@@ -78,7 +78,7 @@ def prepare_peptide_processor(fname, settings):
     min_i = settings.getint('search', 'intensity threshold')
 
     print 'Reading spectra ...'
-    for m, RT, I, c in utils.iterate_spectra(fname, min_ch, max_ch, min_i):
+    for m, RT, I, c, peak_id, pI in utils.iterate_spectra(fname, min_ch, max_ch, min_i):
         nmasses.append(m)
         rts.append(RT)
         Is.append(I)
@@ -148,10 +148,7 @@ def process_peptides(fname, settings):
         sf_values[np.isinf(sf_values)] = 1
         return sf_values
 
-    for iii in [7]:
-        p1 = set()
-        decoy_Is = []
-        peptides_banned = set()
+    for iii in [6]:
 
         I_thresh = 10 ** iii
 
@@ -160,6 +157,7 @@ def process_peptides(fname, settings):
         # for zzz in np.arange(0.9, 2.6, 0.1):
         for zzz in [1.9]:
             try:
+            # if 1:
                 r = zzz ** 2
 
                 p1 = set(seqs_all[idx_I][e_all[idx_I] <= r])
@@ -169,10 +167,13 @@ def process_peptides(fname, settings):
                     for pep, proteins in pept_prot.iteritems():
                         if pep in p1:
                             for protein in proteins:
+                                # if protein == 'sp|P02787|TRFE_HUMAN':
+                                #     print pep
                                 prots_spc2[protein].add(pep)
 
-                    a = None
-                    b = None
+                    isdecoy = lambda x: x[0].startswith(prefix)
+                    isdecoy_key = lambda x: x.startswith(prefix)
+                    escore = lambda x: -x[1]
 
                     for k in protsN:
                         if k not in prots_spc2:
@@ -182,36 +183,22 @@ def process_peptides(fname, settings):
                     names_arr = np.array(prots_spc.keys())
                     v_arr = np.array(prots_spc.values())
                     n_arr = np.array([protsN[k] for k in prots_spc])
-                    if not a and not b:
-                        prots_spc_copy = copy(prots_spc)
-                        top100decoy_score = []
-                        top100decoy_N = []
-                        for x in protsN:
-                            if x.startswith(prefix):
-                                if x in prots_spc:
-                                    top100decoy_score.append(prots_spc[x])
-                                else:
-                                    top100decoy_score.append(0)
-                                top100decoy_N.append(protsN[x])
-                        p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
-                        print 'p=%s' % (np.mean(top100decoy_score) / np.mean(top100decoy_N))
 
-                        a, b = np.polyfit(top100decoy_N, top100decoy_score, 1)
-                        print 'a:%s \nb:%s' % (a, b)
+                    prots_spc_copy = copy(prots_spc)
+                    top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
+                    top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
+                    p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
+                    print 'p=%s' % (np.mean(top100decoy_score) / np.mean(top100decoy_N))
 
                     prots_spc = dict()
                     all_pvals = calc_sf_all(v_arr, n_arr, p)
                     for idx, k in enumerate(names_arr):
                         prots_spc[k] = all_pvals[idx]
 
-
-                    isdecoy = lambda x: x[0].startswith(prefix)
-                    escore = lambda x: -x[1]
-
                     checked = set()
                     for k, v in prots_spc.items():
                         if k not in checked:
-                            if isdecoy(k):
+                            if isdecoy_key(k):
                                 if prots_spc.get(k.replace(prefix, ''), -1e6) > v:
                                     del prots_spc[k]
                                     checked.add(k.replace(prefix, ''))
