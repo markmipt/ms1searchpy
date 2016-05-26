@@ -1,13 +1,10 @@
 from ConfigParser import RawConfigParser
 import sys
 sys.path.append('/usr/share/mmass')
-from sys import argv
 import numpy as np
-from mspy import parser_mzml
-from time import time
-import os
-from pyteomics import mass, electrochem as ec, auxiliary as aux, fasta, mgf, mzml, parser
+from pyteomics import fasta, mzml, parser
 from multiprocessing import Queue, Process, cpu_count
+from scipy.stats import binom
 
 class CustomRawConfigParser(RawConfigParser):
     def get(self, section, option):
@@ -23,20 +20,19 @@ class CustomRawConfigParser(RawConfigParser):
         else:
             return ''
 
-def find_local_max_new(RTs, Is):
+def find_local_max_new(RTs, Is, min_I):
     maximums = []
     lv = RTs.searchsorted(RTs - 1.5, side='left')
     rv = RTs.searchsorted(RTs + 1.5, side='right')
     for idx in range(len(RTs)):
-        # lv = RTs.searchsorted(rt - 1.5, side='left')
-        # rv = RTs.searchsorted(rt + 1.5, side='right')
-        if Is[idx] == max(Is[lv[idx]:rv[idx]]) and lv[idx] != rv[idx] - 1 and RTs[rv[idx] - 1] - RTs[lv[idx]] >= 0.2:
+        maxI = max(Is[lv[idx]:rv[idx]])
+        if maxI >= min_I and Is[idx] == maxI and lv[idx] != rv[idx] - 1 and RTs[rv[idx] - 1] - RTs[lv[idx]] >= 0.2:
             maximums.append(idx)
     return maximums
 
 
 
-def find_peaks(q, q_out):
+def find_peaks(q, q_out, min_I):
     for rec in iter(q.get, None):
         v, x, y, mzst_t, chs_t, pis_t, pI_t = rec
         idt = x.argsort()
@@ -53,7 +49,7 @@ def find_peaks(q, q_out):
         chs_t = chs_t[temp_idx]
         pis_t = pis_t[temp_idx]
         pI_t = pI_t[temp_idx]
-        temp_idx = find_local_max_new(x, y)
+        temp_idx = find_local_max_new(x, y, min_I=min_I)
         x_new2 = x[temp_idx]
         y_new2 = y[temp_idx]
         mzst_t = mzst_t[temp_idx]
@@ -65,31 +61,69 @@ def find_peaks(q, q_out):
 
 
 def iterate_spectra(fname, min_ch, max_ch, min_i):
-    MZML_data = parser_mzml.parseMZML(fname)
-    print 'parsing was started'
-    MZML_data.load()
-    print 'parsing was finished'
     procs = []
     nprocs = 12
     q = Queue()
     q_output = Queue()
 
-    def deiso(q, q_output, min_ch, max_ch):
+    def custom_deiso(q, q_output, min_ch, max_ch):
+        averagine_mass = 111.1254
+        averagine_C = 4.9384
+        tmplist = list(range(15))
+        charges = list(range(min_ch, max_ch + 1, 1))[::-1]
+        prec_masses = []
+        prec_isotopes = []
+        prec_minisotopes = []
+        for i in range(300, 20000, 100):
+            int_arr = binom.pmf(tmplist, float(i) / averagine_mass * averagine_C, 0.0107)
+            prec_masses.append(i)
+            prec_is = np.where(int_arr / int_arr.max() >= 0.01)[0]
+            prec_minisotopes.append(prec_is.min())
+            prec_isotopes.append(prec_is - prec_minisotopes[-1])
+        prec_masses = np.array(prec_masses)
+        done = 0
         for sc in iter(q.get, None):
-            peaks = sc.peaklist
-            if len(peaks) and peaks[-1].mz - peaks[0].mz >= 600:
-                RT = sc.retentionTime / 60
-                peaks = sc.peaklist
-                peaks.deisotope(maxCharge=max_ch, mzTolerance=0.01, intTolerance=0.5)
-                peaks.remisotopes()
-                for peak in peaks:
-                    if peak.charge and min_ch <= peak.charge <= max_ch and peak.intensity >= min_i:
-                        # neutral = peak.mz * peak.charge - 1.0073 * peak.charge
-                        q_output.put((peak.mz, RT, peak.intensity, peak.charge))
+            banned = set()
+            if done % 500 == 0:
+                print done
+            done += 1
+            RT = sc['scanList']['scan'][0]['scan start time']
+            mz = sc['m/z array']
+            Intensities = sc['intensity array']
+            tmpidx = Intensities>=10
+            mz = mz[tmpidx]
+            Intensities = Intensities[tmpidx]
+
+            mz_tol = 0.01
+            mz_size = mz.size
+            for idx, v in enumerate(mz):
+                for ch in charges:
+
+                    pos_ind = prec_masses.searchsorted(v * ch)
+                    shifts = prec_isotopes[pos_ind]
+                    found_isotopes = [idx, ]
+                    min_shift = prec_minisotopes[pos_ind]
+                    flag = 1
+                    for shift in shifts[1:]:
+                        m = v + (1.00335 * shift / ch)
+                        j = mz.searchsorted(m)
+                        if j == mz_size or m - mz[j - 1] < mz[j] - m:
+                            j -= 1
+                        if j not in banned and abs(m - mz[j]) <= mz_tol:
+                            found_isotopes.append(j)
+                        else:
+                            flag = 0
+                            break
+                    if flag:
+                        for jj in found_isotopes:
+                            banned.add(jj)
+                        q_output.put((v - (1.00335 * min_shift / ch), RT, Intensities[idx], ch))
+                        break
         q_output.put(None)
 
+
     for i in range(nprocs):
-        p = Process(target=deiso, args=(q, q_output, min_ch, max_ch))
+        p = Process(target=custom_deiso, args=(q, q_output, min_ch, max_ch))
         procs.append(p)
         p.start()
 
@@ -97,29 +131,24 @@ def iterate_spectra(fname, min_ch, max_ch, min_i):
     idx = 1
     ms1_idx = 1
 
-    while 1:#ms1_idx <= 2000:
-        sc = MZML_data.scan(idx)
-        if sc == False:
-            print 'total number of spectra = %d\ntotal number of ms1 spectra = %d' % (idx - 1, ms1_idx - 1)
-            break
-        if sc.msLevel == 1:
+    for sc in mzml.read(fname):
+        idx += 1
+        if sc['ms level'] == 1:
             q.put(sc)
             ms1_idx += 1
-        idx += 1
-
+    print 'total number of spectra = %d\ntotal number of ms1 spectra = %d' % (idx - 1, ms1_idx - 1)
     for p in procs:
         q.put(None)
 
-    del MZML_data
     results = []
     while nprocs > 0:
         for rec in iter(q_output.get, None):
             results.append(rec)
-            # yield rec
         nprocs -= 1
 
     for p in procs:
         p.terminate()
+    print 'Deisotoping is finished'
 
     peak_id = -1
     number_of_peaks = len(results)
@@ -144,7 +173,7 @@ def iterate_spectra(fname, min_ch, max_ch, min_i):
                 pI = 7
             neutral = mz * cz - 1.0073 * cz
             peak_id += 1
-            if 1:#2 < RT < 100:
+            if 1:
                 mzst[peak_id] = neutral
                 mzs[peak_id] = mz
                 RTs[peak_id] = RT
@@ -172,7 +201,7 @@ def iterate_spectra(fname, min_ch, max_ch, min_i):
     q_out = Queue()
 
     for i in range(nprocs):
-        p = Process(target=find_peaks, args=(q, q_out))
+        p = Process(target=find_peaks, args=(q, q_out, min_i))
         procs.append(p)
         p.start()
 
@@ -183,7 +212,6 @@ def iterate_spectra(fname, min_ch, max_ch, min_i):
             minv = mzs[idx] + 0.005
             if mzs[lv[idx]:rv[idx]].size > 5 and RTs[lv[idx]:rv[idx]].max() - RTs[lv[idx]:rv[idx]].min() > 0.25:
                 q.put((mzs[idx], RTs[lv[idx]:rv[idx]], Is[lv[idx]:rv[idx]], mzst[lv[idx]:rv[idx]], chs[lv[idx]:rv[idx]], pis[lv[idx]:rv[idx]], pIs[lv[idx]:rv[idx]]))
-                # q.put((mzst[idx], RTs[lv[idx]:rv[idx]], Is[lv[idx]:rv[idx]], chs[lv[idx]:rv[idx]], pis[lv[idx]:rv[idx]], pIs[lv[idx]:rv[idx]]))
     for p in procs:
         q.put(None)
 
@@ -197,7 +225,6 @@ def iterate_spectra(fname, min_ch, max_ch, min_i):
         p.terminate()
 
     print 'Total number of peaks = %d' % (len(mzs), )
-#        self.data = list(set(self.data))
     print 'Total number of unique peaks = %d' % (len(outres), )
     for res in outres:
         yield res
@@ -245,15 +272,11 @@ def prot_peptides(prot_seq, enzyme, mc, minlen, maxlen, is_decoy, dont_use_seen_
         if minlen <= plen <= maxlen + 2:
             forms = []
             if dont_use_fast_valid or pep in seen_target or pep in seen_decoy or parser.fast_valid(pep):
-                # plen = len(pep)
-                # if minlen <= plen <= maxlen:
                 if plen <= maxlen:
                     forms.append(pep)
                 if prot_seq[0] == 'M' and prot_seq.startswith(pep):
                     if minlen <= plen - 1 <= maxlen:
                         forms.append(pep[1:])
-                    # if minlen <= plen - 2 <= maxlen:
-                    #     forms.append(pep[2:])
             for f in forms:
                 if dont_use_seen_peptides:
                     yield f
@@ -271,7 +294,6 @@ def get_prot_pept_map(settings):
 
     prefix = settings.get('input', 'decoy prefix')
     enzyme = get_enzyme(settings.get('search', 'enzyme'))
-    print enzyme
     mc = settings.getint('search', 'number of missed cleavages')
     minlen = settings.getint('search', 'peptide minimum length')
     maxlen = settings.getint('search', 'peptide maximum length')
@@ -282,8 +304,6 @@ def get_prot_pept_map(settings):
     for desc, prot in prot_gen(settings):
         dbinfo = desc.split(' ')[0]
         for pep in prot_peptides(prot, enzyme, mc, minlen, maxlen, desc.startswith(prefix), dont_use_seen_peptides=True):
-            if dbinfo == 'sp|P02787|TRFE_HUMAN':
-                print pep
             pept_prot.setdefault(pep, []).append(dbinfo)
             protsN.setdefault(dbinfo, set()).add(pep)
     for k, v in protsN.items():

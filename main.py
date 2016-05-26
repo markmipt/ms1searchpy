@@ -4,13 +4,10 @@ import utils
 import numpy as np
 from scipy.stats import binom
 import operator
-from string import punctuation
 from copy import copy
 from collections import defaultdict
-import operator as op
 import re
-from bisect import bisect
-from pyteomics import parser, mass, fasta, auxiliary as aux, mgf, mzml, achrom
+from pyteomics import parser, mass, fasta, auxiliary as aux, achrom
 try:
     from pyteomics import cmass
 except ImportError:
@@ -126,108 +123,113 @@ def process_peptides(fname, settings):
                 ms1results.extend(result)
 
     prefix = settings.get('input', 'decoy prefix')
+    protsN, pept_prot = utils.get_prot_pept_map(settings)
 
-    seqs_all, md_all, rt_all, I_all = zip(*ms1results)
+    with open(os.path.splitext(fname)[0] + '_PFMs.csv', 'w') as output:
+        output.write('sequence\mass diff\tRT diff\tintensity\tproteins\n')
+        for seq, md, rtd, intensity in ms1results:
+            output.write('\t'.join((seq, str(md), str(rtd), str(intensity), ';'.join(pept_prot[seq]))) + '\n')
+
+    # seqs_all, md_all, rt_all, I_all = zip(*ms1results)[:2]
+    seqs_all, md_all, rt_all = zip(*ms1results)[:3]
     seqs_all = np.array(seqs_all)
     md_all = np.array(md_all)
     rt_all = np.array(rt_all)
-    I_all = np.array(I_all)
+    # I_all = np.array(I_all)
+    # del I_all
+    del ms1results
 
-    mass_m = 0
+    mass_m = settings.getfloat('search', 'precursor accuracy shift')
     mass_sigma = settings.getfloat('search', 'precursor accuracy sigma')
-    RT_m = 0
+    RT_m = settings.getfloat('search', 'retention time shift')
     RT_sigma = settings.getfloat('search', 'retention time sigma')
 
     e_all = (md_all - mass_m) ** 2 / (mass_sigma ** 2) + (rt_all - RT_m) ** 2 / (RT_sigma ** 2)
 
-    protsN, pept_prot = utils.get_prot_pept_map(settings)
-    protsV = {} ###
+    protsV = set()
+    path_to_valid_fasta = settings.get('input', 'valid proteins')
+    if path_to_valid_fasta:
+        for prot in fasta.read(path_to_valid_fasta):
+            protsV.add(prot[0].split(' ')[0])
 
     def calc_sf_all(v, n, p):
         sf_values = np.log10(1 / binom.sf(v, n, p))
         sf_values[np.isinf(sf_values)] = 1
         return sf_values
 
-    for iii in [6]:
+    r = settings.getfloat('search', 'r threshold') ** 2
+    # for zzz in np.arange(1.0, 2.0, 0.1):
+    #     r = zzz**2
+    p1 = set(seqs_all[e_all <= r])
 
-        I_thresh = 10 ** iii
+    if len(p1):
+        prots_spc2 = defaultdict(set)
+        for pep, proteins in pept_prot.iteritems():
+            if pep in p1:
+                for protein in proteins:
+                    prots_spc2[protein].add(pep)
 
-        idx_I = I_all >= I_thresh
+        isdecoy = lambda x: x[0].startswith(prefix)
+        isdecoy_key = lambda x: x.startswith(prefix)
+        escore = lambda x: -x[1]
 
-        # for zzz in np.arange(0.9, 2.6, 0.1):
-        for zzz in [1.9]:
-            try:
-            # if 1:
-                r = zzz ** 2
+        for k in protsN:
+            if k not in prots_spc2:
+                prots_spc2[k] = set([])
+        prots_spc = dict((k, len(v)) for k, v in prots_spc2.iteritems())
 
-                p1 = set(seqs_all[idx_I][e_all[idx_I] <= r])
+        names_arr = np.array(prots_spc.keys())
+        v_arr = np.array(prots_spc.values())
+        n_arr = np.array([protsN[k] for k in prots_spc])
 
-                if len(p1):
-                    prots_spc2 = defaultdict(set)
-                    for pep, proteins in pept_prot.iteritems():
-                        if pep in p1:
-                            for protein in proteins:
-                                # if protein == 'sp|P02787|TRFE_HUMAN':
-                                #     print pep
-                                prots_spc2[protein].add(pep)
+        prots_spc_copy = copy(prots_spc)
+        top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
+        top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
+        p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
+        print 'p=%s' % (np.mean(top100decoy_score) / np.mean(top100decoy_N))
 
-                    isdecoy = lambda x: x[0].startswith(prefix)
-                    isdecoy_key = lambda x: x.startswith(prefix)
-                    escore = lambda x: -x[1]
+        prots_spc = dict()
+        all_pvals = calc_sf_all(v_arr, n_arr, p)
+        for idx, k in enumerate(names_arr):
+            prots_spc[k] = all_pvals[idx]
 
-                    for k in protsN:
-                        if k not in prots_spc2:
-                            prots_spc2[k] = set([])
-                    prots_spc = dict((k, len(v)) for k, v in prots_spc2.iteritems())
+        sortedlist_spc = sorted(prots_spc.iteritems(), key=operator.itemgetter(1))[::-1]
+        with open(os.path.splitext(fname)[0] + '_proteins_full.csv', 'w') as output:
+            output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
+            for x in sortedlist_spc:
+                output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
 
-                    names_arr = np.array(prots_spc.keys())
-                    v_arr = np.array(prots_spc.values())
-                    n_arr = np.array([protsN[k] for k in prots_spc])
+        checked = set()
+        for k, v in prots_spc.items():
+            if k not in checked:
+                if isdecoy_key(k):
+                    if prots_spc.get(k.replace(prefix, ''), -1e6) > v:
+                        del prots_spc[k]
+                        checked.add(k.replace(prefix, ''))
+                else:
+                    if prots_spc.get(prefix + k, -1e6) > v:
+                        del prots_spc[k]
+                        checked.add(prefix + k)
 
-                    prots_spc_copy = copy(prots_spc)
-                    top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
-                    top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
-                    p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
-                    print 'p=%s' % (np.mean(top100decoy_score) / np.mean(top100decoy_N))
-
-                    prots_spc = dict()
-                    all_pvals = calc_sf_all(v_arr, n_arr, p)
-                    for idx, k in enumerate(names_arr):
-                        prots_spc[k] = all_pvals[idx]
-
-                    checked = set()
-                    for k, v in prots_spc.items():
-                        if k not in checked:
-                            if isdecoy_key(k):
-                                if prots_spc.get(k.replace(prefix, ''), -1e6) > v:
-                                    del prots_spc[k]
-                                    checked.add(k.replace(prefix, ''))
-                            else:
-                                if prots_spc.get(prefix + k, -1e6) > v:
-                                    del prots_spc[k]
-                                    checked.add(prefix + k)
-
-                # filtered_prots = aux.filter(prots_spc.items(), fdr=0.01, key=escore, is_decoy=isdecoy, remove_decoy=False, formula=1, full_output=True)
+        filtered_prots = aux.filter(prots_spc.items(), fdr=0.01, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1, full_output=True)
 
 
-                identified_proteins = 0
-                decoy_proteins = 0.
-                identified_proteins_valid = 0
+        identified_proteins = 0
+        identified_proteins_valid = 0
 
-                sortedlist_spc = sorted(prots_spc.iteritems(), key=operator.itemgetter(1))[::-1]
-                for x in sortedlist_spc:
-                    if x[0].startswith(prefix):
-                        decoy_proteins += 1
-                        if decoy_proteins / (identified_proteins + 1) >= 0.01:
-                            break
-                    elif x[0] in protsV:
-                        identified_proteins_valid += 1
-                    identified_proteins += 1
+        for x in filtered_prots:
+            if x[0] in protsV:
+                identified_proteins_valid += 1
+            identified_proteins += 1
 
-                for x in sortedlist_spc[:5]:
-                    print x[0], x[1], int(prots_spc_copy[x[0]]), protsN[x[0]]
-                print 'results:%s;number of identified proteins = %d;number of valid proteins = %d;r-value threshold = %s;Intensity threshold = 10 ^ %s' % (fname, identified_proteins - decoy_proteins + 1, identified_proteins_valid, zzz, iii)
+        for x in filtered_prots[:5]:
+            print x[0], x[1], int(prots_spc_copy[x[0]]), protsN[x[0]]
+        print 'results:%s;number of identified proteins = %d;number of valid proteins = %d' % (fname, identified_proteins, identified_proteins_valid)
+        print 'R=', r
+        with open(os.path.splitext(fname)[0] + '_proteins.csv', 'w') as output:
+            output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
+            for x in filtered_prots:
+                output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
 
-
-            except:
-                pass
+    else:
+        print 'No matches found'
