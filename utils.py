@@ -1,6 +1,4 @@
 from ConfigParser import RawConfigParser
-import sys
-sys.path.append('/usr/share/mmass')
 import numpy as np
 from pyteomics import fasta, mzml, parser
 from multiprocessing import Queue, Process, cpu_count
