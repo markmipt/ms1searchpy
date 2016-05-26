@@ -73,9 +73,10 @@ def prepare_peptide_processor(fname, settings):
     min_ch = settings.getint('search', 'minimum charge')
     max_ch = settings.getint('search', 'maximum charge')
     min_i = settings.getint('search', 'intensity threshold')
+    nprocs = settings.getint('performance', 'processes')
 
     print 'Reading spectra ...'
-    for m, RT, I, c, peak_id, pI in utils.iterate_spectra(fname, min_ch, max_ch, min_i):
+    for m, RT, I, c, peak_id, pI in utils.iterate_spectra(fname, min_ch, max_ch, min_i, nprocs):
         nmasses.append(m)
         rts.append(RT)
         Is.append(I)
@@ -130,13 +131,10 @@ def process_peptides(fname, settings):
         for seq, md, rtd, intensity in ms1results:
             output.write('\t'.join((seq, str(md), str(rtd), str(intensity), ';'.join(pept_prot[seq]))) + '\n')
 
-    # seqs_all, md_all, rt_all, I_all = zip(*ms1results)[:2]
     seqs_all, md_all, rt_all = zip(*ms1results)[:3]
     seqs_all = np.array(seqs_all)
     md_all = np.array(md_all)
     rt_all = np.array(rt_all)
-    # I_all = np.array(I_all)
-    # del I_all
     del ms1results
 
     mass_m = settings.getfloat('search', 'precursor accuracy shift')

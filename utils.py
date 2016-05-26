@@ -58,9 +58,8 @@ def find_peaks(q, q_out, min_I):
     q_out.put(None)
 
 
-def iterate_spectra(fname, min_ch, max_ch, min_i):
+def iterate_spectra(fname, min_ch, max_ch, min_i, nprocs):
     procs = []
-    nprocs = 12
     q = Queue()
     q_output = Queue()
 
@@ -119,7 +118,6 @@ def iterate_spectra(fname, min_ch, max_ch, min_i):
                         break
         q_output.put(None)
 
-
     for i in range(nprocs):
         p = Process(target=custom_deiso, args=(q, q_output, min_ch, max_ch))
         procs.append(p)
@@ -139,10 +137,12 @@ def iterate_spectra(fname, min_ch, max_ch, min_i):
         q.put(None)
 
     results = []
-    while nprocs > 0:
+
+    jj = 0
+    while jj < nprocs:
         for rec in iter(q_output.get, None):
             results.append(rec)
-        nprocs -= 1
+        jj += 1
 
     for p in procs:
         p.terminate()
@@ -194,7 +194,6 @@ def iterate_spectra(fname, min_ch, max_ch, min_i):
 
 
     procs = []
-    nprocs = 12
     q = Queue()
     q_out = Queue()
 
@@ -214,10 +213,11 @@ def iterate_spectra(fname, min_ch, max_ch, min_i):
         q.put(None)
 
     outres = set()
-    while nprocs > 0:
+    jj = 0
+    while jj < nprocs:
         for rec in iter(q_out.get, None):
             outres.update(rec)
-        nprocs -= 1
+        jj += 1
 
     for p in procs:
         p.terminate()
