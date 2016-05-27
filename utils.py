@@ -58,12 +58,12 @@ def find_peaks(q, q_out, min_I):
     q_out.put(None)
 
 
-def iterate_spectra(fname, min_ch, max_ch, min_i, nprocs):
+def iterate_spectra(fname, min_ch, max_ch, min_i, nprocs, mass_acc):
     procs = []
     q = Queue()
     q_output = Queue()
 
-    def custom_deiso(q, q_output, min_ch, max_ch):
+    def custom_deiso(q, q_output, min_ch, max_ch, mass_acc):
         averagine_mass = 111.1254
         averagine_C = 4.9384
         tmplist = list(range(15))
@@ -71,19 +71,19 @@ def iterate_spectra(fname, min_ch, max_ch, min_i, nprocs):
         prec_masses = []
         prec_isotopes = []
         prec_minisotopes = []
+        isotopes_int = []
         for i in range(300, 20000, 100):
             int_arr = binom.pmf(tmplist, float(i) / averagine_mass * averagine_C, 0.0107)
             prec_masses.append(i)
-            prec_is = np.where(int_arr / int_arr.max() >= 0.01)[0]
+            int_arr_norm = int_arr / int_arr.max()
+            prec_is = np.where(int_arr_norm >= 0.1)[0]
+            isotopes_int.append(int_arr_norm[prec_is])
             prec_minisotopes.append(prec_is.min())
             prec_isotopes.append(prec_is - prec_minisotopes[-1])
+            I_err = 0.5
         prec_masses = np.array(prec_masses)
-        done = 0
         for sc in iter(q.get, None):
             banned = set()
-            if done % 500 == 0:
-                print done
-            done += 1
             RT = sc['scanList']['scan'][0]['scan start time']
             mz = sc['m/z array']
             Intensities = sc['intensity array']
@@ -91,11 +91,10 @@ def iterate_spectra(fname, min_ch, max_ch, min_i, nprocs):
             mz = mz[tmpidx]
             Intensities = Intensities[tmpidx]
 
-            mz_tol = 0.01
             mz_size = mz.size
             for idx, v in enumerate(mz):
+                mz_tol = mass_acc * 1e-6 * v
                 for ch in charges:
-
                     pos_ind = prec_masses.searchsorted(v * ch)
                     shifts = prec_isotopes[pos_ind]
                     found_isotopes = [idx, ]
@@ -112,14 +111,24 @@ def iterate_spectra(fname, min_ch, max_ch, min_i, nprocs):
                             flag = 0
                             break
                     if flag:
-                        for jj in found_isotopes:
-                            banned.add(jj)
-                        q_output.put((v - (1.00335 * min_shift / ch), RT, Intensities[idx], ch))
-                        break
+                        int_approved = [found_isotopes[0]]
+
+                        for jj_ind, jj in enumerate(found_isotopes[1:]):
+                            if abs((Intensities[found_isotopes[jj_ind]] / Intensities[jj]) - (
+                                isotopes_int[pos_ind][jj_ind] / isotopes_int[pos_ind][
+                                    jj_ind + 1])) <= I_err:
+                                int_approved.append(jj)
+                            elif jj_ind == 0:
+                                break
+                        if len(int_approved) > 1:
+                            for jj in int_approved:
+                                banned.add(jj)
+                            q_output.put((v - (1.00335 * min_shift / ch), RT, Intensities[idx], ch))
+                            break
         q_output.put(None)
 
     for i in range(nprocs):
-        p = Process(target=custom_deiso, args=(q, q_output, min_ch, max_ch))
+        p = Process(target=custom_deiso, args=(q, q_output, min_ch, max_ch, mass_acc))
         procs.append(p)
         p.start()
 
@@ -160,25 +169,23 @@ def iterate_spectra(fname, min_ch, max_ch, min_i, nprocs):
     pIs = np.empty(number_of_peaks, dtype=np.dtype('f4'))
 
     for rec in results:
-        if 1:#try:
-            mz = float(rec[0])
-            RT = float(rec[1])
-            I = float(rec[2])
-            cz = int(rec[3])
-            try:
-                pI = float(rec[6])
-            except:
-                pI = 7
-            neutral = mz * cz - 1.0073 * cz
-            peak_id += 1
-            if 1:
-                mzst[peak_id] = neutral
-                mzs[peak_id] = mz
-                RTs[peak_id] = RT
-                Is[peak_id] = I
-                chs[peak_id] = cz
-                pis[peak_id] = peak_id
-                pIs[peak_id] = pI
+        mz = float(rec[0])
+        RT = float(rec[1])
+        I = float(rec[2])
+        cz = int(rec[3])
+        try:
+            pI = float(rec[6])
+        except:
+            pI = 7
+        neutral = mz * cz - 1.0073 * cz
+        peak_id += 1
+        mzst[peak_id] = neutral
+        mzs[peak_id] = mz
+        RTs[peak_id] = RT
+        Is[peak_id] = I
+        chs[peak_id] = cz
+        pis[peak_id] = peak_id
+        pIs[peak_id] = pI
     print len(mzs), 'len(mzs)'
     print peak_id, 'peak_id'
     idx = np.argsort(mzs)
