@@ -127,15 +127,11 @@ def process_peptides(fname, settings):
     prefix = settings.get('input', 'decoy prefix')
     protsN, pept_prot = utils.get_prot_pept_map(settings)
 
-    with open(os.path.splitext(fname)[0] + '_PFMs.csv', 'w') as output:
-        output.write('sequence\tmass diff\tRT diff\tintensity\tproteins\n')
-        for seq, md, rtd, intensity in ms1results:
-            output.write('\t'.join((seq, str(md), str(rtd), str(intensity), ';'.join(pept_prot[seq]))) + '\n')
-
-    seqs_all, md_all, rt_all = zip(*ms1results)[:3]
+    seqs_all, md_all, rt_all, I_all = zip(*ms1results)
     seqs_all = np.array(seqs_all)
     md_all = np.array(md_all)
     rt_all = np.array(rt_all)
+    I_all = np.array(I_all)
     del ms1results
 
     mass_m = settings.getfloat('search', 'precursor accuracy shift')
@@ -144,6 +140,17 @@ def process_peptides(fname, settings):
     RT_sigma = settings.getfloat('search', 'retention time sigma')
 
     e_all = (md_all - mass_m) ** 2 / (mass_sigma ** 2) + (rt_all - RT_m) ** 2 / (RT_sigma ** 2)
+    r = settings.getfloat('search', 'r threshold') ** 2
+    e_ind = e_all <= r
+    seqs_all = seqs_all[e_ind]
+    md_all = md_all[e_ind]
+    rt_all = rt_all[e_ind]
+    I_all = I_all[e_ind]
+
+    with open(os.path.splitext(fname)[0] + '_PFMs.csv', 'w') as output:
+        output.write('sequence\tmass diff\tRT diff\tintensity\tproteins\n')
+        for seq, md, rtd, intensity in zip(seqs_all, md_all, rt_all, I_all):
+            output.write('\t'.join((seq, str(md), str(rtd), str(intensity), ';'.join(pept_prot[seq]))) + '\n')
 
     protsV = set()
     path_to_valid_fasta = settings.get('input', 'valid proteins')
@@ -156,8 +163,7 @@ def process_peptides(fname, settings):
         sf_values[np.isinf(sf_values)] = 1
         return sf_values
 
-    r = settings.getfloat('search', 'r threshold') ** 2
-    p1 = set(seqs_all[e_all <= r])
+    p1 = set(seqs_all)
 
     if len(p1):
         prots_spc2 = defaultdict(set)
