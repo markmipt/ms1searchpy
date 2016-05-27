@@ -74,9 +74,10 @@ def prepare_peptide_processor(fname, settings):
     max_ch = settings.getint('search', 'maximum charge')
     min_i = settings.getint('search', 'intensity threshold')
     nprocs = settings.getint('performance', 'processes')
+    mass_acc = max(abs(settings.getfloat('search', 'precursor accuracy left')), abs(settings.getfloat('search', 'precursor accuracy right')))
 
     print 'Reading spectra ...'
-    for m, RT, I, c, peak_id, pI in utils.iterate_spectra(fname, min_ch, max_ch, min_i, nprocs):
+    for m, RT, I, c, peak_id, pI in utils.iterate_spectra(fname, min_ch, max_ch, min_i, nprocs, mass_acc):
         nmasses.append(m)
         rts.append(RT)
         Is.append(I)
@@ -127,7 +128,7 @@ def process_peptides(fname, settings):
     protsN, pept_prot = utils.get_prot_pept_map(settings)
 
     with open(os.path.splitext(fname)[0] + '_PFMs.csv', 'w') as output:
-        output.write('sequence\mass diff\tRT diff\tintensity\tproteins\n')
+        output.write('sequence\tmass diff\tRT diff\tintensity\tproteins\n')
         for seq, md, rtd, intensity in ms1results:
             output.write('\t'.join((seq, str(md), str(rtd), str(intensity), ';'.join(pept_prot[seq]))) + '\n')
 
@@ -156,8 +157,6 @@ def process_peptides(fname, settings):
         return sf_values
 
     r = settings.getfloat('search', 'r threshold') ** 2
-    # for zzz in np.arange(1.0, 2.0, 0.1):
-    #     r = zzz**2
     p1 = set(seqs_all[e_all <= r])
 
     if len(p1):
