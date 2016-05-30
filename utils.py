@@ -80,7 +80,7 @@ def iterate_spectra(fname, min_ch, max_ch, min_i, nprocs, mass_acc):
             isotopes_int.append(int_arr_norm[prec_is])
             prec_minisotopes.append(prec_is.min())
             prec_isotopes.append(prec_is - prec_minisotopes[-1])
-        I_err = 0.5
+        I_err = 1.5
         prec_masses = np.array(prec_masses)
         for sc in iter(q.get, None):
             banned = set()
@@ -112,11 +112,10 @@ def iterate_spectra(fname, min_ch, max_ch, min_i, nprocs, mass_acc):
                             break
                     if flag:
                         int_approved = [found_isotopes[0]]
-
                         for jj_ind, jj in enumerate(found_isotopes[1:]):
-                            if abs((Intensities[found_isotopes[jj_ind]] / Intensities[jj]) - (
-                                isotopes_int[pos_ind][jj_ind] / isotopes_int[pos_ind][
-                                    jj_ind + 1])) <= I_err:
+                            if 1 / I_err <= (Intensities[found_isotopes[jj_ind]] / Intensities[jj]) / (
+                                        isotopes_int[pos_ind][jj_ind] / isotopes_int[pos_ind][
+                                    jj_ind + 1]) <= I_err:
                                 int_approved.append(jj)
                             elif jj_ind == 0:
                                 break
