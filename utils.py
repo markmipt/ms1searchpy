@@ -76,7 +76,7 @@ def iterate_spectra(fname, min_ch, max_ch, min_i, nprocs, mass_acc):
             int_arr = binom.pmf(tmplist, float(i) / averagine_mass * averagine_C, 0.0107)
             prec_masses.append(i)
             int_arr_norm = int_arr / int_arr.max()
-            prec_is = np.where(int_arr_norm >= 0.25)[0]
+            prec_is = np.where(int_arr_norm >= 0.1)[0]
             isotopes_int.append(int_arr_norm[prec_is])
             prec_minisotopes.append(prec_is.min())
             prec_isotopes.append(prec_is - prec_minisotopes[-1])
