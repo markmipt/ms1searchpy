@@ -3,6 +3,20 @@ import numpy as np
 from pyteomics import fasta, mzml, parser
 from multiprocessing import Queue, Process, cpu_count
 from scipy.stats import binom
+import os
+
+
+def settings(fname=None, default_name=os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), 'default.cfg')):
+    """Read a configuration file and return a :py:class:`RawConfigParser` object.
+    """
+
+    raw_config = CustomRawConfigParser(dict_type=dict, allow_no_value=True)
+    if default_name:
+        raw_config.read(default_name)
+    if fname:
+        raw_config.read(fname)
+    return raw_config
 
 class CustomRawConfigParser(RawConfigParser):
     def get(self, section, option):
