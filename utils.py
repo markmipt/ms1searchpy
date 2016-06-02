@@ -244,8 +244,10 @@ def iterate_spectra(fname, min_ch, max_ch, min_i, nprocs, mass_acc):
 
     print 'Total number of peaks = %d' % (len(mzs), )
     print 'Total number of unique peaks = %d' % (len(outres), )
+    peak_id = 1
     for res in outres:
-        yield res
+        yield res + (int(peak_id), )
+        peak_id += 1
 
 
 def peptide_gen(settings):

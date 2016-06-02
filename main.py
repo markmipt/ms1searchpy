@@ -44,8 +44,9 @@ def peptide_processor(peptide, **kwargs):
         RTdiff = RT - rts[i]
         if abs(RTdiff) <= 3 * RT_sigma:
             intensity = Is[i]
+            peak_id = ids[i]
             massdiff = (m - nmasses[i]) / m * 1e6
-            results.append((seqm, massdiff, RTdiff, intensity))
+            results.append((seqm, massdiff, RTdiff, intensity, peak_id))
     return results
 
 
@@ -54,10 +55,12 @@ def prepare_peptide_processor(fname, settings):
     global rts
     global Is
     global charges
+    global ids
     nmasses = []
     rts = []
     Is = []
     charges = []
+    ids = []
 
     min_ch = settings.getint('search', 'minimum charge')
     max_ch = settings.getint('search', 'maximum charge')
@@ -66,17 +69,20 @@ def prepare_peptide_processor(fname, settings):
     mass_acc = max(abs(settings.getfloat('search', 'precursor accuracy left')), abs(settings.getfloat('search', 'precursor accuracy right')))
 
     print 'Reading spectra ...'
-    for m, RT, I, c, peak_id, pI in utils.iterate_spectra(fname, min_ch, max_ch, min_i, nprocs, mass_acc):
+    for m, RT, I, c, peak_id, pI, peak_id in utils.iterate_spectra(fname, min_ch, max_ch, min_i, nprocs, mass_acc):
         nmasses.append(m)
         rts.append(RT)
         Is.append(I)
         charges.append(c)
+        ids.append(peak_id)
 
     i = np.argsort(nmasses)
     nmasses = np.array(nmasses)[i]
     rts = np.array(rts)[i]
     Is = np.array(Is)[i]
     charges = np.array(charges)[i]
+    ids = np.array(ids)[i]
+
 
     fmods = settings.get('modifications', 'fixed')
     aa_mass = mass.std_aa_mass
@@ -116,11 +122,12 @@ def process_peptides(fname, settings):
     prefix = settings.get('input', 'decoy prefix')
     protsN, pept_prot = utils.get_prot_pept_map(settings)
 
-    seqs_all, md_all, rt_all, I_all = zip(*ms1results)
+    seqs_all, md_all, rt_all, I_all, ids_all = zip(*ms1results)
     seqs_all = np.array(seqs_all)
     md_all = np.array(md_all)
     rt_all = np.array(rt_all)
     I_all = np.array(I_all)
+    ids_all = np.array(ids_all)
     del ms1results
 
     mass_m = settings.getfloat('search', 'precursor accuracy shift')
@@ -135,11 +142,12 @@ def process_peptides(fname, settings):
     md_all = md_all[e_ind]
     rt_all = rt_all[e_ind]
     I_all = I_all[e_ind]
+    ids_all = ids_all[e_ind]
 
     with open(os.path.splitext(fname)[0] + '_PFMs.csv', 'w') as output:
-        output.write('sequence\tmass diff\tRT diff\tintensity\tproteins\n')
-        for seq, md, rtd, intensity in zip(seqs_all, md_all, rt_all, I_all):
-            output.write('\t'.join((seq, str(md), str(rtd), str(intensity), ';'.join(pept_prot[seq]))) + '\n')
+        output.write('sequence\tmass diff\tRT diff\tintensity\tpeak_id\tproteins\n')
+        for seq, md, rtd, intensity, peak_id in zip(seqs_all, md_all, rt_all, I_all, ids_all):
+            output.write('\t'.join((seq, str(md), str(rtd), str(intensity), str(peak_id), ';'.join(pept_prot[seq]))) + '\n')
 
     protsV = set()
     path_to_valid_fasta = settings.get('input', 'valid proteins')
