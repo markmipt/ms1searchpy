@@ -8,10 +8,7 @@ Algorithm can be run with following command:
 
     python search.py path_to_mzML path_to_cfg
 
-The script output contains files:
-    all identified proteins (filename_proteins_full.csv)
-    filtered proteins (filename_proteins.csv)
-    all matched peptide match fingerprints (filename_PFMs.csv)
+The script output contains files: all identified proteins (filename_proteins_full.csv), filtered proteins (filename_proteins.csv), all matched peptide match fingerprints (filename_PFMs.csv).
 
 To combine results of MS1 searches use the following command:
 
