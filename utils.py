@@ -1,9 +1,8 @@
 from ConfigParser import RawConfigParser
-import numpy as np
-from pyteomics import fasta, mzml, parser
+from pyteomics import fasta, parser
 from multiprocessing import Queue, Process, cpu_count
-from scipy.stats import binom
 import os
+import csv
 
 
 def settings(fname=None, default_name=os.path.join(
@@ -32,222 +31,24 @@ class CustomRawConfigParser(RawConfigParser):
         else:
             return ''
 
-def find_local_max_new(RTs, Is, min_I):
-    maximums = []
-    lv = RTs.searchsorted(RTs - 1.5, side='left')
-    rv = RTs.searchsorted(RTs + 1.5, side='right')
-    for idx in range(len(RTs)):
-        maxI = max(Is[lv[idx]:rv[idx]])
-        if maxI >= min_I and Is[idx] == maxI and lv[idx] != rv[idx] - 1 and RTs[rv[idx] - 1] - RTs[lv[idx]] >= 0.2:
-            maximums.append(idx)
-    return maximums
 
-
-
-def find_peaks(q, q_out, min_I):
-    for rec in iter(q.get, None):
-        v, x, y, mzst_t, chs_t, pis_t, pI_t = rec
-        idt = x.argsort()
-        x = x[idt]
-        y = y[idt]
-        mzst_t = mzst_t[idt]
-        chs_t = chs_t[idt]
-        pis_t = pis_t[idt]
-        pI_t = pI_t[idt]
-        temp_idx = np.array([True for _ in x], dtype=bool)
-        x = x[temp_idx]
-        y = y[temp_idx]
-        mzst_t = mzst_t[temp_idx]
-        chs_t = chs_t[temp_idx]
-        pis_t = pis_t[temp_idx]
-        pI_t = pI_t[temp_idx]
-        temp_idx = find_local_max_new(x, y, min_I=min_I)
-        x_new2 = x[temp_idx]
-        y_new2 = y[temp_idx]
-        mzst_t = mzst_t[temp_idx]
-        chs_t = chs_t[temp_idx]
-        pis_t = pis_t[temp_idx]
-        pI_t = pI_t[temp_idx]
-        q_out.put(zip(mzst_t, x_new2, y_new2, chs_t, pis_t, pI_t))
-    q_out.put(None)
-
-
-def iterate_spectra(fname, min_ch, max_ch, min_i, nprocs, mass_acc):
-    procs = []
-    q = Queue()
-    q_output = Queue()
-
-    def custom_deiso(q, q_output, min_ch, max_ch, mass_acc):
-        averagine_mass = 111.1254
-        averagine_C = 4.9384
-        tmplist = list(range(15))
-        charges = list(range(min_ch, max_ch + 1, 1))[::-1]
-        prec_masses = []
-        prec_isotopes = []
-        prec_minisotopes = []
-        isotopes_int = []
-        for i in range(300, 20000, 100):
-            int_arr = binom.pmf(tmplist, float(i) / averagine_mass * averagine_C, 0.0107)
-            prec_masses.append(i)
-            int_arr_norm = int_arr / int_arr.max()
-            prec_is = np.where(int_arr_norm >= 0.1)[0]
-            isotopes_int.append(int_arr_norm[prec_is])
-            prec_minisotopes.append(prec_is.min())
-            prec_isotopes.append(prec_is - prec_minisotopes[-1])
-        I_err = 1.5
-        prec_masses = np.array(prec_masses)
-        for sc in iter(q.get, None):
-            banned = set()
-            RT = sc['scanList']['scan'][0]['scan start time']
-            mz = sc['m/z array']
-            Intensities = sc['intensity array']
-            tmpidx = Intensities>=10
-            mz = mz[tmpidx]
-            Intensities = Intensities[tmpidx]
-
-            mz_size = mz.size
-            for idx, v in enumerate(mz):
-                mz_tol = mass_acc * 1e-6 * v
-                for ch in charges:
-                    pos_ind = prec_masses.searchsorted(v * ch)
-                    shifts = prec_isotopes[pos_ind]
-                    found_isotopes = [idx, ]
-                    min_shift = prec_minisotopes[pos_ind]
-                    flag = 1
-                    for shift in shifts[1:]:
-                        m = v + (1.00335 * shift / ch)
-                        j = mz.searchsorted(m)
-                        if j == mz_size or m - mz[j - 1] < mz[j] - m:
-                            j -= 1
-                        if j not in banned and abs(m - mz[j]) <= mz_tol:
-                            found_isotopes.append(j)
-                        else:
-                            flag = 0
-                            break
-                    if flag:
-                        int_approved = [found_isotopes[0]]
-                        for jj_ind, jj in enumerate(found_isotopes[1:]):
-                            if 1 / I_err <= (Intensities[found_isotopes[jj_ind]] / Intensities[jj]) / (
-                                        isotopes_int[pos_ind][jj_ind] / isotopes_int[pos_ind][
-                                    jj_ind + 1]) <= I_err:
-                                int_approved.append(jj)
-                            elif jj_ind == 0:
-                                break
-                        if len(int_approved) > 1:
-                            for jj in int_approved:
-                                banned.add(jj)
-                            q_output.put((v - (1.00335 * min_shift / ch), RT, Intensities[idx], ch))
-                            break
-        q_output.put(None)
-
-    for i in range(nprocs):
-        p = Process(target=custom_deiso, args=(q, q_output, min_ch, max_ch, mass_acc))
-        procs.append(p)
-        p.start()
-
-
-    idx = 1
-    ms1_idx = 1
-
-    for sc in mzml.read(fname):
-        idx += 1
-        if sc['ms level'] == 1:
-            q.put(sc)
-            ms1_idx += 1
-    print 'total number of spectra = %d\ntotal number of ms1 spectra = %d' % (idx - 1, ms1_idx - 1)
-    for p in procs:
-        q.put(None)
-
-    results = []
-
-    jj = 0
-    while jj < nprocs:
-        for rec in iter(q_output.get, None):
-            results.append(rec)
-        jj += 1
-
-    for p in procs:
-        p.terminate()
-    print 'Deisotoping is finished'
-
-    peak_id = -1
-    number_of_peaks = len(results)
-
-    mzst = np.empty(number_of_peaks, dtype=np.dtype('f4'))
-    mzs = np.empty(number_of_peaks, dtype=np.dtype('f4'))
-    RTs = np.empty(number_of_peaks, dtype=np.dtype('f2'))
-    Is = np.empty(number_of_peaks, dtype=int)
-    chs = np.empty(number_of_peaks, dtype=np.dtype('i2'))
-    pis = np.empty(number_of_peaks, dtype=np.dtype('i4'))
-    pIs = np.empty(number_of_peaks, dtype=np.dtype('f4'))
-
-    for rec in results:
-        mz = float(rec[0])
-        RT = float(rec[1])
-        I = float(rec[2])
-        cz = int(rec[3])
-        try:
-            pI = float(rec[6])
-        except:
-            pI = 7
-        neutral = mz * cz - 1.0073 * cz
-        peak_id += 1
-        mzst[peak_id] = neutral
-        mzs[peak_id] = mz
-        RTs[peak_id] = RT
-        Is[peak_id] = I
-        chs[peak_id] = cz
-        pis[peak_id] = peak_id
-        pIs[peak_id] = pI
-    print len(mzs), 'len(mzs)'
-    print peak_id, 'peak_id'
-    idx = np.argsort(mzs)
-    mzs = mzs[idx]
-    mzst = mzst[idx]
-    RTs = RTs[idx]
-    Is = Is[idx]
-    chs = chs[idx]
-    pis = pis[idx]
-    pIs = pIs[idx]
-    minv = -1
-
-
-
-    procs = []
-    q = Queue()
-    q_out = Queue()
-
-    for i in range(nprocs):
-        p = Process(target=find_peaks, args=(q, q_out, min_i))
-        procs.append(p)
-        p.start()
-
-    lv = mzs.searchsorted(mzs - 0.01, side='left')
-    rv = mzs.searchsorted(mzs + 0.01, side='right')
-    for idx in range(len(mzs)):
-        if mzs[idx] >= minv:
-            minv = mzs[idx] + 0.005
-            if mzs[lv[idx]:rv[idx]].size > 5 and RTs[lv[idx]:rv[idx]].max() - RTs[lv[idx]:rv[idx]].min() > 0.25:
-                q.put((mzs[idx], RTs[lv[idx]:rv[idx]], Is[lv[idx]:rv[idx]], mzst[lv[idx]:rv[idx]], chs[lv[idx]:rv[idx]], pis[lv[idx]:rv[idx]], pIs[lv[idx]:rv[idx]]))
-    for p in procs:
-        q.put(None)
-
-    outres = set()
-    jj = 0
-    while jj < nprocs:
-        for rec in iter(q_out.get, None):
-            outres.update(rec)
-        jj += 1
-
-    for p in procs:
-        p.terminate()
-
-    print 'Total number of peaks = %d' % (len(mzs), )
-    print 'Total number of unique peaks = %d' % (len(outres), )
-    peak_id = 1
-    for res in outres:
-        yield res + (int(peak_id), )
-        peak_id += 1
+def iterate_spectra(fname, min_ch, max_ch, min_isotopes):
+    with open(fname, 'rb') as infile:
+        csvreader = csv.reader(infile, delimiter='\t')
+        header = csvreader.next()
+        mass_ind = header.index('massCalib')
+        RT_ind = header.index('rtApex')
+        ch_ind = header.index('charge')
+        nIsotopes_ind = header.index('nIsotopes')
+        idx = 0
+        for z in csvreader:
+            nm = float(z[mass_ind])
+            RT = float(z[RT_ind])
+            ch = float(z[ch_ind])
+            nIsotopes = float(z[nIsotopes_ind])
+            idx += 1
+            if nIsotopes >= min_isotopes and min_ch <= ch <= max_ch:
+                yield nm, RT, ch, idx
 
 
 def peptide_gen(settings):
