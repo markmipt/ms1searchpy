@@ -1,0 +1,1 @@
+Here is in the folder the attached software for deisotoping and peak picking called Dinosaur. The orinal source code repository is https://github.com/fickludd/dinosaur. The description of the algorithm is avaliable at Journal of Proteome Research in the work J.Teleman et al., "Dinosaur: A Refined Open-Source Peptide MS Feature Detector", 2016.

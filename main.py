@@ -23,7 +23,6 @@ def process_file(fname, settings):
     return process_peptides(fname, settings)
 
 
-
 def peptide_processor(peptide, **kwargs):
     seqm = peptide
     m = cmass.fast_mass(seqm, aa_mass=kwargs['aa_mass'])
@@ -78,14 +77,12 @@ def prepare_peptide_processor(fname, settings):
     charges = np.array(charges)[i]
     ids = np.array(ids)[i]
 
-
     fmods = settings.get('modifications', 'fixed')
     aa_mass = mass.std_aa_mass
     if fmods:
         for mod in re.split(r'[,;]\s*', fmods):
             m, aa = parser._split_label(mod)
             aa_mass[aa] += settings.getfloat('modifications', m)
-
 
     acc_l = settings.getfloat('search', 'precursor accuracy left')
     acc_r = settings.getfloat('search', 'precursor accuracy right')
@@ -95,6 +92,7 @@ def prepare_peptide_processor(fname, settings):
 
     return {'aa_mass': aa_mass, 'acc_l': acc_l, 'acc_r': acc_r,
             'RC': RC, 'RT_sigma': RT_sigma, 'settings': settings}
+
 
 def peptide_processor_iter_isoforms(peptide, **kwargs):
     out = []
@@ -130,8 +128,6 @@ def process_peptides(fname, settings):
     ids_all = np.array(ids_all)
     del ms1results
 
-    mass_m = settings.getfloat('search', 'precursor accuracy shift')
-    mass_sigma = settings.getfloat('search', 'precursor accuracy sigma')
     RT_m = settings.getfloat('search', 'retention time shift')
     RT_sigma = settings.getfloat('search', 'retention time sigma')
 

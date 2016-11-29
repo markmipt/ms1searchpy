@@ -3,6 +3,7 @@ from pyteomics import fasta, parser
 from multiprocessing import Queue, Process, cpu_count
 import os
 import csv
+import subprocess
 
 
 def settings(fname=None, default_name=os.path.join(
@@ -33,6 +34,9 @@ class CustomRawConfigParser(RawConfigParser):
 
 
 def iterate_spectra(fname, min_ch, max_ch, min_isotopes):
+    if os.path.splitext(fname)[-1].lower() == '.mzml':
+        subprocess.call(['java', '-jar', 'Dinosaur/Dinosaur-1.1.3.free.jar', fname])
+        fname = os.path.splitext(fname)[0] + '.features.tsv'
     with open(fname, 'rb') as infile:
         csvreader = csv.reader(infile, delimiter='\t')
         header = csvreader.next()
