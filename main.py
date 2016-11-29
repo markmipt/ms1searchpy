@@ -123,9 +123,6 @@ def process_peptides(fname, settings):
     prefix = settings.get('input', 'decoy prefix')
     protsN, pept_prot = utils.get_prot_pept_map(settings)
 
-    # # for zz in np.arange(0.5, 3.0, 0.1):
-    # for zz in [1.6, ]:
-    #     print zz
     seqs_all, md_all, rt_all, ids_all = zip(*ms1results)
     seqs_all = np.array(seqs_all)
     md_all = np.array(md_all)
@@ -138,9 +135,8 @@ def process_peptides(fname, settings):
     RT_m = settings.getfloat('search', 'retention time shift')
     RT_sigma = settings.getfloat('search', 'retention time sigma')
 
-    e_all = (rt_all - RT_m) ** 2 / (RT_sigma ** 2)#(md_all - mass_m) ** 2 / (mass_sigma ** 2)# + (rt_all - RT_m) ** 2 / (RT_sigma ** 2)
+    e_all = (rt_all - RT_m) ** 2 / (RT_sigma ** 2)
     r = settings.getfloat('search', 'r threshold') ** 2
-    # r = zz ** 2
     e_ind = e_all <= r
     seqs_all = seqs_all[e_ind]
     md_all = md_all[e_ind]
