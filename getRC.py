@@ -3,10 +3,6 @@ import argparse
 import cPickle
 from pyteomics import achrom, auxiliary as aux
 
-# infile = argv[1]
-# outfile = argv[2]
-# delimiter = argv[3]
-
 parser = argparse.ArgumentParser(
     description='Create file with Retention Coefficients trained on input peptides.',
     epilog='''
@@ -63,10 +59,10 @@ for key, val in RC_dict['aa'].items():
         xdict[key][1] = val
     except:
         xdict[key] = [None, val]
-a, b, _, _ = aux.linear_regression([x[0] for x in xdict.values() if all(v != None for v in x)],
-                                   [x[1] for x in xdict.values() if all(v != None for v in x)])
+a, b, _, _ = aux.linear_regression([x[0] for x in xdict.values() if all(v is not None for v in x)],
+                                   [x[1] for x in xdict.values() if all(v is not None for v in x)])
 for key, x in xdict.items():
-    if x[1] == None:
+    if x[1] is None:
         x[1] = x[0] * a + b
     RC_dict['aa'][key] = x[1]
 if 'C' not in RC_dict['aa']:
