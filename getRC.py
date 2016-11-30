@@ -13,7 +13,7 @@ parser = argparse.ArgumentParser(
 
 Example usage
 -------------
-  $ getRC.py input.txt output.pickle tab
+  $ getRC.py input.txt -o output.pickle -d tab
 -------------
 
 input file must contains lines with peptide sequence and Retention times:
@@ -43,15 +43,21 @@ seqs = []
 RTexp = []
 with open(infile) as inp:
     for line in inp:
-        seq, RT = line.strip().split(delimiter)
-        seqs.append(seq)
-        RTexp.append(RT)
+        if line.strip():
+            seq, RT = line.strip().split(delimiter)
+            seqs.append(seq)
+            RTexp.append(float(RT))
 RC_def = achrom.RCs_gilar_rp
 aa_labels = set(RC_def['aa'].keys())
 xdict = {}
 for key, val in RC_def['aa'].items():
     xdict[key] = [val, None]
 RC_dict = achrom.get_RCs_vary_lcp(seqs, RTexp, labels=aa_labels)
+
+RTpred = [achrom.calculate_RT(seq, RC_dict) for seq in seqs]
+
+_, _, Rcoef, sigma = aux.linear_regression(RTpred, RTexp)
+
 for key, val in RC_dict['aa'].items():
     try:
         xdict[key][1] = val
@@ -66,4 +72,5 @@ for key, x in xdict.items():
 if 'C' not in RC_dict['aa']:
     RC_dict['aa']['C'] = RC_dict['aa']['C*']
 cPickle.dump(RC_dict, open(outfile, 'w'))
+print 'Model results: R^2 = %.2f, stdev = %.2f' % (Rcoef ** 2, sigma)
 print 'Retention coefficients were saved.'
