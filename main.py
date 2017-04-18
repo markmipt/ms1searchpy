@@ -174,11 +174,7 @@ def prepare_peptide_processor(fname, settings):
     acc_l = settings.getfloat('search', 'precursor accuracy left')
     acc_r = settings.getfloat('search', 'precursor accuracy right')
 
-    RC = cPickle.load(open(settings.get('input', 'RC'), 'r'))
-    RT_sigma = settings.getfloat('search', 'retention time sigma')
-
-    return {'aa_mass': aa_mass, 'acc_l': acc_l, 'acc_r': acc_r,
-            'RC': RC, 'RT_sigma': RT_sigma, 'settings': settings}
+    return {'aa_mass': aa_mass, 'acc_l': acc_l, 'acc_r': acc_r, 'settings': settings}
 
 
 def peptide_processor_iter_isoforms(peptide, **kwargs):
@@ -379,9 +375,9 @@ def process_peptides(fname, settings):
             RC = achrom.get_RCs_vary_lcp(true_seqs[~outmask], true_rt[~outmask])
             # RC = cPickle.load(open('/home/mark/MS1_2016/confetti/output/c1_RC.pickle'))
             # RC = achrom.get_RCs(true_seqs, true_rt)
-            RT_pred = np.array([achrom.calculate_RT(s, RC) for s in true_seqs[~outmask]])
-            RT_diff = RT_pred - true_rt[~outmask]
-            aa, bb, RR, ss = aux.linear_regression(RT_pred, true_rt[~outmask])
+            RT_pred = np.array([achrom.calculate_RT(s, RC) for s in true_seqs])
+            RT_diff = RT_pred - true_rt
+            aa, bb, RR, ss = aux.linear_regression(RT_pred, true_rt)
             # aa, bb, RR, ss = aux.linear_regression(RT_pred, true_rt)
         print aa, bb, RR, ss
 
@@ -538,8 +534,10 @@ def process_peptides(fname, settings):
         for x in filtered_prots:
             identified_proteins += 1
 
+        print 'TOP 5 identified proteins:'
+        print 'dbname\tscore\tnum matched peptides\tnum theoretical peptides'
         for x in filtered_prots[:5]:
-            print x[0], x[1], int(prots_spc_copy[x[0]]), protsN[x[0]]
+            print '\t'.join((x[0], x[1], int(prots_spc_copy[x[0]]), protsN[x[0]]))
         print 'results:%s;number of identified proteins = %d' % (fname, identified_proteins, )
         print 'R=', r
         with open(os.path.splitext(fname)[0] + '_proteins.csv', 'w') as output:
