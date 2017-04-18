@@ -79,9 +79,8 @@ def prot_gen(settings):
     db = settings.get('input', 'database')
     add_decoy = settings.getboolean('input', 'add decoy')
     prefix = settings.get('input', 'decoy prefix')
-    mode = settings.get('input', 'decoy method')
 
-    read = [fasta.read, lambda f: fasta.decoy_db(f, mode=mode, prefix=prefix)][add_decoy]
+    read = [fasta.read, lambda f: fasta.decoy_db(f, mode='shuffle', prefix=prefix)][add_decoy]
     with read(db) as f:
         for p in f:
             yield p
@@ -207,13 +206,11 @@ def multimap(n, func, it, **kw):
                 qin.put(s)
                 count += 1
                 if count > 5000000:
-                    print 'Loaded 5000000 items. Ending cycle.'
                     break
             for _ in range(n):
                 qin.put(None)
 
             if not count:
-                print 'No items left. Exiting.'
                 break
 
             while count:
@@ -222,5 +219,3 @@ def multimap(n, func, it, **kw):
 
             for p in procs:
                 p.join()
-
-            print 'Cycle finished.'
