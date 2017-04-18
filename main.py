@@ -15,8 +15,8 @@ try:
 except ImportError:
     cmass = mass
 import subprocess
-
 from sklearn import linear_model
+
 def get_RCs2(sequences, RTs, lcp = -0.21,
             term_aa = False, **kwargs):
     labels = kwargs.get('labels')
@@ -222,12 +222,6 @@ def process_peptides(fname, settings):
     isdecoy_key = lambda x: x.startswith(prefix)
     escore = lambda x: -x[1]
 
-    protsV = set()
-    path_to_valid_fasta = settings.get('input', 'valid proteins')
-    if path_to_valid_fasta:
-        for prot in fasta.read(path_to_valid_fasta):
-            protsV.add(prot[0].split(' ')[0])
-
     p1 = set(seqs_all)
 
     if len(p1):
@@ -276,13 +270,11 @@ def process_peptides(fname, settings):
         identified_proteins_valid = 0
 
         for x in filtered_prots:
-            if x[0] in protsV:
-                identified_proteins_valid += 1
             identified_proteins += 1
 
         # for x in filtered_prots[:5]:
         #     print x[0], x[1], int(prots_spc_copy[x[0]]), protsN[x[0]]
-        print 'results for default search: number of identified proteins = %d;number of valid proteins = %d' % (identified_proteins, identified_proteins_valid)
+        print 'results for default search: number of identified proteins = %d' % (identified_proteins, )
 
 
         print 'Running mass recalibration...'
@@ -388,7 +380,7 @@ def process_peptides(fname, settings):
             # RC = cPickle.load(open('/home/mark/MS1_2016/confetti/output/c1_RC.pickle'))
             # RC = achrom.get_RCs(true_seqs, true_rt)
             RT_pred = np.array([achrom.calculate_RT(s, RC) for s in true_seqs[~outmask]])
-            RT_diff = RT_pred - true_rt
+            RT_diff = RT_pred - true_rt[~outmask]
             aa, bb, RR, ss = aux.linear_regression(RT_pred, true_rt[~outmask])
             # aa, bb, RR, ss = aux.linear_regression(RT_pred, true_rt)
         print aa, bb, RR, ss
@@ -544,13 +536,11 @@ def process_peptides(fname, settings):
         identified_proteins_valid = 0
 
         for x in filtered_prots:
-            if x[0] in protsV:
-                identified_proteins_valid += 1
             identified_proteins += 1
 
         for x in filtered_prots[:5]:
             print x[0], x[1], int(prots_spc_copy[x[0]]), protsN[x[0]]
-        print 'results:%s;number of identified proteins = %d;number of valid proteins = %d' % (fname, identified_proteins, identified_proteins_valid)
+        print 'results:%s;number of identified proteins = %d' % (fname, identified_proteins, )
         print 'R=', r
         with open(os.path.splitext(fname)[0] + '_proteins.csv', 'w') as output:
             output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
