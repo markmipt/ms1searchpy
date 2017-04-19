@@ -20,7 +20,7 @@ parser.add_argument('-rtt', help='retention time threshold in sigma', default=1.
 parser.add_argument('-i', help='minimum number of isotopes', default=4, type=int)
 parser.add_argument('-lmin', help='min length of peptides', default=7, type=int)
 parser.add_argument('-lmax', help='max length of peptides', default=30, type=int)
-parser.add_argument('-e', help='cleavage rule. X!Tandem style for cleavage rules.', default='[RK]|{P}')
+parser.add_argument('-e', help='cleavage rule in quotes!. X!Tandem style for cleavage rules', default='[RK]|{P}')
 parser.add_argument('-mc', help='number of missed cleavages', default=0, type=int)
 parser.add_argument('-cmin', help='min precursor charge', default=2, type=int)
 parser.add_argument('-cmax', help='max precursor charge', default=5, type=int)
