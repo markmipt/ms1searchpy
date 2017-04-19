@@ -57,20 +57,9 @@ def get_RCs2(sequences, RTs, lcp = -0.21,
     model = linear_model.LinearRegression(n_jobs=12)
     model.fit(np.array(composition_array), np.array(RTs))
     
-#     model_ransac = TheilSenRegressor(n_jobs=12)
-    model_ransac = linear_model.RANSACRegressor(linear_model.LinearRegression(n_jobs=12), min_samples=0.999, max_trials=1000)
+    model_ransac = linear_model.RANSACRegressor(linear_model.LinearRegression(n_jobs=12), min_samples=0.5, max_trials=5000)
     model_ransac.fit(np.array(composition_array), np.array(RTs))
-#     print model_ransac
-#     print model_ransac.n_subpopulation_
-    
-    # print model_ransac.estimator_.coef_
-#     print model_ransac.coef_
-#     RCs = model_ransac.coef_
     RCs = model_ransac.estimator_.coef_
-#     RCs, res, rank, s = np.linalg.lstsq(np.array(composition_array),
-#                                            np.array(RTs))
-
-    # Remove normalizing elements from the RTs vector.
     if term_aa:
         for term_label in ['nterm', 'cterm']:
             RTs.pop()
@@ -130,16 +119,8 @@ def peptide_processor(peptide, **kwargs):
     start = nmasses.searchsorted(m - dm_l)
     end = nmasses.searchsorted(m + dm_r)
     idx = set(range(start, end))
-
-    # if idx:
-    #     RC = kwargs['RC']
-    #     RT_sigma = kwargs['RT_sigma']
-    #     RT = achrom.calculate_RT(seqm, RC)
-
     results = []
     for i in idx:
-        # RTdiff = RT - rts[i]
-        # if abs(RTdiff) <= 3 * RT_sigma:
         peak_id = ids[i]
         massdiff = (m - nmasses[i]) / m * 1e6
         results.append((seqm, massdiff, rts[i], peak_id))
@@ -276,14 +257,9 @@ def process_peptides(fname, settings):
 
         for x in filtered_prots:
             identified_proteins += 1
-
-        # for x in filtered_prots[:5]:
-        #     print x[0], x[1], int(prots_spc_copy[x[0]]), protsN[x[0]]
         print 'results for default search: number of identified proteins = %d' % (identified_proteins, )
 
-
         print 'Running mass recalibration...'
-
 
         true_md = []
         true_seqs = []
@@ -311,12 +287,9 @@ def process_peptides(fname, settings):
         mass_shift, mass_sigma = popt[1], abs(popt[2])
         print 'Calibrated mass shift: ', mass_shift
         print 'Calibrated mass sigma in ppm: ', mass_sigma
-        # print np.sqrt(np.diag(pcov))
-        # print '\n'
 
         e_all = abs(md_all - mass_shift) / (mass_sigma)
         r = 3.0
-        # r = zz ** 2
         e_ind = e_all <= r
         seqs_all = seqs_all[e_ind]
         md_all = md_all[e_ind]
@@ -328,7 +301,7 @@ def process_peptides(fname, settings):
         true_seqs = []
         true_md = []
         true_rt = []
-        true_prots = set(x[0] for x in filtered_prots[:1])
+        true_prots = set(x[0] for x in filtered_prots[:5])
         for pep, proteins in pept_prot.iteritems():
             if any(protein in true_prots for protein in proteins):
                 true_seqs.append(pep)
@@ -341,8 +314,6 @@ def process_peptides(fname, settings):
         true_rt = np.array(true_rt)
         true_md = np.array(true_md)
 
-        # cPickle.dump([true_seqs, true_rt, true_md], open('/home/mark/test002.cpickle', 'w'))
-
         best_seq = defaultdict(list)
         newseqs = []
         newRTs = []
@@ -354,7 +325,6 @@ def process_peptides(fname, settings):
         true_seqs = np.array(newseqs)
         true_rt = np.array(newRTs)
 
-        # RC = achrom.get_RCs_vary_lcp(true_seqs, true_rt)
         RC, outmask = get_RCs2(true_seqs, true_rt)
 
         if elude_path:
@@ -376,79 +346,19 @@ def process_peptides(fname, settings):
                 train_seq.append(seq)
                 train_RT.append(float(RTexp))
             train_RT = np.array(train_RT)
-            RT_pred = np.array([pepdict[s] for s in train_seq])#np.array([pepdict[s] for s in true_seqs[~outmask]])
+            RT_pred = np.array([pepdict[s] for s in train_seq])
             RT_diff = RT_pred - train_RT
-            # print aux.linear_regression(RT_pred, train_RT)
             aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
         else:
             RC = achrom.get_RCs_vary_lcp(true_seqs[~outmask], true_rt[~outmask])
-            # RC = achrom.get_RCs_vary_lcp(true_seqs, true_rt)
-            # RC = cPickle.load(open('/home/mark/MS1_2016/confetti/output/c1_RC.pickle'))
-            # RC = achrom.get_RCs(true_seqs, true_rt)
             RT_pred = np.array([achrom.calculate_RT(s, RC) for s in true_seqs])
             RT_diff = RT_pred - true_rt
             aa, bb, RR, ss = aux.linear_regression(RT_pred, true_rt)
-            # aa, bb, RR, ss = aux.linear_regression(RT_pred, true_rt)
         print aa, bb, RR, ss
 
-        # RC = achrom.get_RCs(true_seqs[~outmask], true_rt[~outmask])
-        # # RC = cPickle.load(open('/home/mark/MS1_2016/confetti/output/c1_RC.pickle'))
-        # # RC = achrom.get_RCs(true_seqs, true_rt)
-        # RT_pred = np.array([achrom.calculate_RT(s, RC) for s in true_seqs])
-        # RT_diff = RT_pred - true_rt
-        # aa, bb, RR, ss = aux.linear_regression(RT_pred, true_rt)
-        # # aa, bb, RR, ss = aux.linear_regression(RT_pred, true_rt)
-        # print aa, bb, RR, ss
-        best_sigma = ss#aux.linear_regression(RT_pred, true_rt)[3]
+
+        best_sigma = ss
         RT_sigma = best_sigma
-        # # RT_sigma = 9.6
-
-        # e_ind = [True for i in range(len(true_seqs))]
-        # better = []
-        # for i in range(len(true_seqs)):
-        #     e_ind[i] = False
-        #     if i!=0:
-        #         e_ind[i-1] = True
-        # #     RC = achrom.get_RCs_vary_lcp(seqs[e_ind], RTs[e_ind])
-        #     RC = achrom.get_RCs(true_seqs[e_ind], true_rt[e_ind])
-        #     RT_pred = np.array([achrom.calculate_RT(s, RC) for s in true_seqs[e_ind]])
-        #     if aux.linear_regression(RT_pred, true_rt[e_ind])[3] <= best_sigma:
-        #         better.append(i)
-        # # print better
-        # e_ind[-1] = True
-        # for i in better:
-        #     e_ind[i] = False
-            
-        # RC = achrom.get_RCs(true_seqs[e_ind], true_rt[e_ind])
-        # RT_pred = np.array([achrom.calculate_RT(s, RC) for s in true_seqs[e_ind]])
-        # print aux.linear_regression(RT_pred, true_rt[e_ind])
-        # RT_sigma = aux.linear_regression(RT_pred, true_rt[e_ind])[3]
-
-
-
-
-        # RC = achrom.get_RCs_vary_lcp(true_seqs, true_rt)
-        # rt_pred = np.array([achrom.calculate_RT(s, RC) for s in true_seqs])
-        # print aux.linear_regression(rt_pred, true_rt)
-
-# #####
-#         rt_pred = np.array([achrom.calculate_RT(s, RC) for s in seqs_all])
-#         rt_diff = rt_all - rt_pred
-
-#         # RT_m = settings.getfloat('search', 'retention time shift')
-#         # RT_sigma = settings.getfloat('search', 'retention time sigma')
-
-#         e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
-#         r = settings.getfloat('search', 'r threshold') ** 2
-#         e_ind = e_all <= r
-#         seqs_all = seqs_all[e_ind]
-#         md_all = md_all[e_ind]
-#         rt_all = rt_all[e_ind]
-#         ids_all = ids_all[e_ind]
-
-
-
-
 
     else:
         print 'No matches found'
@@ -472,7 +382,6 @@ def process_peptides(fname, settings):
             pepdict[seq] = achrom.calculate_RT(seq, RC)
     # for rrr in np.arange(2.0, 0.5, -0.1):
         # for rrr in [1.6, ]:
-            # rt_pred = np.array([achrom.calculate_RT(s, RC) for s in seqs_all])
     rt_pred = np.array([pepdict[s] for s in seqs_all])
     rt_diff = rt_all - rt_pred
     e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
