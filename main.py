@@ -101,11 +101,12 @@ def get_RCs2(sequences, RTs, lcp = -0.21,
     return RC_dict, outlier_mask
 
 
-def process_file(fname, settings):
-    ftype = fname.rsplit('.', 1)[-1].lower()
+def process_file(args):
+    # fname = args['file']
+    # ftype = fname.rsplit('.', 1)[-1].lower()
     utils.seen_target.clear()
     utils.seen_decoy.clear()
-    return process_peptides(fname, settings)
+    return process_peptides(args)
 
 
 def peptide_processor(peptide, **kwargs):
@@ -113,7 +114,6 @@ def peptide_processor(peptide, **kwargs):
     m = cmass.fast_mass(seqm, aa_mass=kwargs['aa_mass'])
     acc_l = kwargs['acc_l']
     acc_r = kwargs['acc_r']
-    settings = kwargs['settings']
     dm_l = acc_l * m / 1.0e6
     dm_r = acc_r * m / 1.0e6
     start = nmasses.searchsorted(m - dm_l)
@@ -127,7 +127,7 @@ def peptide_processor(peptide, **kwargs):
     return results
 
 
-def prepare_peptide_processor(fname, settings):
+def prepare_peptide_processor(fname, args):
     global nmasses
     global rts
     global charges
@@ -137,9 +137,10 @@ def prepare_peptide_processor(fname, settings):
     charges = []
     ids = []
 
-    min_ch = settings.getint('search', 'minimum charge')
-    max_ch = settings.getint('search', 'maximum charge')
-    min_isotopes = settings.getint('search', 'minimum isotopes')
+    min_ch = args['cmin']
+    max_ch = args['cmax']
+
+    min_isotopes = args['i']
 
     print 'Reading spectra ...'
     for m, RT, c, peak_id in utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes):
@@ -154,17 +155,17 @@ def prepare_peptide_processor(fname, settings):
     charges = np.array(charges)[i]
     ids = np.array(ids)[i]
 
-    fmods = settings.get('modifications', 'fixed')
+    fmods = args['fmods']
     aa_mass = mass.std_aa_mass
     if fmods:
-        for mod in re.split(r'[,;]\s*', fmods):
-            m, aa = parser._split_label(mod)
-            aa_mass[aa] += settings.getfloat('modifications', m)
+        for mod in fmods.split(','):
+            m, aa = mod.split('@')
+            aa_mass[aa] += float(m)
 
-    acc_l = settings.getfloat('search', 'precursor accuracy left')
-    acc_r = settings.getfloat('search', 'precursor accuracy right')
+    acc_l = args['ptol']
+    acc_r = args['ptol']
 
-    return {'aa_mass': aa_mass, 'acc_l': acc_l, 'acc_r': acc_r, 'settings': settings}
+    return {'aa_mass': aa_mass, 'acc_l': acc_l, 'acc_r': acc_r, 'args': args}
 
 
 def peptide_processor_iter_isoforms(peptide, **kwargs):
@@ -173,29 +174,30 @@ def peptide_processor_iter_isoforms(peptide, **kwargs):
     return out
 
 
-def process_peptides(fname, settings):
+def process_peptides(args):
+    fname = args['file']
 
     def calc_sf_all(v, n, p):
         sf_values = np.log10(1 / binom.sf(v, n, p))
         sf_values[np.isinf(sf_values)] = 1
         return sf_values
 
-    elude_path = settings.get('performance', 'elude_path')
+    elude_path = args['elude']
     elude_path = elude_path.strip()
 
     ms1results = []
-    peps = utils.peptide_gen(settings)
-    kwargs = prepare_peptide_processor(fname, settings)
+    peps = utils.peptide_gen(args)
+    kwargs = prepare_peptide_processor(fname, args)
     func = peptide_processor_iter_isoforms
     print 'Running the search ...'
-    n = settings.getint('performance', 'processes')
+    n = args['nprocs']
     for y in utils.multimap(n, func, peps, **kwargs):
         for result in y:
             if len(result):
                 ms1results.extend(result)
 
-    prefix = settings.get('input', 'decoy prefix')
-    protsN, pept_prot = utils.get_prot_pept_map(settings)
+    prefix = args['prefix']
+    protsN, pept_prot = utils.get_prot_pept_map(args)
 
     seqs_all, md_all, rt_all, ids_all = zip(*ms1results)
     seqs_all = np.array(seqs_all)
@@ -272,8 +274,8 @@ def process_peptides(fname, settings):
 
         true_md.extend(md_all[e_ind])
 
-        mass_left = settings.getfloat('search', 'precursor accuracy left')
-        mass_right = settings.getfloat('search', 'precursor accuracy right')
+        mass_left = args['ptol']
+        mass_right = args['ptol']
         bwidth = 0.01
         bbins = np.arange(-mass_left, mass_right, bwidth)
         H1, b1 = np.histogram(true_md, bins=bbins)
@@ -385,7 +387,7 @@ def process_peptides(fname, settings):
     rt_pred = np.array([pepdict[s] for s in seqs_all])
     rt_diff = rt_all - rt_pred
     e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
-    r = settings.getfloat('search', 'r threshold') ** 2
+    r = args['rtt']
     e_ind = e_all <= r
     seqs_all = seqs_all[e_ind]
     md_all = md_all[e_ind]
