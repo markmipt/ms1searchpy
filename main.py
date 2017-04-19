@@ -21,6 +21,7 @@ def get_RCs2(sequences, RTs, lcp = -0.21,
             term_aa = False, **kwargs):
     labels = kwargs.get('labels')
 
+    # Make a list of all amino acids present in the sample.
     peptide_dicts = [
             parser.amino_acid_composition(peptide, False, term_aa,
                                allow_unknown_modifications=True,
@@ -56,11 +57,20 @@ def get_RCs2(sequences, RTs, lcp = -0.21,
     model = linear_model.LinearRegression(n_jobs=12)
     model.fit(np.array(composition_array), np.array(RTs))
     
-    model_ransac = linear_model.RANSACRegressor(linear_model.LinearRegression(n_jobs=12), min_samples=0.3, max_trials=1000)
-
+#     model_ransac = TheilSenRegressor(n_jobs=12)
+    model_ransac = linear_model.RANSACRegressor(linear_model.LinearRegression(n_jobs=12), min_samples=0.999, max_trials=1000)
     model_ransac.fit(np.array(composition_array), np.array(RTs))
+#     print model_ransac
+#     print model_ransac.n_subpopulation_
+    
+    # print model_ransac.estimator_.coef_
+#     print model_ransac.coef_
+#     RCs = model_ransac.coef_
     RCs = model_ransac.estimator_.coef_
+#     RCs, res, rank, s = np.linalg.lstsq(np.array(composition_array),
+#                                            np.array(RTs))
 
+    # Remove normalizing elements from the RTs vector.
     if term_aa:
         for term_label in ['nterm', 'cterm']:
             RTs.pop()
@@ -97,7 +107,6 @@ def get_RCs2(sequences, RTs, lcp = -0.21,
             # Define missing terminal RCs using this linear equation.
             for aa in undefined_term_RCs:
                 RC_dict['aa'][term_label + aa] = a * RC_dict['aa'][aa] + b
-
     inlier_mask = model_ransac.inlier_mask_
     outlier_mask = np.logical_not(inlier_mask)
     return RC_dict, outlier_mask
@@ -319,7 +328,7 @@ def process_peptides(fname, settings):
         true_seqs = []
         true_md = []
         true_rt = []
-        true_prots = set(x[0] for x in filtered_prots[:5])
+        true_prots = set(x[0] for x in filtered_prots[:1])
         for pep, proteins in pept_prot.iteritems():
             if any(protein in true_prots for protein in proteins):
                 true_seqs.append(pep)
@@ -373,6 +382,7 @@ def process_peptides(fname, settings):
             aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
         else:
             RC = achrom.get_RCs_vary_lcp(true_seqs[~outmask], true_rt[~outmask])
+            # RC = achrom.get_RCs_vary_lcp(true_seqs, true_rt)
             # RC = cPickle.load(open('/home/mark/MS1_2016/confetti/output/c1_RC.pickle'))
             # RC = achrom.get_RCs(true_seqs, true_rt)
             RT_pred = np.array([achrom.calculate_RT(s, RC) for s in true_seqs])
@@ -459,8 +469,8 @@ def process_peptides(fname, settings):
 
     else:
         for seq in p1:
-            pepdict[seq] = achrom.calculate_RT(s, RC)
-        # for rrr in np.arange(2.0, 0.5, -0.1):
+            pepdict[seq] = achrom.calculate_RT(seq, RC)
+    # for rrr in np.arange(2.0, 0.5, -0.1):
         # for rrr in [1.6, ]:
             # rt_pred = np.array([achrom.calculate_RT(s, RC) for s in seqs_all])
     rt_pred = np.array([pepdict[s] for s in seqs_all])
@@ -537,7 +547,7 @@ def process_peptides(fname, settings):
         print 'TOP 5 identified proteins:'
         print 'dbname\tscore\tnum matched peptides\tnum theoretical peptides'
         for x in filtered_prots[:5]:
-            print '\t'.join((x[0], x[1], int(prots_spc_copy[x[0]]), protsN[x[0]]))
+            print '\t'.join((str(x[0]), str(x[1]), str(int(prots_spc_copy[x[0]])), str(protsN[x[0]])))
         print 'results:%s;number of identified proteins = %d' % (fname, identified_proteins, )
         print 'R=', r
         with open(os.path.splitext(fname)[0] + '_proteins.csv', 'w') as output:
