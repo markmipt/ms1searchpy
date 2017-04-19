@@ -1,36 +1,8 @@
-from ConfigParser import RawConfigParser
 from pyteomics import fasta, parser
 from multiprocessing import Queue, Process, cpu_count
 import os
 import csv
 import subprocess
-
-
-def settings(fname=None, default_name=os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), 'default.cfg')):
-    """Read a configuration file and return a :py:class:`RawConfigParser` object.
-    """
-
-    raw_config = CustomRawConfigParser(dict_type=dict, allow_no_value=True)
-    if default_name:
-        raw_config.read(default_name)
-    if fname:
-        raw_config.read(fname)
-    return raw_config
-
-class CustomRawConfigParser(RawConfigParser):
-    def get(self, section, option):
-        val = RawConfigParser.get(self, section, option)
-        if isinstance(val, basestring):
-            return val[::-1].split('|', 1)[-1][::-1]
-        return val
-
-    def get_choices(self, section, option):
-        val = RawConfigParser.get(self, section, option)
-        if isinstance(val, basestring) and len(val.split('|')) > 1:
-            return val[::-1].split('|', 1)[0][::-1]
-        else:
-            return ''
 
 
 def iterate_spectra(fname, min_ch, max_ch, min_isotopes):
@@ -55,13 +27,13 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes):
                 yield nm, RT, ch, idx
 
 
-def peptide_gen(settings):
-    prefix = settings.get('input', 'decoy prefix')
-    enzyme = get_enzyme(settings.get('search', 'enzyme'))
-    mc = settings.getint('search', 'number of missed cleavages')
-    minlen = settings.getint('search', 'peptide minimum length')
-    maxlen = settings.getint('search', 'peptide maximum length')
-    for prot in prot_gen(settings):
+def peptide_gen(args):
+    prefix = args['prefix']
+    enzyme = get_enzyme(args['e'])
+    mc = args['mc']
+    minlen = args['lmin']
+    maxlen = args['lmax']
+    for prot in prot_gen(args):
         for pep in prot_peptides(prot[1], enzyme, mc, minlen, maxlen, is_decoy=prot[0].startswith(prefix)):
             yield pep
 
@@ -75,10 +47,10 @@ def get_enzyme(enzyme):
         except:
             return enzyme
 
-def prot_gen(settings):
-    db = settings.get('input', 'database')
-    add_decoy = settings.getboolean('input', 'add decoy')
-    prefix = settings.get('input', 'decoy prefix')
+def prot_gen(args):
+    db = args['d']
+    add_decoy = args['ad']
+    prefix = args['prefix']
 
     read = [fasta.read, lambda f: fasta.decoy_db(f, mode='shuffle', prefix=prefix)][add_decoy]
     with read(db) as f:
@@ -112,20 +84,21 @@ def prot_peptides(prot_seq, enzyme, mc, minlen, maxlen, is_decoy, dont_use_seen_
                             seen_target.add(f)
                         yield f
 
-def get_prot_pept_map(settings):
+def get_prot_pept_map(args):
     seen_target.clear()
     seen_decoy.clear()
 
-    prefix = settings.get('input', 'decoy prefix')
-    enzyme = get_enzyme(settings.get('search', 'enzyme'))
-    mc = settings.getint('search', 'number of missed cleavages')
-    minlen = settings.getint('search', 'peptide minimum length')
-    maxlen = settings.getint('search', 'peptide maximum length')
+
+    prefix = args['prefix']
+    enzyme = get_enzyme(args['e'])
+    mc = args['mc']
+    minlen = args['lmin']
+    maxlen = args['lmax']
 
     pept_prot = dict()
     protsN = dict()
 
-    for desc, prot in prot_gen(settings):
+    for desc, prot in prot_gen(args):
         dbinfo = desc.split(' ')[0]
         for pep in prot_peptides(prot, enzyme, mc, minlen, maxlen, desc.startswith(prefix), dont_use_seen_peptides=True):
             pept_prot.setdefault(pep, []).append(dbinfo)
