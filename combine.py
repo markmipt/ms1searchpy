@@ -1,25 +1,32 @@
 import csv
 import os
-from sys import argv
 import operator
 from collections import defaultdict
-from pyteomics import auxiliary as aux, fasta
-import utils
+from pyteomics import auxiliary as aux
+import argparse
 
+parser = argparse.ArgumentParser(
+    description='Search proteins using LC-MS spectra',
+    epilog='''
 
-settings = utils.settings(argv[-1])
-prefix = settings.get('input', 'decoy prefix')
+Example usage
+-------------
+$ search.py results_1_proteins_full.csv ... results_n_proteins_full.csv
+-------------
+''',
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+parser.add_argument('files', help='input .csv proteins_full files', nargs='+')
+parser.add_argument('-prefix', help='decoy prefix', default='DECOY_')
+args = vars(parser.parse_args())
+prefix = args['prefix']
+
 isdecoy = lambda x: x[0].startswith(prefix)
 isdecoy_key = lambda x: x.startswith(prefix)
 escore = lambda x: -x[1]
-protsV = set()
-path_to_valid_fasta = settings.get('input', 'valid proteins')
-if path_to_valid_fasta:
-    for prot in fasta.read(path_to_valid_fasta):
-        protsV.add(prot[0].split(' ')[0])
 
 prots_spc = defaultdict(float)
-for filename in argv[1:-1]:
+for filename in args['files']:
     with open(filename, 'r') as csvfile:
         csvreader = csv.reader(csvfile, delimiter='\t')
         csvreader.next()
@@ -49,15 +56,12 @@ identified_proteins = 0
 identified_proteins_valid = 0
 
 for x in filtered_prots:
-    if x[0] in protsV:
-        identified_proteins_valid += 1
     identified_proteins += 1
 
 for x in filtered_prots[:5]:
     print x[0], x[1]
-print 'results:%s;number of identified proteins = %d;number of valid proteins = %d' % (
-'union', identified_proteins, identified_proteins_valid)
-with open(os.path.join(os.path.dirname(argv[1]), 'union_proteins.csv'), 'w') as output:
+print 'results:%s;number of identified proteins = %d' % ('union', identified_proteins)
+with open(os.path.join(os.path.dirname(args['files'][0]), 'union_proteins.csv'), 'w') as output:
     output.write('dbname\tscore\n')
     for x in filtered_prots:
         output.write('\t'.join((x[0], str(x[1]))) + '\n')
