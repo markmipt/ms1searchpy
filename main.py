@@ -57,7 +57,7 @@ def get_RCs2(sequences, RTs, lcp = -0.21,
     model = linear_model.LinearRegression(n_jobs=12)
     model.fit(np.array(composition_array), np.array(RTs))
     
-    model_ransac = linear_model.RANSACRegressor(linear_model.LinearRegression(n_jobs=12), min_samples=0.5, max_trials=5000)
+    model_ransac = linear_model.RANSACRegressor(linear_model.LinearRegression(n_jobs=12), min_samples=0.5, max_trials=5000, random_state=42)
     model_ransac.fit(np.array(composition_array), np.array(RTs))
     RCs = model_ransac.estimator_.coef_
     if term_aa:
