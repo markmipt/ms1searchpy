@@ -228,7 +228,6 @@ def process_peptides(args):
         v_arr = np.array(prots_spc.values())
         n_arr = np.array([protsN[k] for k in prots_spc])
 
-        prots_spc_copy = copy(prots_spc)
         top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
         top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
         p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
@@ -255,7 +254,6 @@ def process_peptides(args):
                                     full_output=True)
 
         identified_proteins = 0
-        identified_proteins_valid = 0
 
         for x in filtered_prots:
             identified_proteins += 1
@@ -276,7 +274,7 @@ def process_peptides(args):
 
         mass_left = args['ptol']
         mass_right = args['ptol']
-        bwidth = 0.01
+        bwidth = 0.1
         bbins = np.arange(-mass_left, mass_right, bwidth)
         H1, b1 = np.histogram(true_md, bins=bbins)
         b1 = b1 + bwidth
@@ -301,7 +299,6 @@ def process_peptides(args):
 
         print 'Running RT prediction...'
         true_seqs = []
-        true_md = []
         true_rt = []
         true_prots = set(x[0] for x in filtered_prots[:5])
         for pep, proteins in pept_prot.iteritems():
@@ -312,9 +309,7 @@ def process_peptides(args):
 
         true_seqs = seqs_all[e_ind]
         true_rt.extend(rt_all[e_ind])
-        true_md.extend(md_all[e_ind])
         true_rt = np.array(true_rt)
-        true_md = np.array(true_md)
 
         best_seq = defaultdict(list)
         newseqs = []
@@ -349,12 +344,10 @@ def process_peptides(args):
                 train_RT.append(float(RTexp))
             train_RT = np.array(train_RT)
             RT_pred = np.array([pepdict[s] for s in train_seq])
-            RT_diff = RT_pred - train_RT
             aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
         else:
             RC = achrom.get_RCs_vary_lcp(true_seqs[~outmask], true_rt[~outmask])
             RT_pred = np.array([achrom.calculate_RT(s, RC) for s in true_seqs])
-            RT_diff = RT_pred - true_rt
             aa, bb, RR, ss = aux.linear_regression(RT_pred, true_rt)
         print aa, bb, RR, ss
 
@@ -382,8 +375,6 @@ def process_peptides(args):
     else:
         for seq in p1:
             pepdict[seq] = achrom.calculate_RT(seq, RC)
-    # for rrr in np.arange(2.0, 0.5, -0.1):
-        # for rrr in [1.6, ]:
     rt_pred = np.array([pepdict[s] for s in seqs_all])
     rt_diff = rt_all - rt_pred
     e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
@@ -450,7 +441,6 @@ def process_peptides(args):
         filtered_prots = aux.filter(prots_spc.items(), fdr=0.01, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1, full_output=True)
 
         identified_proteins = 0
-        identified_proteins_valid = 0
 
         for x in filtered_prots:
             identified_proteins += 1
