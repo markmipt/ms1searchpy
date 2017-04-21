@@ -16,6 +16,7 @@ except ImportError:
     cmass = mass
 import subprocess
 from sklearn import linear_model
+import tempfile
 
 def get_RCs2(sequences, RTs, lcp = -0.21,
             term_aa = False, **kwargs):
@@ -52,10 +53,6 @@ def get_RCs2(sequences, RTs, lcp = -0.21,
             normalizing_peptide.append(0.0)
             composition_array.append(normalizing_peptide)
             RTs.append(0.0)
-
-    # Use least square linear regression.
-    model = linear_model.LinearRegression(n_jobs=12)
-    model.fit(np.array(composition_array), np.array(RTs))
     
     model_ransac = linear_model.RANSACRegressor(linear_model.LinearRegression(n_jobs=12), min_samples=0.5, max_trials=5000, random_state=42)
     model_ransac.fit(np.array(composition_array), np.array(RTs))
@@ -325,19 +322,22 @@ def process_peptides(args):
         RC, outmask = get_RCs2(true_seqs, true_rt)
 
         if elude_path:
-            outtrain = open('/home/mark/Elude/train3.txt', 'w')
+            outtrain = tempfile.NamedTemporaryFile(suffix='.txt')
+            outres = tempfile.NamedTemporaryFile(suffix='.txt')
+            outres_name = outres.name
+            outres.close()
             ns = true_seqs[~outmask]
             nr = true_rt[~outmask]
             ll = len(ns)
             for seq, RT in zip(ns[:ll], nr[:ll]):
                 outtrain.write(seq + '\t' + str(RT) + '\n')
-            outtrain.close()
+            outtrain.flush()
 
-            subprocess.call([elude_path, '-t', '/home/mark/Elude/train3.txt', '-e', '/home/mark/Elude/train3.txt', '-a', '-g', '-o', '/home/mark/Elude/res3.txt'])
+            subprocess.call([elude_path, '-t', outtrain.name, '-e', outtrain.name, '-a', '-g', '-o', outres_name])
             pepdict = dict()
             train_RT = []
             train_seq = []
-            for x in open('/home/mark/Elude/res3.txt').readlines()[3:]:
+            for x in open(outres_name).readlines()[3:]:
                 seq, RT, RTexp = x.strip().split('\t')
                 pepdict[seq] = float(RT)
                 train_seq.append(seq)
@@ -362,16 +362,17 @@ def process_peptides(args):
 
     pepdict = dict()    
     if elude_path:
-        outtrain = open('/home/mark/Elude/test3.txt', 'w')
+        outtest = tempfile.NamedTemporaryFile(suffix='.txt')
         for seq in p1:
-            outtrain.write(seq + '\n')
-        outtrain.close()
+            outtest.write(seq + '\n')
+        outtest.flush()
 
-        subprocess.call([elude_path, '-t', '/home/mark/Elude/train3.txt', '-e', '/home/mark/Elude/test3.txt', '-a', '-o', '/home/mark/Elude/res3.txt'])
-        for x in open('/home/mark/Elude/res3.txt').readlines()[3:]:
+        subprocess.call([elude_path, '-t', outtrain.name, '-e', outtest.name, '-a', '-o', outres_name])
+        for x in open(outres_name).readlines()[3:]:
             seq, RT = x.strip().split('\t')
             pepdict[seq] = float(RT)
-
+        outtest.close()
+        outtrain.close()
     else:
         for seq in p1:
             pepdict[seq] = achrom.calculate_RT(seq, RC)
