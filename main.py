@@ -271,17 +271,25 @@ def process_peptides(args):
 
         mass_left = args['ptol']
         mass_right = args['ptol']
-        bwidth = 0.1
-        bbins = np.arange(-mass_left, mass_right, bwidth)
-        H1, b1 = np.histogram(true_md, bins=bbins)
-        b1 = b1 + bwidth
-        b1 = b1[:-1]
 
         def noisygaus(x, a, x0, sigma, b):
             return a * exp(-(x - x0) ** 2 / (2 * sigma ** 2)) + b
 
-        popt, pcov = curve_fit(noisygaus, b1, H1, p0=[1, np.median(true_md), 1, 1])
-        mass_shift, mass_sigma = popt[1], abs(popt[2])
+        def calibrate_mass(bwidth, mass_left, mass_right, true_md):
+
+            bbins = np.arange(-mass_left, mass_right, bwidth)
+            H1, b1 = np.histogram(true_md, bins=bbins)
+            b1 = b1 + bwidth
+            b1 = b1[:-1]
+
+
+            popt, pcov = curve_fit(noisygaus, b1, H1, p0=[1, np.median(true_md), 1, 1])
+            mass_shift, mass_sigma = popt[1], abs(popt[2])
+            return mass_shift, mass_sigma, pcov[0][0]
+
+        mass_shift, mass_sigma, covvalue = calibrate_mass(0.1, mass_left, mass_right, true_md)
+        if np.isinf(covvalue):
+            mass_shift, mass_sigma, covvalue = calibrate_mass(0.01, mass_left, mass_right, true_md)
         print 'Calibrated mass shift: ', mass_shift
         print 'Calibrated mass sigma in ppm: ', mass_sigma
 
