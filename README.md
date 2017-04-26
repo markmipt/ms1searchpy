@@ -8,9 +8,9 @@ For an efficient usage of retention time, user can install and use ELUDE predict
 
 Algorithm can be run with following command:
 
-    python search.py path_to_peptideFeatures -d path_to_fasta
+    python search.py path_to_MZML -d path_to_fasta
 
-
+    OR
 
     python search.py path_to_peptideFeatures -d path_to_fasta
 
