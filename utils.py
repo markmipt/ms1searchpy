@@ -7,7 +7,7 @@ import subprocess
 
 def iterate_spectra(fname, min_ch, max_ch, min_isotopes):
     if os.path.splitext(fname)[-1].lower() == '.mzml':
-        subprocess.call(['java', '-jar', 'Dinosaur/Dinosaur-1.1.3.free.jar', fname])
+        subprocess.call(['java', '-Djava.awt.headless=true', '-jar', os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Dinosaur/Dinosaur-1.1.3.free.jar'), fname])
         fname = os.path.splitext(fname)[0] + '.features.tsv'
     with open(fname, 'rb') as infile:
         csvreader = csv.reader(infile, delimiter='\t')
@@ -16,12 +16,14 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes):
         RT_ind = header.index('rtApex')
         ch_ind = header.index('charge')
         nIsotopes_ind = header.index('nIsotopes')
+        nScans_ind = header.index('nScans')
         idx = 0
         for z in csvreader:
             nm = float(z[mass_ind])
             RT = float(z[RT_ind])
             ch = float(z[ch_ind])
             nIsotopes = float(z[nIsotopes_ind])
+            nScans = int(z[nScans_ind])
             idx += 1
             if nIsotopes >= min_isotopes and min_ch <= ch <= max_ch:
                 yield nm, RT, ch, idx
