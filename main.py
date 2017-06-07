@@ -108,6 +108,7 @@ def process_file(args):
 
 def peptide_processor(peptide, **kwargs):
     seqm = peptide
+    results = []
     m = cmass.fast_mass(seqm, aa_mass=kwargs['aa_mass'])
     acc_l = kwargs['acc_l']
     acc_r = kwargs['acc_r']
@@ -116,7 +117,6 @@ def peptide_processor(peptide, **kwargs):
     start = nmasses.searchsorted(m - dm_l)
     end = nmasses.searchsorted(m + dm_r)
     idx = set(range(start, end))
-    results = []
     for i in idx:
         peak_id = ids[i]
         massdiff = (m - nmasses[i]) / m * 1e6
@@ -173,6 +173,10 @@ def peptide_processor_iter_isoforms(peptide, **kwargs):
 
 def process_peptides(args):
     fname = args['file']
+    try:
+        outpath = args['outpath']
+    except:
+        outpath = False
 
     def calc_sf_all(v, n, p):
         sf_values = np.log10(1 / binom.sf(v, n, p))
@@ -394,9 +398,13 @@ def process_peptides(args):
     rt_all = rt_all[e_ind]
     ids_all = ids_all[e_ind]
 
+    if outpath:
+        base_out_name = os.path.splitext(os.path.join(outpath, os.path.basename(fname)))[0]
+    else:
+        base_out_name = os.path.splitext(fname)[0]
 
 
-    with open(os.path.splitext(fname)[0] + '_PFMs.csv', 'w') as output:
+    with open(base_out_name + '_PFMs.csv', 'w') as output:
         output.write('sequence\tmass diff\tRT diff\tpeak_id\tproteins\n')
         for seq, md, rtd, peak_id in zip(seqs_all, md_all, rt_all, ids_all):
             output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), ';'.join(pept_prot[seq]))) + '\n')
@@ -430,7 +438,7 @@ def process_peptides(args):
             prots_spc[k] = all_pvals[idx]
 
         sortedlist_spc = sorted(prots_spc.iteritems(), key=operator.itemgetter(1))[::-1]
-        with open(os.path.splitext(fname)[0] + '_proteins_full.csv', 'w') as output:
+        with open(base_out_name + '_proteins_full.csv', 'w') as output:
             output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
             for x in sortedlist_spc:
                 output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
@@ -460,7 +468,7 @@ def process_peptides(args):
             print '\t'.join((str(x[0]), str(x[1]), str(int(prots_spc_copy[x[0]])), str(protsN[x[0]])))
         print 'results:%s;number of identified proteins = %d' % (fname, identified_proteins, )
         print 'R=', r
-        with open(os.path.splitext(fname)[0] + '_proteins.csv', 'w') as output:
+        with open(base_out_name + '_proteins.csv', 'w') as output:
             output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
             for x in filtered_prots:
                 output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
