@@ -2,7 +2,7 @@ import os
 import cPickle
 import utils
 import numpy as np
-from scipy.stats import binom
+from scipy.stats import binom, scoreatpercentile
 from scipy.optimize import curve_fit
 from scipy import exp
 import operator
@@ -119,8 +119,9 @@ def peptide_processor(peptide, **kwargs):
     idx = set(range(start, end))
     for i in idx:
         peak_id = ids[i]
+        I = Is[i]
         massdiff = (m - nmasses[i]) / m * 1e6
-        results.append((seqm, massdiff, rts[i], peak_id))
+        results.append((seqm, massdiff, rts[i], peak_id, I))
     return results
 
 
@@ -129,28 +130,33 @@ def prepare_peptide_processor(fname, args):
     global rts
     global charges
     global ids
+    global Is
     nmasses = []
     rts = []
     charges = []
     ids = []
+    Is = []
 
     min_ch = args['cmin']
     max_ch = args['cmax']
 
     min_isotopes = args['i']
+    min_scans = args['sc']
 
     print 'Reading spectra ...'
-    for m, RT, c, peak_id in utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes):
+    for m, RT, c, peak_id, I in utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
         nmasses.append(m)
         rts.append(RT)
         charges.append(c)
         ids.append(peak_id)
+        Is.append(I)
 
     i = np.argsort(nmasses)
     nmasses = np.array(nmasses)[i]
     rts = np.array(rts)[i]
     charges = np.array(charges)[i]
     ids = np.array(ids)[i]
+    Is = np.array(Is)[i]
 
     fmods = args['fmods']
     aa_mass = mass.std_aa_mass
@@ -200,11 +206,12 @@ def process_peptides(args):
     prefix = args['prefix']
     protsN, pept_prot = utils.get_prot_pept_map(args)
 
-    seqs_all, md_all, rt_all, ids_all = zip(*ms1results)
+    seqs_all, md_all, rt_all, ids_all, Is_all = zip(*ms1results)
     seqs_all = np.array(seqs_all)
     md_all = np.array(md_all)
     rt_all = np.array(rt_all)
     ids_all = np.array(ids_all)
+    Is_all = np.array(Is_all)
     del ms1results
 
     isdecoy = lambda x: x[0].startswith(prefix)
@@ -304,6 +311,7 @@ def process_peptides(args):
         md_all = md_all[e_ind]
         rt_all = rt_all[e_ind]
         ids_all = ids_all[e_ind]
+        Is_all = Is_all[e_ind]
 
 
         print 'Running RT prediction...'
@@ -397,6 +405,7 @@ def process_peptides(args):
     md_all = md_all[e_ind]
     rt_all = rt_all[e_ind]
     ids_all = ids_all[e_ind]
+    Is_all = Is_all[e_ind]
 
     if outpath:
         base_out_name = os.path.splitext(os.path.join(outpath, os.path.basename(fname)))[0]
@@ -405,10 +414,12 @@ def process_peptides(args):
 
 
     with open(base_out_name + '_PFMs.csv', 'w') as output:
-        output.write('sequence\tmass diff\tRT diff\tpeak_id\tproteins\n')
-        for seq, md, rtd, peak_id in zip(seqs_all, md_all, rt_all, ids_all):
-            output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), ';'.join(pept_prot[seq]))) + '\n')
+        output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tproteins\n')
+        for seq, md, rtd, peak_id, I in zip(seqs_all, md_all, rt_all, ids_all, Is_all):
+            output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), ';'.join(pept_prot[seq]))) + '\n')
 
+
+        # seqs_all = seqs_all[e_ind]
     p1 = set(seqs_all)
     if len(p1):
         prots_spc2 = defaultdict(set)
