@@ -404,9 +404,9 @@ def process_peptides(args):
     seqs_all = seqs_all[e_ind]
     md_all = md_all[e_ind]
     rt_all = rt_all[e_ind]
+    rt_diff = rt_diff[e_ind]
     ids_all = ids_all[e_ind]
     Is_all = Is_all[e_ind]
-
     if outpath:
         base_out_name = os.path.splitext(os.path.join(outpath, os.path.basename(fname)))[0]
     else:
@@ -415,7 +415,7 @@ def process_peptides(args):
 
     with open(base_out_name + '_PFMs.csv', 'w') as output:
         output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tproteins\n')
-        for seq, md, rtd, peak_id, I in zip(seqs_all, md_all, rt_all, ids_all, Is_all):
+        for seq, md, rtd, peak_id, I in zip(seqs_all, md_all, rt_diff, ids_all, Is_all):
             output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), ';'.join(pept_prot[seq]))) + '\n')
 
 
