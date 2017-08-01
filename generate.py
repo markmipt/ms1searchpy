@@ -120,9 +120,10 @@ class ScanWriter():
                 sequences[int(t[5])].add(t[3])
         output_full.close()
         output_full = open(self.outfile + '_temp', 'r')
-        mc_todel[0] = peptide_efficiency * mc_efficiency[0]
+        mc_todel[0] = mc_efficiency[0]
         for i in [1, 2]:
-            mc_todel[i] = float(len(sequences[0])) * mc_todel[0] * mc_efficiency[i] / len(sequences[i])
+            if len(sequences[i]):
+                mc_todel[i] = float(len(sequences[0])) * mc_todel[0] * mc_efficiency[i] / len(sequences[i])
         output_short.write(output_full.readline())
         for peak in output_full:
             t = peak.strip().split('\t')
@@ -190,7 +191,8 @@ def get_peptide_info(peptide, aa_per_charge, charge_min, charge_max, mz_min, mz_
             if RT_min <= peptide_RT <= RT_max:
                 peptide_RT_exp = get_exp_RT(peptide_RT, RT_tol)
                 mc = parser.num_sites(peptide, protease)#get_number_of_mc(peptide, protease)
-                if 1:#noise == 'yes' or (mc in mc_efficiency and peptide_efficiency * mc_efficiency[mc] > random()):
+                if noise == 'yes' or peptide_efficiency > random():
+                # if 1:#noise == 'yes' or (mc in mc_efficiency and peptide_efficiency * mc_efficiency[mc] > random()):
                     peptide_mass_exp = get_exp_mass(peptide_mass, mz_tol)
                     # if pI_tol != -1:
                     #     pI = get_exp_pI(electrochem.pI(peptide), pI_tol)
