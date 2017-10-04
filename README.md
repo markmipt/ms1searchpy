@@ -32,6 +32,6 @@ Links
 -----
 
 - BitBucket repo & issue tracker: https://bitbucket.org/markmipt/ms1searchpy
-- Mailing list: pyteomics@googlegroups.com
+- Mailing list: pyteomics@googlegroups.com, markmipt@gmail.com
 
 - Dinosaur repo: https://github.com/fickludd/dinosaur
