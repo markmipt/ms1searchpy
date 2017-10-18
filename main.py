@@ -121,7 +121,7 @@ def peptide_processor(peptide, **kwargs):
         peak_id = ids[i]
         I = Is[i]
         massdiff = (m - nmasses[i]) / m * 1e6
-        results.append((seqm, massdiff, rts[i], peak_id, I))
+        results.append((seqm, massdiff, rts[i], peak_id, I, Scans[i]))
     return results
 
 
@@ -131,11 +131,13 @@ def prepare_peptide_processor(fname, args):
     global charges
     global ids
     global Is
+    global Scans
     nmasses = []
     rts = []
     charges = []
     ids = []
     Is = []
+    Scans = []
 
     min_ch = args['cmin']
     max_ch = args['cmax']
@@ -144,12 +146,13 @@ def prepare_peptide_processor(fname, args):
     min_scans = args['sc']
 
     print 'Reading spectra ...'
-    for m, RT, c, peak_id, I in utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
+    for m, RT, c, peak_id, I, nScans in utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
         nmasses.append(m)
         rts.append(RT)
         charges.append(c)
         ids.append(peak_id)
         Is.append(I)
+        Scans.append(nScans)
 
     i = np.argsort(nmasses)
     nmasses = np.array(nmasses)[i]
@@ -157,6 +160,7 @@ def prepare_peptide_processor(fname, args):
     charges = np.array(charges)[i]
     ids = np.array(ids)[i]
     Is = np.array(Is)[i]
+    Scans = np.array(Scans)[i]
 
     fmods = args['fmods']
     aa_mass = mass.std_aa_mass
@@ -206,12 +210,13 @@ def process_peptides(args):
     prefix = args['prefix']
     protsN, pept_prot = utils.get_prot_pept_map(args)
 
-    seqs_all, md_all, rt_all, ids_all, Is_all = zip(*ms1results)
+    seqs_all, md_all, rt_all, ids_all, Is_all, Scans_all = zip(*ms1results)
     seqs_all = np.array(seqs_all)
     md_all = np.array(md_all)
     rt_all = np.array(rt_all)
     ids_all = np.array(ids_all)
     Is_all = np.array(Is_all)
+    Scans_all = np.array(Scans_all)
     del ms1results
 
     isdecoy = lambda x: x[0].startswith(prefix)
@@ -271,6 +276,7 @@ def process_peptides(args):
 
         true_md = []
         true_seqs = []
+        true_scans = []
         true_prots = set(x[0] for x in filtered_prots)
         for pep, proteins in pept_prot.iteritems():
             if any(protein in true_prots for protein in proteins):
@@ -279,6 +285,13 @@ def process_peptides(args):
         e_ind = np.in1d(seqs_all, true_seqs)
 
         true_md.extend(md_all[e_ind])
+        true_md = np.array(true_md)
+        true_scans.extend(Scans_all[e_ind])
+        true_scans = np.array(true_scans)
+
+        e_ind = true_scans >= 10
+        true_md = true_md[e_ind]
+        true_scans = true_scans[e_ind]
 
         mass_left = args['ptol']
         mass_right = args['ptol']
@@ -312,11 +325,13 @@ def process_peptides(args):
         rt_all = rt_all[e_ind]
         ids_all = ids_all[e_ind]
         Is_all = Is_all[e_ind]
+        Scans_all = Scans_all[e_ind]
 
 
         print 'Running RT prediction...'
         true_seqs = []
         true_rt = []
+        true_scans = []
         true_prots = set(x[0] for x in filtered_prots[:5])
         for pep, proteins in pept_prot.iteritems():
             if any(protein in true_prots for protein in proteins):
@@ -327,6 +342,13 @@ def process_peptides(args):
         true_seqs = seqs_all[e_ind]
         true_rt.extend(rt_all[e_ind])
         true_rt = np.array(true_rt)
+        true_scans.extend(Scans_all[e_ind])
+        true_scans = np.array(true_scans)
+        e_ind = true_scans >= 10
+        true_seqs = true_seqs[e_ind]
+        true_rt = true_rt[e_ind]
+        true_scans = true_scans[e_ind]
+        
 
         best_seq = defaultdict(list)
         newseqs = []
@@ -335,7 +357,7 @@ def process_peptides(args):
             best_seq[seq].append(RT)
         for k, v in best_seq.items():
             newseqs.append(k)
-            newRTs.append(np.mean(v))
+            newRTs.append(np.median(v))
         true_seqs = np.array(newseqs)
         true_rt = np.array(newRTs)
 
@@ -407,6 +429,7 @@ def process_peptides(args):
     rt_diff = rt_diff[e_ind]
     ids_all = ids_all[e_ind]
     Is_all = Is_all[e_ind]
+    Scans_all = Scans_all[e_ind]
     if outpath:
         base_out_name = os.path.splitext(os.path.join(outpath, os.path.basename(fname)))[0]
     else:
@@ -414,9 +437,9 @@ def process_peptides(args):
 
 
     with open(base_out_name + '_PFMs.csv', 'w') as output:
-        output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tproteins\n')
-        for seq, md, rtd, peak_id, I in zip(seqs_all, md_all, rt_diff, ids_all, Is_all):
-            output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), ';'.join(pept_prot[seq]))) + '\n')
+        output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tnScans\tproteins\n')
+        for seq, md, rtd, peak_id, I, nScans in zip(seqs_all, md_all, rt_diff, ids_all, Is_all, Scans_all):
+            output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), str(nScans), ';'.join(pept_prot[seq]))) + '\n')
 
 
         # seqs_all = seqs_all[e_ind]

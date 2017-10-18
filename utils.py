@@ -7,7 +7,7 @@ import subprocess
 
 def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
     if os.path.splitext(fname)[-1].lower() == '.mzml':
-        subprocess.call(['java', '-Djava.awt.headless=true', '-jar', os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Dinosaur/Dinosaur-1.1.3.free.jar'), '--advParams=Dinosaur/adv.txt', fname])
+        subprocess.call(['java', '-Djava.awt.headless=true', '-jar', os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Dinosaur/Dinosaur-1.1.3.free.jar'), '--advParams=Dinosaur/adv.txt', '--concurrency=12', fname])
         fname = os.path.splitext(fname)[0] + '.features.tsv'
     with open(fname, 'rb') as infile:
         csvreader = csv.reader(infile, delimiter='\t')
@@ -27,8 +27,8 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
             nScans = int(z[nScans_ind])
             I = float(z[Int_ind])
             idx += 1
-            if nIsotopes >= min_isotopes and min_ch <= ch <= max_ch and nScans >= min_scans:
-                yield nm, RT, ch, idx, I
+            if nIsotopes >= min_isotopes and min_ch <= ch <= max_ch and min_scans <= nScans:
+                yield nm, RT, ch, idx, I, nScans
 
 
 def peptide_gen(args):
