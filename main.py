@@ -276,7 +276,6 @@ def process_peptides(args):
 
         true_md = []
         true_seqs = []
-        true_scans = []
         true_prots = set(x[0] for x in filtered_prots)
         for pep, proteins in pept_prot.iteritems():
             if any(protein in true_prots for protein in proteins):
@@ -286,12 +285,6 @@ def process_peptides(args):
 
         true_md.extend(md_all[e_ind])
         true_md = np.array(true_md)
-        true_scans.extend(Scans_all[e_ind])
-        true_scans = np.array(true_scans)
-
-        e_ind = true_scans >= 10
-        true_md = true_md[e_ind]
-        true_scans = true_scans[e_ind]
 
         mass_left = args['ptol']
         mass_right = args['ptol']
@@ -331,7 +324,6 @@ def process_peptides(args):
         print 'Running RT prediction...'
         true_seqs = []
         true_rt = []
-        true_scans = []
         true_prots = set(x[0] for x in filtered_prots[:5])
         for pep, proteins in pept_prot.iteritems():
             if any(protein in true_prots for protein in proteins):
@@ -342,13 +334,6 @@ def process_peptides(args):
         true_seqs = seqs_all[e_ind]
         true_rt.extend(rt_all[e_ind])
         true_rt = np.array(true_rt)
-        true_scans.extend(Scans_all[e_ind])
-        true_scans = np.array(true_scans)
-        e_ind = true_scans >= 10
-        true_seqs = true_seqs[e_ind]
-        true_rt = true_rt[e_ind]
-        true_scans = true_scans[e_ind]
-        
 
         best_seq = defaultdict(list)
         newseqs = []
