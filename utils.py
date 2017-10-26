@@ -157,42 +157,5 @@ def convert_tandem_cleave_rule_to_regexp(cleavage_rule):
     return '|'.join(out_rules)
 
 def multimap(n, func, it, **kw):
-    if n == 0:
-        try:
-            n = cpu_count()
-        except NotImplementedError:
-            n = 1
-    if n == 1:
-        for s in it:
-            yield func(s, **kw)
-    else:
-        def worker(qin, qout):
-            for item in iter(qin.get, None):
-                result = func(item, **kw)
-                qout.put(result)
-        qin = Queue()
-        qout = Queue()
-        count = 0
-        while True:
-            procs = []
-            for _ in range(n):
-                p = Process(target=worker, args=(qin, qout))
-                p.start()
-                procs.append(p)
-            for s in it:
-                qin.put(s)
-                count += 1
-                if count > 5000000:
-                    break
-            for _ in range(n):
-                qin.put(None)
-
-            if not count:
-                break
-
-            while count:
-                yield qout.get()
-                count -= 1
-
-            for p in procs:
-                p.join()
+    for s in it:
+        yield func(s, **kw)

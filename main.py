@@ -201,8 +201,7 @@ def process_peptides(args):
     kwargs = prepare_peptide_processor(fname, args)
     func = peptide_processor_iter_isoforms
     print 'Running the search ...'
-    n = args['nprocs']
-    for y in utils.multimap(n, func, peps, **kwargs):
+    for y in utils.multimap(1, func, peps, **kwargs):
         for result in y:
             if len(result):
                 ms1results.extend(result)
