@@ -17,6 +17,17 @@ except ImportError:
 import subprocess
 from sklearn import linear_model
 import tempfile
+import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+try:
+    import seaborn
+    seaborn.set(rc={'axes.facecolor':'#ffffff'})
+    seaborn.set_style('whitegrid')
+except:
+    pass
+
 
 def get_RCs2(sequences, RTs, lcp = -0.21,
             term_aa = False, **kwargs):
@@ -490,6 +501,44 @@ def process_peptides(args):
             output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
             for x in filtered_prots:
                 output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
+
+
+        fig = plt.figure(figsize=(16, 12))
+        DPI = fig.get_dpi()
+        fig.set_size_inches(2000.0/float(DPI), 2000.0/float(DPI))
+
+        df0 = pd.read_table(base_out_name + '.tsv')
+        # df1 = pd.read_table('/home/mark/Denmark/mzml/QHF2_02182_VG.features_PFMs.csv')
+        # df2 = pd.read_table('/home/mark/Denmark/mzml/QHF2_02182_VG.features_proteins.csv')
+        # df3 = pd.read_table('/home/mark/Denmark/mzml/QHF2_02182_VG.features_proteins_full.csv')
+
+        # Features RT distribution
+        # TODO add matched features and matched to 1% FDR proteins features
+        ax = fig.add_subplot(3, 1, 1)
+        bns = np.arange(0, df0['rtApex'].max() + 1, 1)
+        ax.hist(df0['rtApex'], bins = bns)
+        ax.set_xlabel('RT, min', size=16)
+        ax.set_ylabel('# features', size=16)
+
+        # Features mass distribution
+
+        # TODO add matched features and matched to 1% FDR proteins features
+        ax = fig.add_subplot(3, 1, 2)
+        bns = np.arange(0, df0['massCalib'].max() + 6, 5)
+        ax.hist(df0['massCalib'], bins = bns)
+        ax.set_xlabel('neutral mass, Da', size=16)
+        ax.set_ylabel('# features', size=16)
+
+        # Features intensity distribution
+
+        # TODO add matched features and matched to 1% FDR proteins features
+        ax = fig.add_subplot(3, 1, 3)
+        bns = np.arange(np.log10(df0['intensityApex'].min()) - 0.5, np.log10(df0['intensityApex'].max()) + 0.5, 0.5)
+        ax.hist(np.log10(df0['intensityApex']), bins = bns)
+        ax.set_xlabel('log10(Intensity)', size=16)
+        ax.set_ylabel('# features', size=16)
+
+        plt.savefig(base_out_name + '.png')
 
     else:
         print 'No matches found'
