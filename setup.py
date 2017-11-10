@@ -15,7 +15,7 @@ setup(
     long_description     = (''.join(open('README.md').readlines())),
     author               = 'Mark Ivanov',
     author_email         = 'pyteomics@googlegroups.com',
-    install_requires     = ['pyteomics[XML]', 'scipy', 'numpy', 'sklearn'],
+    install_requires     = ['pyteomics[XML]', 'scipy', 'numpy', 'sklearn', 'matplotlib', 'pandas', 'seaborn'],
     classifiers          = ['Intended Audience :: Science/Research',
                             'Programming Language :: Python :: 2.7',
                             'Topic :: Education',

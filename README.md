@@ -36,6 +36,9 @@ Dependencies
 - numpy
 - scipy
 - sklearn
+- pandas
+- matplotlib
+- seaborn
 
 Links
 -----
