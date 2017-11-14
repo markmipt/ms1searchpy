@@ -38,7 +38,7 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
             av = float(z[av_ind]) if av_ind >= 0 else 0
             idx += 1
             if nIsotopes >= min_isotopes and min_ch <= ch <= max_ch and min_scans <= nScans:
-                yield nm, RT, ch, idx, I, nScans, mz, av
+                yield nm, RT, ch, idx, I, nScans, nIsotopes, mz, av
 
 
 def peptide_gen(args):
