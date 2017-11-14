@@ -537,10 +537,7 @@ def process_peptides(args):
         DPI = fig.get_dpi()
         fig.set_size_inches(2000.0/float(DPI), 2000.0/float(DPI))
 
-        df0 = pd.read_table(base_out_name + '.tsv')
-        # df1 = pd.read_table('/home/mark/Denmark/mzml/QHF2_02182_VG.features_PFMs.csv')
-        # df2 = pd.read_table('/home/mark/Denmark/mzml/QHF2_02182_VG.features_proteins.csv')
-        # df3 = pd.read_table('/home/mark/Denmark/mzml/QHF2_02182_VG.features_proteins_full.csv')
+        df0 = pd.read_table(base_out_name.replace('.features', '') + '.features' + '.tsv')
 
         # Features RT distribution
         # TODO add matched features and matched to 1% FDR proteins features
