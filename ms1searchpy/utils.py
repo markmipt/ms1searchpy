@@ -18,6 +18,14 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
         nIsotopes_ind = header.index('nIsotopes')
         Int_ind = header.index('intensityApex')
         nScans_ind = header.index('nScans')
+        try:
+            mz_ind = header.index('mz')
+        except:
+            mz_ind = -1
+        try:
+            av_ind = header.index('averagineCorr')
+        except:
+            av_ind = -1
         idx = 0
         for z in csvreader:
             nm = float(z[mass_ind])
@@ -26,9 +34,11 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
             nIsotopes = float(z[nIsotopes_ind])
             nScans = int(z[nScans_ind])
             I = float(z[Int_ind])
+            mz = float(z[mz_ind]) if mz_ind >= 0 else 0
+            av = float(z[av_ind]) if av_ind >= 0 else 0
             idx += 1
             if nIsotopes >= min_isotopes and min_ch <= ch <= max_ch and min_scans <= nScans:
-                yield nm, RT, ch, idx, I, nScans
+                yield nm, RT, ch, idx, I, nScans, mz, av
 
 
 def peptide_gen(args):
