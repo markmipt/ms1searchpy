@@ -371,6 +371,56 @@ def process_peptides(args):
         # av_all = av_all[e_ind]
         # ch_all = ch_all[e_ind]
 
+        p1 = set(seqs_all)
+
+        prots_spc2 = defaultdict(set)
+        for pep, proteins in pept_prot.iteritems():
+            if pep in p1:
+                for protein in proteins:
+                    prots_spc2[protein].add(pep)
+
+        for k in protsN:
+            if k not in prots_spc2:
+                prots_spc2[k] = set([])
+        prots_spc = dict((k, len(v)) for k, v in prots_spc2.iteritems())
+
+        names_arr = np.array(prots_spc.keys())
+        v_arr = np.array(prots_spc.values())
+        n_arr = np.array([protsN[k] for k in prots_spc])
+
+        top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
+        top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
+        p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
+        print 'p=%s' % (np.mean(top100decoy_score) / np.mean(top100decoy_N))
+
+        prots_spc = dict()
+        all_pvals = calc_sf_all(v_arr, n_arr, p)
+        for idx, k in enumerate(names_arr):
+            prots_spc[k] = all_pvals[idx]
+
+        checked = set()
+        for k, v in prots_spc.items():
+            if k not in checked:
+                if isdecoy_key(k):
+                    if prots_spc.get(k.replace(prefix, ''), -1e6) > v:
+                        del prots_spc[k]
+                        checked.add(k.replace(prefix, ''))
+                else:
+                    if prots_spc.get(prefix + k, -1e6) > v:
+                        del prots_spc[k]
+                        checked.add(prefix + k)
+
+        filtered_prots = aux.filter(prots_spc.items(), fdr=0.01, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
+                                    full_output=True)
+
+        identified_proteins = 0
+
+        for x in filtered_prots:
+            identified_proteins += 1
+        print 'results for default search after mass calibration: number of identified proteins = %d' % (identified_proteins, )
+
+
+
         print 'Running RT prediction...'
         true_seqs = []
         true_rt = []
