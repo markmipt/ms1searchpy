@@ -9,7 +9,7 @@ M.V. Ivanov et al., Journal of Proteome Research, 2017, DOI:10.1021/acs.jproteom
 
 ---------------------------------------------------------------
 
-For those who want to simply test ms1searchpy without any installation, there is a BETA web-interface on http://176.100.242.58:8890
+For those who want to simply test ms1searchpy without any installation, there is a BETA web-interface on http://83.149.244.82:8890
 Login - guest, password - test.
 
 ---------------------------------------------------------------
