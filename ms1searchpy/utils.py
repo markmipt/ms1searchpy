@@ -7,7 +7,8 @@ import subprocess
 
 def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
     if os.path.splitext(fname)[-1].lower() == '.mzml':
-        subprocess.call(['java', '-Djava.awt.headless=true', '-jar', os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Dinosaur/Dinosaur-1.1.3.free.jar'), '--advParams=Dinosaur/adv.txt', '--concurrency=12', fname])
+        advpath = '--advParams=' + os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Dinosaur/adv.txt')
+        subprocess.call(['java', '-Djava.awt.headless=true', '-jar', os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Dinosaur/Dinosaur-1.1.3.free.jar'), advpath, '--concurrency=12', fname])
         fname = os.path.splitext(fname)[0] + '.features.tsv'
     with open(fname, 'rb') as infile:
         csvreader = csv.reader(infile, delimiter='\t')
