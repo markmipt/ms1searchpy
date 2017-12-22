@@ -537,7 +537,7 @@ def process_peptides(args):
     with open(base_out_name + '_PFMs.csv', 'w') as output:
         output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tnScans\tnIsotopes\tproteins\tm/z\tRT\taveragineCorr\tcharge\n')
         for seq, md, rtd, peak_id, I, nScans, nIsotopes, mzr, rtr, av, ch in zip(seqs_all, md_all, rt_diff, ids_all, Is_all, Scans_all, Isotopes_all, mzraw_all, rt_all, av_all, ch_all):
-            output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), str(nScans), ';'.join(pept_prot[seq]), str(mzr), str(rtr), str(av), str(ch))) + '\n')
+            output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), str(nScans), str(nIsotopes), ';'.join(pept_prot[seq]), str(mzr), str(rtr), str(av), str(ch))) + '\n')
 
 
         # seqs_all = seqs_all[e_ind]
