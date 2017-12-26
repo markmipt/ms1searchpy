@@ -357,6 +357,7 @@ def process_peptides(args):
         mzraw_all = mzraw_all[e_ind]
         av_all = av_all[e_ind]
         ch_all = ch_all[e_ind]
+        zs_all = e_all[e_ind] ** 2
 
 
         # valid_seqs = np.array([x.strip() for x in open('/home/mark/validseqs.txt')])
@@ -514,7 +515,8 @@ def process_peptides(args):
     rt_pred = np.array([pepdict[s] for s in seqs_all])
     rt_diff = rt_all - rt_pred
     e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
-    r = args['rtt']
+    zs_all = zs_all + e_all
+    r = 3.0
     e_ind = e_all <= r
     seqs_all = seqs_all[e_ind]
     md_all = md_all[e_ind]
@@ -527,6 +529,22 @@ def process_peptides(args):
     mzraw_all = mzraw_all[e_ind]
     av_all = av_all[e_ind]
     ch_all = ch_all[e_ind]
+    zs_all = zs_all[e_ind]
+
+    e_ind = zs_all <= args['rtt']
+    seqs_all = seqs_all[e_ind]
+    md_all = md_all[e_ind]
+    rt_all = rt_all[e_ind]
+    rt_diff = rt_diff[e_ind]
+    ids_all = ids_all[e_ind]
+    Is_all = Is_all[e_ind]
+    Scans_all = Scans_all[e_ind]
+    Isotopes_all = Isotopes_all[e_ind]
+    mzraw_all = mzraw_all[e_ind]
+    av_all = av_all[e_ind]
+    ch_all = ch_all[e_ind]
+    zs_all = zs_all[e_ind]
+
 
     if outpath:
         base_out_name = os.path.splitext(os.path.join(outpath, os.path.basename(fname)))[0]
