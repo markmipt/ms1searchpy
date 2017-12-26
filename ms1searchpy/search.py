@@ -17,7 +17,7 @@ def run():
     parser.add_argument('file', help='input mzML or .tsv file with peptide features')
     parser.add_argument('-d', help='path to protein fasta file', required=True)
     parser.add_argument('-ptol', help='precursor mass tolerance in ppm', default=10.0, type=float)
-    parser.add_argument('-rtt', help='retention time threshold in sigma', default=1.3, type=float)
+    parser.add_argument('-rtt', help='sum of squared sigmas threshold', default=2.5, type=float)
     parser.add_argument('-i', help='minimum number of isotopes', default=4, type=int)
     parser.add_argument('-sc', help='minimum number of scans for peptide feature', default=3, type=int)
     parser.add_argument('-lmin', help='min length of peptides', default=7, type=int)
