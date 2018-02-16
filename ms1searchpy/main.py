@@ -203,6 +203,28 @@ def peptide_processor_iter_isoforms(peptide, **kwargs):
     out.append(peptide_processor(peptide, **kwargs))
     return out
 
+def get_results(ms1results):
+    resdict = dict()
+    labels = [
+        'seqs',
+        'md',
+        'rt',
+        'ids',
+        'Is',
+        'Scans',
+        'Isotopes',
+        'mzraw',
+        'av',
+        'ch'
+    ]
+    for label, val in zip(labels, zip(*ms1results)):
+        resdict[label] = np.array(val)
+    return resdict
+
+def filter_results(resultdict, idx):
+    for label in resultdict.keys():
+        resultdict[label] = resultdict[label][idx]
+    return resultdict
 
 def process_peptides(args):
     fname = args['file']
@@ -232,24 +254,14 @@ def process_peptides(args):
     prefix = args['prefix']
     protsN, pept_prot = utils.get_prot_pept_map(args)
 
-    seqs_all, md_all, rt_all, ids_all, Is_all, Scans_all, Isotopes_all, mzraw_all, av_all, ch_all = zip(*ms1results)
-    seqs_all = np.array(seqs_all)
-    md_all = np.array(md_all)
-    rt_all = np.array(rt_all)
-    ids_all = np.array(ids_all)
-    Is_all = np.array(Is_all)
-    Scans_all = np.array(Scans_all)
-    Isotopes_all = np.array(Isotopes_all)
-    mzraw_all = np.array(mzraw_all)
-    av_all = np.array(av_all)
-    ch_all = np.array(ch_all)
+    resdict = get_results(ms1results)
     del ms1results
 
     isdecoy = lambda x: x[0].startswith(prefix)
     isdecoy_key = lambda x: x.startswith(prefix)
     escore = lambda x: -x[1]
 
-    p1 = set(seqs_all)
+    p1 = set(resdict['seqs'])
 
     if len(p1):
         prots_spc2 = defaultdict(set)
@@ -308,12 +320,12 @@ def process_peptides(args):
             if any(protein in true_prots for protein in proteins):
                 true_seqs.append(pep)
 
-        e_ind = np.in1d(seqs_all, true_seqs)
+        e_ind = np.in1d(resdict['seqs'], true_seqs)
 
-        true_seqs = seqs_all[e_ind]
-        true_md.extend(md_all[e_ind])
+        true_seqs = resdict['seqs'][e_ind]
+        true_md.extend(resdict['md'][e_ind])
         true_md = np.array(true_md)
-        true_isotopes.extend(Isotopes_all[e_ind])
+        true_isotopes.extend(resdict['Isotopes'][e_ind])
         true_isotopes = np.array(true_isotopes)
 
         e_ind = true_isotopes >= 4
@@ -338,41 +350,20 @@ def process_peptides(args):
             mass_shift, mass_sigma = popt[1], abs(popt[2])
             return mass_shift, mass_sigma, pcov[0][0]
 
-        mass_shift, mass_sigma, covvalue = calibrate_mass(0.1, mass_left, mass_right, true_md)
+        mass_shift, mass_sigma, covvalue = calibrate_mass(0.001, mass_left, mass_right, true_md)
         if np.isinf(covvalue):
             mass_shift, mass_sigma, covvalue = calibrate_mass(0.01, mass_left, mass_right, true_md)
         print 'Calibrated mass shift: ', mass_shift
         print 'Calibrated mass sigma in ppm: ', mass_sigma
 
-        e_all = abs(md_all - mass_shift) / (mass_sigma)
+        e_all = abs(resdict['md'] - mass_shift) / (mass_sigma)
         r = 3.0
         e_ind = e_all <= r
-        seqs_all = seqs_all[e_ind]
-        md_all = md_all[e_ind]
-        rt_all = rt_all[e_ind]
-        ids_all = ids_all[e_ind]
-        Is_all = Is_all[e_ind]
-        Scans_all = Scans_all[e_ind]
-        Isotopes_all = Isotopes_all[e_ind]
-        mzraw_all = mzraw_all[e_ind]
-        av_all = av_all[e_ind]
-        ch_all = ch_all[e_ind]
+        resdict = filter_results(resdict, e_ind)
+
         zs_all = e_all[e_ind] ** 2
 
-
-        # valid_seqs = np.array([x.strip() for x in open('/home/mark/validseqs.txt')])
-        # e_ind = np.in1d(seqs_all, valid_seqs)
-        # seqs_all = seqs_all[e_ind]
-        # md_all = md_all[e_ind]
-        # rt_all = rt_all[e_ind]
-        # ids_all = ids_all[e_ind]
-        # Is_all = Is_all[e_ind]
-        # Scans_all = Scans_all[e_ind]
-        # mzraw_all = mzraw_all[e_ind]
-        # av_all = av_all[e_ind]
-        # ch_all = ch_all[e_ind]
-
-        p1 = set(seqs_all)
+        p1 = set(resdict['seqs'])
 
         prots_spc2 = defaultdict(set)
         for pep, proteins in pept_prot.iteritems():
@@ -430,13 +421,13 @@ def process_peptides(args):
         for pep, proteins in pept_prot.iteritems():
             if any(protein in true_prots for protein in proteins):
                 true_seqs.append(pep)
-        e_ind = np.in1d(seqs_all, true_seqs)
+        e_ind = np.in1d(resdict['seqs'], true_seqs)
 
 
-        true_seqs = seqs_all[e_ind]
-        true_rt.extend(rt_all[e_ind])
+        true_seqs = resdict['seqs'][e_ind]
+        true_rt.extend(resdict['rt'][e_ind])
         true_rt = np.array(true_rt)
-        true_isotopes.extend(Isotopes_all[e_ind])
+        true_isotopes.extend(resdict['Isotopes'][e_ind])
         true_isotopes = np.array(true_isotopes)
 
         e_ind = true_isotopes >= 4
@@ -494,7 +485,7 @@ def process_peptides(args):
     else:
         print 'No matches found'
 
-    p1 = set(seqs_all)
+    p1 = set(resdict['seqs'])
 
     pepdict = dict()    
     if elude_path:
@@ -512,37 +503,19 @@ def process_peptides(args):
     else:
         for seq in p1:
             pepdict[seq] = achrom.calculate_RT(seq, RC)
-    rt_pred = np.array([pepdict[s] for s in seqs_all])
-    rt_diff = rt_all - rt_pred
+    rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
+    rt_diff = resdict['rt'] - rt_pred
     e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
     zs_all = zs_all + e_all
     r = 3.0
     e_ind = e_all <= r
-    seqs_all = seqs_all[e_ind]
-    md_all = md_all[e_ind]
-    rt_all = rt_all[e_ind]
+    resdict = filter_results(resdict, e_ind)
     rt_diff = rt_diff[e_ind]
-    ids_all = ids_all[e_ind]
-    Is_all = Is_all[e_ind]
-    Scans_all = Scans_all[e_ind]
-    Isotopes_all = Isotopes_all[e_ind]
-    mzraw_all = mzraw_all[e_ind]
-    av_all = av_all[e_ind]
-    ch_all = ch_all[e_ind]
     zs_all = zs_all[e_ind]
 
     e_ind = zs_all <= args['rtt']
-    seqs_all = seqs_all[e_ind]
-    md_all = md_all[e_ind]
-    rt_all = rt_all[e_ind]
+    resdict = filter_results(resdict, e_ind)
     rt_diff = rt_diff[e_ind]
-    ids_all = ids_all[e_ind]
-    Is_all = Is_all[e_ind]
-    Scans_all = Scans_all[e_ind]
-    Isotopes_all = Isotopes_all[e_ind]
-    mzraw_all = mzraw_all[e_ind]
-    av_all = av_all[e_ind]
-    ch_all = ch_all[e_ind]
     zs_all = zs_all[e_ind]
 
 
@@ -554,12 +527,10 @@ def process_peptides(args):
 
     with open(base_out_name + '_PFMs.csv', 'w') as output:
         output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tnScans\tnIsotopes\tproteins\tm/z\tRT\taveragineCorr\tcharge\n')
-        for seq, md, rtd, peak_id, I, nScans, nIsotopes, mzr, rtr, av, ch in zip(seqs_all, md_all, rt_diff, ids_all, Is_all, Scans_all, Isotopes_all, mzraw_all, rt_all, av_all, ch_all):
+        for seq, md, rtd, peak_id, I, nScans, nIsotopes, mzr, rtr, av, ch in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['ids'], resdict['Is'], resdict['Scans'], resdict['Isotopes'], resdict['mzraw'], resdict['rt'], resdict['av'], resdict['ch']):
             output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), str(nScans), str(nIsotopes), ';'.join(pept_prot[seq]), str(mzr), str(rtr), str(av), str(ch))) + '\n')
-
-
-        # seqs_all = seqs_all[e_ind]
-    p1 = set(seqs_all)
+            
+    p1 = set(resdict['seqs'])
     if len(p1):
         prots_spc2 = defaultdict(set)
         for pep, proteins in pept_prot.iteritems():
