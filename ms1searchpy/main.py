@@ -6,7 +6,7 @@ from scipy.stats import binom, scoreatpercentile
 from scipy.optimize import curve_fit
 from scipy import exp
 import operator
-from copy import copy
+from copy import copy, deepcopy
 from collections import defaultdict
 import re
 from pyteomics import parser, mass, fasta, auxiliary as aux, achrom
@@ -531,34 +531,101 @@ def process_peptides(args):
             output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), str(nScans), str(nIsotopes), ';'.join(pept_prot[seq]), str(mzr), str(rtr), str(av), str(ch))) + '\n')
             
     p1 = set(resdict['seqs'])
+
+    pep_pid = defaultdict(set)
+    pid_pep = defaultdict(set)
+    for pep, pid in zip(resdict['seqs'], resdict['ids']):
+        pep_pid[pep].add(pid)
+        pid_pep[pid].add(pep)
+
     if len(p1):
-        prots_spc2 = defaultdict(set)
-        for pep, proteins in pept_prot.iteritems():
-            if pep in p1:
-                for protein in proteins:
-                    prots_spc2[protein].add(pep)
 
-        for k in protsN:
-            if k not in prots_spc2:
-                prots_spc2[k] = set([])
-        prots_spc = dict((k, len(v)) for k, v in prots_spc2.iteritems())
+        prots_spc_final = dict()
+        prots_spc_copy = False
+        # banned_peptides = set()
+        banned_dict = dict()
+        prots_spc2 = False
+        unstable_prots = set()
+        p0 = False
 
-        names_arr = np.array(prots_spc.keys())
-        v_arr = np.array(prots_spc.values())
-        n_arr = np.array([protsN[k] for k in prots_spc])
+        # p1 = p1.difference(banned_peptides)
+        while(len(p1)):
+            # p1 = p1.difference(banned_peptides)
+            if not prots_spc2:
+                prots_spc2 = defaultdict(set)
+                for pep, proteins in pept_prot.iteritems():
+                    if pep in p1:
+                        for protein in proteins:
+                            prots_spc2[protein].add(pep)
 
-        prots_spc_copy = copy(prots_spc)
-        top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
-        top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
-        p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
-        print 'p=%s' % (np.mean(top100decoy_score) / np.mean(top100decoy_N))
+                for k in protsN:
+                    if k not in prots_spc2:
+                        prots_spc2[k] = set([])
+                unstable_prots = set(prots_spc2.keys())
+            tmp_spc_new = dict((k, sum(banned_dict.get(l, 1) for l in v) if k in unstable_prots else tmp_spc.get(k, 0)) for k, v in prots_spc2.iteritems())
+            tmp_spc = tmp_spc_new
+            prots_spc = tmp_spc_new
+            if not prots_spc_copy:
+                prots_spc_copy = deepcopy(prots_spc)
 
-        prots_spc = dict()
-        all_pvals = calc_sf_all(v_arr, n_arr, p)
-        for idx, k in enumerate(names_arr):
-            prots_spc[k] = all_pvals[idx]
+            names_arr = np.array(prots_spc.keys())
+            # print len(v_arr), np.sum(v_arr == np.array(prots_spc.values()))#sum(zzz1 == zzz2 for zzz1, zzz2 in zip(v_arr, np.array(prots_spc.values())))
+            v_arr = np.array(prots_spc.values())
+            n_arr = np.array([protsN[k] for k in prots_spc])
 
-        sortedlist_spc = sorted(prots_spc.iteritems(), key=operator.itemgetter(1))[::-1]
+            # prots_spc_copy = copy(prots_spc)
+            top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
+            top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
+            p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
+            if not p0:
+                p0 = float(p)
+            # print 'p=%s' % (np.mean(top100decoy_score) / np.mean(top100decoy_N))
+
+            prots_spc = dict()
+            all_pvals = calc_sf_all(v_arr, n_arr, p)
+            for idx, k in enumerate(names_arr):
+                prots_spc[k] = all_pvals[idx]
+
+            sortedlist_spc = sorted(prots_spc.iteritems(), key=operator.itemgetter(1))[::-1]
+            best_prot, best_score = sortedlist_spc[0][0], sortedlist_spc[0][1]
+            unstable_prots = set()
+            if best_prot not in prots_spc_final:
+                prots_spc_final[best_prot] = best_score
+                banned_pids = set()
+                for pep in prots_spc2[best_prot]:
+                    for pid in pep_pid[pep]:
+                        banned_pids.add(pid)
+                for pid in banned_pids:
+                    for pep in pid_pep[pid]:
+                        # banned_peptides.add(pep)
+                        banned_dict[pep] = 0
+                        for bprot in pept_prot[pep]:
+                            unstable_prots.add(bprot)
+                del banned_pids
+
+            prot_fdr = aux.fdr(prots_spc_final.items(), is_decoy=isdecoy)
+            # print len(prots_spc_final), len(p1), prot_fdr
+            num_tot_prots = len(prots_spc_final)
+            if num_tot_prots % 25 == 0:
+                print 'Approximately %d proteins identified at %.1f %% FDR' % (num_tot_prots, prot_fdr * 100)
+            if prot_fdr >= 0.02:
+                break
+        # while(len(p1)):
+        #     # prots_spc2 = defaultdict(set)
+        #     # for pep, proteins in pept_prot.iteritems():
+        #     #     if pep in p1:
+        #     #         for protein in proteins:
+        #     #             prots_spc2[protein].add(pep)
+        #     for k, v in list(prots_spc2.items()):
+                
+
+                
+        print 'p=%s' % (p0, )
+
+
+
+
+        prots_spc = prots_spc_final
         with open(base_out_name + '_proteins_full.csv', 'w') as output:
             output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
             for x in sortedlist_spc:
