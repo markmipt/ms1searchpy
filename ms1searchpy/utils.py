@@ -80,14 +80,11 @@ def prot_peptides(prot_seq, enzyme, mc, minlen, maxlen, is_decoy, dont_use_seen_
     peptides = parser.cleave(prot_seq, enzyme, mc)
     for pep in peptides:
         plen = len(pep)
-        if minlen <= plen <= maxlen + 2:
+        if minlen <= plen <= maxlen:
             forms = []
             if dont_use_fast_valid or pep in seen_target or pep in seen_decoy or parser.fast_valid(pep):
                 if plen <= maxlen:
                     forms.append(pep)
-                if prot_seq[0] == 'M' and prot_seq.startswith(pep):
-                    if minlen <= plen - 1 <= maxlen:
-                        forms.append(pep[1:])
             for f in forms:
                 if dont_use_seen_peptides:
                     yield f
