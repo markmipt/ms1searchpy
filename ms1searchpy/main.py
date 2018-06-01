@@ -120,7 +120,7 @@ def process_file(args):
 def peptide_processor(peptide, **kwargs):
     seqm = peptide
     results = []
-    m = cmass.fast_mass(seqm, aa_mass=kwargs['aa_mass'])
+    m = cmass.fast_mass(seqm, aa_mass=kwargs['aa_mass']) + kwargs['aa_mass'].get('Nterm', 0) + kwargs['aa_mass'].get('Cterm', 0)
     acc_l = kwargs['acc_l']
     acc_r = kwargs['acc_r']
     dm_l = acc_l * m / 1.0e6
@@ -190,7 +190,12 @@ def prepare_peptide_processor(fname, args):
     if fmods:
         for mod in fmods.split(','):
             m, aa = mod.split('@')
-            aa_mass[aa] += float(m)
+            if aa == '[':
+                aa_mass['Nterm'] = float(m)
+            elif aa == ']':
+                aa_mass['Cterm'] = float(m)
+            else:
+                aa_mass[aa] += float(m)
 
     acc_l = args['ptol']
     acc_r = args['ptol']
@@ -228,6 +233,7 @@ def filter_results(resultdict, idx):
 
 def process_peptides(args):
     fname = args['file']
+    fdr = args['fdr'] / 100
     try:
         outpath = args['outpath']
     except:
@@ -301,7 +307,7 @@ def process_peptides(args):
                         del prots_spc[k]
                         checked.add(prefix + k)
 
-        filtered_prots = aux.filter(prots_spc.items(), fdr=0.01, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
+        filtered_prots = aux.filter(prots_spc.items(), fdr=fdr, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
                                     full_output=True)
 
         identified_proteins = 0
@@ -402,7 +408,7 @@ def process_peptides(args):
                         del prots_spc[k]
                         checked.add(prefix + k)
 
-        filtered_prots = aux.filter(prots_spc.items(), fdr=0.01, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
+        filtered_prots = aux.filter(prots_spc.items(), fdr=fdr, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
                                     full_output=True)
 
         identified_proteins = 0
@@ -539,18 +545,14 @@ def process_peptides(args):
         pid_pep[pid].add(pep)
 
     if len(p1):
-
         prots_spc_final = dict()
         prots_spc_copy = False
-        # banned_peptides = set()
         banned_dict = dict()
         prots_spc2 = False
         unstable_prots = set()
         p0 = False
 
-        # p1 = p1.difference(banned_peptides)
         while(len(p1)):
-            # p1 = p1.difference(banned_peptides)
             if not prots_spc2:
                 prots_spc2 = defaultdict(set)
                 for pep, proteins in pept_prot.iteritems():
@@ -602,22 +604,17 @@ def process_peptides(args):
                         for bprot in pept_prot[pep]:
                             unstable_prots.add(bprot)
                 del banned_pids
+            else:
+                break
 
             prot_fdr = aux.fdr(prots_spc_final.items(), is_decoy=isdecoy)
             # print len(prots_spc_final), len(p1), prot_fdr
             num_tot_prots = len(prots_spc_final)
             if num_tot_prots % 25 == 0:
                 print 'Approximately %d proteins identified at %.1f %% FDR' % (num_tot_prots, prot_fdr * 100)
-            if prot_fdr >= 0.02:
+                print p
+            if prot_fdr >= 2.5 * fdr:
                 break
-        # while(len(p1)):
-        #     # prots_spc2 = defaultdict(set)
-        #     # for pep, proteins in pept_prot.iteritems():
-        #     #     if pep in p1:
-        #     #         for protein in proteins:
-        #     #             prots_spc2[protein].add(pep)
-        #     for k, v in list(prots_spc2.items()):
-                
 
                 
         print 'p=%s' % (p0, )
@@ -626,6 +623,7 @@ def process_peptides(args):
 
 
         prots_spc = prots_spc_final
+        sortedlist_spc = sorted(prots_spc.iteritems(), key=operator.itemgetter(1))[::-1]
         with open(base_out_name + '_proteins_full.csv', 'w') as output:
             output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
             for x in sortedlist_spc:
@@ -643,7 +641,7 @@ def process_peptides(args):
                         del prots_spc[k]
                         checked.add(prefix + k)
 
-        filtered_prots = aux.filter(prots_spc.items(), fdr=0.01, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1, full_output=True)
+        filtered_prots = aux.filter(prots_spc.items(), fdr=fdr, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1, full_output=True)
 
         identified_proteins = 0
 
