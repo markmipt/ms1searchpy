@@ -513,13 +513,13 @@ def process_peptides(args):
     rt_diff = resdict['rt'] - rt_pred
     e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
     zs_all = zs_all + e_all
-    r = 3.0
+    r = 9.0
     e_ind = e_all <= r
     resdict = filter_results(resdict, e_ind)
     rt_diff = rt_diff[e_ind]
     zs_all = zs_all[e_ind]
 
-    e_ind = zs_all <= args['rtt']
+    e_ind = zs_all <= args['rtt'] ** 2
     resdict = filter_results(resdict, e_ind)
     rt_diff = rt_diff[e_ind]
     zs_all = zs_all[e_ind]
@@ -530,7 +530,11 @@ def process_peptides(args):
     else:
         base_out_name = os.path.splitext(fname)[0]
 
-
+    with open(base_out_name + '_protsN.csv', 'w') as output:
+        output.write('dbname\ttheor peptides\n')
+        for k, v in protsN.items():
+            output.write('\t'.join((k, str(v))) + '\n')
+   
     with open(base_out_name + '_PFMs.csv', 'w') as output:
         output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tnScans\tnIsotopes\tproteins\tm/z\tRT\taveragineCorr\tcharge\n')
         for seq, md, rtd, peak_id, I, nScans, nIsotopes, mzr, rtr, av, ch in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['ids'], resdict['Is'], resdict['Scans'], resdict['Isotopes'], resdict['mzraw'], resdict['rt'], resdict['av'], resdict['ch']):
