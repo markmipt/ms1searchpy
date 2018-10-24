@@ -22,7 +22,7 @@ def run():
     parser.add_argument('-i', help='minimum number of isotopes', default=4, type=int)
     parser.add_argument('-sc', help='minimum number of scans for peptide feature', default=3, type=int)
     parser.add_argument('-lmin', help='min length of peptides', default=7, type=int)
-    parser.add_argument('-lmax', help='max length of peptides', default=30, type=int)
+    parser.add_argument('-lmax', help='max length of peptides', default=60, type=int)
     parser.add_argument('-e', help='cleavage rule in quotes!. X!Tandem style for cleavage rules', default='[RK]|{P}')
     parser.add_argument('-mc', help='number of missed cleavages', default=0, type=int)
     parser.add_argument('-cmin', help='min precursor charge', default=2, type=int)
