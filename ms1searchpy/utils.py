@@ -3,7 +3,14 @@ from multiprocessing import Queue, Process, cpu_count
 import os
 import csv
 import subprocess
+from scipy.stats import binom
+import numpy as np
 
+def recalc_spc(banned_dict, unstable_prots, prots_spc2):
+    tmp = dict()
+    for k in unstable_prots:
+        tmp[k] = sum(banned_dict.get(l, 1) > 0 for l in prots_spc2[k])
+    return tmp
 
 def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
     if os.path.splitext(fname)[-1].lower() == '.mzml':
@@ -13,12 +20,22 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
     with open(fname, 'rb') as infile:
         csvreader = csv.reader(infile, delimiter='\t')
         header = csvreader.next()
+
         mass_ind = header.index('massCalib')
+        # mass_ind = header.index('mostAbundantMz')
         RT_ind = header.index('rtApex')
         ch_ind = header.index('charge')
         nIsotopes_ind = header.index('nIsotopes')
         Int_ind = header.index('intensityApex')
         nScans_ind = header.index('nScans')
+
+        # mass_ind = header.index('apex_mz')
+        # RT_ind = header.index('rt')
+        # ch_ind = header.index('charge')
+        # nIsotopes_ind = header.index('isotopes_count')
+        # Int_ind = header.index('intensity')
+        # nScans_ind = header.index('centroid_mz')
+
         try:
             mz_ind = header.index('mz')
         except:
@@ -32,8 +49,16 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
             nm = float(z[mass_ind])
             RT = float(z[RT_ind])
             ch = float(z[ch_ind])
-            nIsotopes = float(z[nIsotopes_ind])
+            # if ch != 0:
+            #     nm = (nm + 1.0073 * ch) / ch
+            # else:
+            # nm = (nm + 1.0073 * ch) / ch
+            # for ch in [1,2,3]:
+            # nm = nm * ch - 1.0073 * ch
+            nIsotopes = float(z[nIsotopes_ind])# + 1
             nScans = int(z[nScans_ind])
+            # nIsotopes = 4
+            # nScans = 4
             I = float(z[Int_ind])
             mz = float(z[mz_ind]) if mz_ind >= 0 else 0
             av = float(z[av_ind]) if av_ind >= 0 else 0
@@ -167,3 +192,66 @@ def convert_tandem_cleave_rule_to_regexp(cleavage_rule):
 def multimap(n, func, it, **kw):
     for s in it:
         yield func(s, **kw)
+
+def keywithmaxval(d):
+     """ a) create a list of the dict's keys and values; 
+         b) return the key with the max value"""  
+     v=list(d.values())
+     k=list(d.keys())
+     return k[v.index(max(v))]
+
+def calc_sf_all(v, n, p):
+    sf_values = -np.log10(binom.sf(v, n, p))
+    sf_values[np.isinf(sf_values)] = 0
+    return sf_values
+
+
+# def multimap(n, func, it, **kw):
+#     if n == 0:
+#         try:
+#             n = cpu_count()
+#         except NotImplementedError:
+#             n = 1
+#     # if n == 1:
+#     #     for s in it:
+#     #         result = func(s, best_res, **kw)
+#     #         if result:
+#     #             for x in result:
+#     #                 peptide, m, snp_label, res = x
+
+#     #                 for score, spec_t, c, info in res:
+#     #                     if -score <= best_res.get(spec_t, 0):
+#     #                         best_res_raw[spec_t] = [peptide, m, snp_label, score, spec_t, c, info]
+#     #                         best_res[spec_t] = -score   
+#     #     return best_res_raw, best_res
+      
+#     else:
+
+#         qout = Queue()
+#         count = 0
+
+#         while True:
+#             qin = list(islice(it, 5000000))
+#             if not len(qin):
+#                 break
+# #           print 'Loaded 500000 items. Ending cycle.'
+#             procs = []
+#             for proc_num in range(n):
+#                 p = Process(target=worker, args=(qin, qout, proc_num, n, best_res, best_res_raw))
+#                 p.start()
+#                 procs.append(p)
+
+#             count = len(qin)
+
+#             for _ in range(n):
+#                 for item in iter(qout.get, None):
+#                     for k, v in item.items():
+#                         if -v[3] <= best_res.get(k, 0):
+#                             best_res_raw[k] = v
+#                             best_res[k] = -v[3]
+#                     # yield item
+
+#             for p in procs:
+#                 p.join()
+
+#         return best_res_raw, best_res
