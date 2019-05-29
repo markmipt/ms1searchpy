@@ -641,8 +641,9 @@ def process_peptides(args):
             procs.append(p)
 
         for _ in range(n):
-            for item in iter(qout.get, None):
-                # for k, v in item.iteritems():
+            for item, item2 in iter(qout.get, None):
+                if item2:
+                    prots_spc_copy = item2
                 for k in protsN:
                     if k not in prots_spc_final:
                         prots_spc_final[k] = [item.get(k, 0.0), ]
@@ -660,8 +661,8 @@ def process_peptides(args):
         with open(base_out_name + '_proteins_full.csv', 'w') as output:
             output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
             for x in sortedlist_spc:
-                output.write('\t'.join((x[0], str(x[1]), str(protsN[x[0]]))) + '\n')
-                # output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN_full[x[0]]))) + '\n')
+                # output.write('\t'.join((x[0], str(x[1]), str(protsN[x[0]]))) + '\n')
+                output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
 
         checked = set()
         for k, v in prots_spc.items():
@@ -685,15 +686,15 @@ def process_peptides(args):
         print 'TOP 5 identified proteins:'
         print 'dbname\tscore\tnum matched peptides\tnum theoretical peptides'
         for x in filtered_prots[:5]:
-            print '\t'.join((str(x[0]), str(x[1]), str(protsN[x[0]])))
-            # print '\t'.join((str(x[0]), str(x[1]), str(int(prots_spc_copy[x[0]])), str(protsN_full[x[0]])))
+            # print '\t'.join((str(x[0]), str(x[1]), str(protsN[x[0]])))
+            print '\t'.join((str(x[0]), str(x[1]), str(int(prots_spc_copy[x[0]])), str(protsN[x[0]])))
         print 'results:%s;number of identified proteins = %d' % (fname, identified_proteins, )
         print 'R=', r
         with open(base_out_name + '_proteins.csv', 'w') as output:
             output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
             for x in filtered_prots:
-                output.write('\t'.join((x[0], str(x[1]), str(protsN[x[0]]))) + '\n')
-                # output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN_full[x[0]]))) + '\n')
+                # output.write('\t'.join((x[0], str(x[1]), str(protsN[x[0]]))) + '\n')
+                output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
 
 
         fig = plt.figure(figsize=(16, 12))
@@ -738,28 +739,14 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
     for item in iter(qin.get, None):
         mass_koef, rtt_koef = item
 
-        # e_ind = resdict['mc'] <= mc
-        # resdict2 = filter_results(resdict, e_ind)
-        # mass_diff2 = mass_diff[e_ind]
-        # rt_diff2 = rt_diff[e_ind]
-
         m_k = scoreatpercentile(mass_diff, mass_koef * 100)
         e_ind = mass_diff <= m_k
-        # e_ind = mass_diff2 <= mass_koef
         resdict2 = filter_results(resdict, e_ind)
         rt_diff2 = rt_diff[e_ind]
 
         r_k = scoreatpercentile(rt_diff2, rtt_koef * 100)
         e_ind = rt_diff2 <= r_k
-        # e_ind = rt_diff2 <= rtt_koef
         resdict2 = filter_results(resdict2, e_ind)
-
-
-        # shared_sigma = np.power(mass_diff2, 2) + np.power(rt_diff2, 2)
-        # s_k = scoreatpercentile(shared_sigma, mass_koef * 100)
-        # e_ind = shared_sigma <= s_k
-        # # e_ind = shared_sigma <= mass_koef ** 2
-        # resdict2 = filter_results(resdict2, e_ind)
 
         p1 = set(resdict2['seqs'])
 
@@ -789,15 +776,11 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
             while(len(p1)):
                 if not prots_spc2:
 
-                    # prots_spc3 = defaultdict(list)
                     prots_spc2 = defaultdict(set)
                     for pep, proteins in pept_prot.iteritems():
                         if pep in p1:
                             for protein in proteins:
                                 prots_spc2[protein].add(pep)
-
-                    # for k in prots_spc3:
-                    #     prots_spc3[k] = np.median(prots_spc3[k])
 
                     for k in protsN:
                         if k not in prots_spc2:
@@ -811,7 +794,6 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                     n_arr = np.array([protsN[k] for k in names_arr])
 
                 if not tmp_spc_new:
-                    # tmp_spc_new = dict((k, len(v)) for k, v in prots_spc2.iteritems())
                     tmp_spc_new = dict((k, sum(banned_dict.get(l, 1) > 0 for l in v) if k in unstable_prots else tmp_spc.get(k, 0)) for k, v in prots_spc2.iteritems())
                 else:
                     for k, v in recalc_spc(banned_dict, unstable_prots, prots_spc2).iteritems():
@@ -842,10 +824,6 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
 
                 best_prot = utils.keywithmaxval(prots_spc_basic)
 
-                # for k, v in prots_spc_basic.iteritems():
-                #     prots_spc_final[k] = v
-                # break
-
                 best_score = prots_spc_basic[best_prot]
                 unstable_prots = set()
                 if best_prot not in prots_spc_final:
@@ -864,12 +842,16 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                     break
 
                 prot_fdr = aux.fdr(prots_spc_final.items(), is_decoy=isdecoy)
-                # num_tot_prots = len(prots_spc_final)
-                # if prot_fdr >= 2.5 * fdr:
                 if prot_fdr >= 12.5 * fdr:
                     for k, v in prots_spc_basic.iteritems():
                         if k not in prots_spc_final:
                             prots_spc_final[k] = v
                     break
-        qout.put(prots_spc_final)
+
+        if mass_koef + rtt_koef >= 1.99:
+            item2 = prots_spc_copy
+        else:
+            item2 = False
+
+        qout.put((prots_spc_final, item2))
     qout.put(None)
