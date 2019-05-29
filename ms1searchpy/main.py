@@ -857,8 +857,9 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                     for pid in banned_pids:
                         for pep in pid_pep[pid]:
                             banned_dict[pep] -= 1
-                            for bprot in pept_prot[pep]:
-                                unstable_prots.add(bprot)
+                            if banned_dict[pep] <= 0:
+                                for bprot in pept_prot[pep]:
+                                    unstable_prots.add(bprot)
                 else:
                     break
 
