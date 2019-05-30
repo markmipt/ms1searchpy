@@ -29,12 +29,36 @@ try:
     seaborn.set_style('whitegrid')
 except:
     pass
-try:
-    from .cutils import recalc_spc
-except:
-    print('Cython modules were not loaded...')
-    from .utils import recalc_spc
-from .utils import calc_sf_all
+
+from .utils import calc_sf_all, recalc_spc
+
+def noisygaus(x, a, x0, sigma, b):
+    return a * exp(-(x - x0) ** 2 / (2 * sigma ** 2)) + b
+
+def calibrate_mass(bwidth, mass_left, mass_right, true_md):
+
+    bbins = np.arange(-mass_left, mass_right, bwidth)
+    H1, b1 = np.histogram(true_md, bins=bbins)
+    b1 = b1 + bwidth
+    b1 = b1[:-1]
+
+
+    popt, pcov = curve_fit(noisygaus, b1, H1, p0=[1, np.median(true_md), 1, 1])
+    mass_shift, mass_sigma = popt[1], abs(popt[2])
+    return mass_shift, mass_sigma, pcov[0][0]
+
+def calibrate_RT_gaus(bwidth, mass_left, mass_right, true_md):
+
+    bbins = np.arange(-mass_left, mass_right, bwidth)
+    H1, b1 = np.histogram(true_md, bins=bbins)
+    b1 = b1 + bwidth
+    b1 = b1[:-1]
+
+
+    popt, pcov = curve_fit(noisygaus, b1, H1, p0=[1, np.median(true_md), bwidth * 5, 1])
+    mass_shift, mass_sigma = popt[1], abs(popt[2])
+    return mass_shift, mass_sigma, pcov[0][0]
+
 
 def get_RCs2(sequences, RTs, lcp = -0.21,
             term_aa = False, **kwargs):
@@ -356,21 +380,6 @@ def process_peptides(args):
         mass_left = args['ptol']
         mass_right = args['ptol']
 
-        def noisygaus(x, a, x0, sigma, b):
-            return a * exp(-(x - x0) ** 2 / (2 * sigma ** 2)) + b
-
-        def calibrate_mass(bwidth, mass_left, mass_right, true_md):
-
-            bbins = np.arange(-mass_left, mass_right, bwidth)
-            H1, b1 = np.histogram(true_md, bins=bbins)
-            b1 = b1 + bwidth
-            b1 = b1[:-1]
-
-
-            popt, pcov = curve_fit(noisygaus, b1, H1, p0=[1, np.median(true_md), 1, 1])
-            mass_shift, mass_sigma = popt[1], abs(popt[2])
-            return mass_shift, mass_sigma, pcov[0][0]
-
         mass_shift, mass_sigma, covvalue = calibrate_mass(0.001, mass_left, mass_right, true_md)
         if np.isinf(covvalue):
             mass_shift, mass_sigma, covvalue = calibrate_mass(0.01, mass_left, mass_right, true_md)
@@ -517,18 +526,6 @@ def process_peptides(args):
             RT_left = -min(rt_diff_tmp)
             RT_right = max(rt_diff_tmp)
 
-            def calibrate_RT_gaus(bwidth, mass_left, mass_right, true_md):
-
-                bbins = np.arange(-mass_left, mass_right, bwidth)
-                H1, b1 = np.histogram(true_md, bins=bbins)
-                b1 = b1 + bwidth
-                b1 = b1[:-1]
-
-
-                popt, pcov = curve_fit(noisygaus, b1, H1, p0=[1, np.median(true_md), bwidth * 5, 1])
-                mass_shift, mass_sigma = popt[1], abs(popt[2])
-                return mass_shift, mass_sigma, pcov[0][0]
-
             start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
             print(start_width, 'SW')
             XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
@@ -544,6 +541,21 @@ def process_peptides(args):
             RC = achrom.get_RCs_vary_lcp(true_seqs[~outmask], true_rt[~outmask])
             RT_pred = np.array([achrom.calculate_RT(s, RC) for s in true_seqs])
             aa, bb, RR, ss = aux.linear_regression(RT_pred, true_rt)
+
+            rt_diff_tmp = RT_pred - true_rt
+            RT_left = -min(rt_diff_tmp)
+            RT_right = max(rt_diff_tmp)
+
+            start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
+            print(start_width, 'SW')
+            XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
+            if np.isinf(covvalue):
+                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
+            if np.isinf(covvalue):
+                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
+            print 'Calibrated RT shift: ', XRT_shift
+            print 'Calibrated RT sigma in ppm: ', XRT_sigma
+
         print aa, bb, RR, ss
 
 
@@ -1017,8 +1029,10 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                         for pep in pid_pep[pid]:
                             banned_dict[pep] -= 1
                             if banned_dict[pep] <= 0:
+                                best_prot_val = features_dict[pep][0]
                                 for bprot in pept_prot[pep]:
-                                    unstable_prots.add(bprot)
+                                    if bprot == best_prot_val:
+                                        unstable_prots.add(bprot)
                 else:
                     break
 
