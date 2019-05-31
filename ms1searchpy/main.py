@@ -736,8 +736,8 @@ def process_peptides(args):
             #     for rtt_koef in [3, 2, 1, 0.5, 0.25, 0.1]:
             # for mass_koef in [1.0, 0.8, 0.6, 0.4, 0.2]:
             #     for rtt_koef in [1.0, 0.8, 0.6, 0.4, 0.2]:
-        for mass_koef in np.arange(1.0, 0.19, -0.2):
-            for rtt_koef in np.arange(1.0, 0.19, -0.2):
+        for mass_koef in np.arange(1.0, 0.2, -0.33):
+            for rtt_koef in np.arange(1.0, 0.2, -0.33):
             # for mass_koef in np.arange(0.5, 0.0, -0.1):
             #     for rtt_koef in np.arange(0.5, 0.0, -0.1):
             # for mass_koef in np.arange(1.0, 0.0, -0.05):
