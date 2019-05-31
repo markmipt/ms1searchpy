@@ -32,6 +32,46 @@ except:
 
 from .utils import calc_sf_all, recalc_spc
 
+def worker_RT(qin, qout, shift, step, RC=False, elude_path=False, ns=False, nr=False):
+
+
+
+    pepdict = dict()    
+    if elude_path:
+        outtrain = tempfile.NamedTemporaryFile(suffix='.txt')
+        outres = tempfile.NamedTemporaryFile(suffix='.txt')
+        outres_name = outres.name
+        outres.close()
+        for seq, RT in zip(ns, nr):
+            outtrain.write(seq + '\t' + str(RT) + '\n')
+        outtrain.flush()
+
+        outtest = tempfile.NamedTemporaryFile(suffix='.txt')
+
+        maxval = len(qin)
+        start = 0
+        while start + shift < maxval:
+            item = qin[start+shift]
+            outtest.write(item + '\n')
+            start += step
+        outtest.flush()
+
+        subprocess.call([elude_path, '-t', outtrain.name, '-e', outtest.name, '-a', '-o', outres_name])
+        for x in open(outres_name).readlines()[3:]:
+            seq, RT = x.strip().split('\t')
+            pepdict[seq] = float(RT)
+        outtest.close()
+        outtrain.close()
+    else:
+        maxval = len(qin)
+        start = 0
+        while start + shift < maxval:
+            item = qin[start+shift]
+            pepdict[item] = achrom.calculate_RT(item, RC)
+            start += step
+    qout.put(pepdict)
+    qout.put(None)
+
 def noisygaus(x, a, x0, sigma, b):
     return a * exp(-(x - x0) ** 2 / (2 * sigma ** 2)) + b
 
@@ -155,11 +195,13 @@ def peptide_processor(peptide, **kwargs):
     acc_l = kwargs['acc_l']
     acc_r = kwargs['acc_r']
     dm_l = acc_l * m / 1.0e6
-    dm_r = acc_r * m / 1.0e6
+    if acc_r == acc_l:
+        dm_r = dm_l
+    else:
+        dm_r = acc_r * m / 1.0e6
     start = nmasses.searchsorted(m - dm_l)
     end = nmasses.searchsorted(m + dm_r)
-    idx = set(range(start, end))
-    for i in idx:
+    for i in xrange(start, end):
         peak_id = ids[i]
         I = Is[i]
         massdiff = (m - nmasses[i]) / m * 1e6
@@ -506,7 +548,9 @@ def process_peptides(args):
             nr = true_rt[~outmask]
             print(len(ns))
             ll = len(ns)
-            for seq, RT in zip(ns[:ll], nr[:ll]):
+            ns = ns[:ll]
+            nr = nr[:ll]
+            for seq, RT in zip(ns, nr):
                 outtrain.write(seq + '\t' + str(RT) + '\n')
             outtrain.flush()
 
@@ -567,22 +611,29 @@ def process_peptides(args):
 
     p1 = set(resdict['seqs'])
 
-    pepdict = dict()    
-    if elude_path:
-        outtest = tempfile.NamedTemporaryFile(suffix='.txt')
-        for seq in p1:
-            outtest.write(seq + '\n')
-        outtest.flush()
+    n = args['nproc']
 
-        subprocess.call([elude_path, '-t', outtrain.name, '-e', outtest.name, '-a', '-o', outres_name])
-        for x in open(outres_name).readlines()[3:]:
-            seq, RT = x.strip().split('\t')
-            pepdict[seq] = float(RT)
-        outtest.close()
-        outtrain.close()
-    else:
-        for seq in p1:
-            pepdict[seq] = achrom.calculate_RT(seq, RC)
+    qin = list(p1)
+    qout = Queue()
+    procs = []
+    for i in range(n):
+        if elude_path:
+            p = Process(target=worker_RT, args=(qin, qout, i, n, False, elude_path, ns, nr))
+        else:
+            p = Process(target=worker_RT, args=(qin, qout, i, n, RC, False, False, False))
+        p.start()
+        procs.append(p)
+
+    pepdict = dict()
+    for _ in range(n):
+        for item in iter(qout.get, None):
+            for k, v in item.iteritems():
+                pepdict[k] = v
+
+    for p in procs:
+        p.join()
+
+
     rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
     rt_diff = resdict['rt'] - rt_pred
     e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
@@ -617,6 +668,8 @@ def process_peptides(args):
         n = args['nproc']
 
 
+        prots_spc_basic = dict()
+
         p1 = set(resdict['seqs'])
 
         pep_pid = defaultdict(set)
@@ -631,8 +684,7 @@ def process_peptides(args):
                 banned_dict[pep] = 1
 
         if len(p1):
-            prots_spc_basic = dict()
-            prots_spc_basic2 = dict()
+            prots_spc_final = dict()
             prots_spc_copy = False
             prots_spc2 = False
             unstable_prots = set()
@@ -642,8 +694,20 @@ def process_peptides(args):
             tmp_spc_new = False
             decoy_set = False
 
-            while(len(p1)):
+            while 1:
                 if not prots_spc2:
+
+                    best_match_dict = dict()
+                    n_map_dict = defaultdict(list)
+                    for k, v in protsN.iteritems():
+                        n_map_dict[v].append(k)
+
+                    decoy_set = set()
+                    for k in protsN:
+                        if isdecoy_key(k):
+                            decoy_set.add(k)
+                    decoy_set = list(decoy_set)
+                    
 
                     prots_spc2 = defaultdict(set)
                     for pep, proteins in pept_prot.iteritems():
@@ -662,41 +726,52 @@ def process_peptides(args):
                     names_arr = np.array(prots_spc2.keys())
                     n_arr = np.array([protsN[k] for k in names_arr])
 
-                if not tmp_spc_new:
-                    tmp_spc_new = dict((k, sum(banned_dict.get(l, 1) > 0 for l in v) if k in unstable_prots else tmp_spc.get(k, 0)) for k, v in prots_spc2.iteritems())
-                else:
-                    for k, v in recalc_spc(banned_dict, unstable_prots, prots_spc2).iteritems():
-                        tmp_spc_new[k] = v
-                
+                    tmp_spc_new = dict((k, len(v)) for k, v in prots_spc2.iteritems())
+
+
+                    top100decoy_score_tmp = [tmp_spc_new.get(dprot, 0) for dprot in decoy_set]
+                    top100decoy_score_tmp_sum = float(sum(top100decoy_score_tmp))
+
                 tmp_spc = tmp_spc_new
                 prots_spc = tmp_spc_new
                 if not prots_spc_copy:
                     prots_spc_copy = deepcopy(prots_spc)
 
-                if not decoy_set:
-                    decoy_set = set()
-                    for k in protsN:
-                        if isdecoy_key(k):
-                            decoy_set.add(k)
-
-                v_arr = np.array([prots_spc[k] for k in names_arr])
-
-                top100decoy_score_tmp = [prots_spc.get(dprot, 0) for dprot in decoy_set]
+                for idx, v in enumerate(decoy_set):
+                    if v in unstable_prots:
+                        top100decoy_score_tmp_sum -= top100decoy_score_tmp[idx]
+                        top100decoy_score_tmp[idx] = prots_spc.get(v, 0)
+                        top100decoy_score_tmp_sum += top100decoy_score_tmp[idx]
                 p = float(sum(top100decoy_score_tmp)) / top100decoy_N
+                p = top100decoy_score_tmp_sum / top100decoy_N
                 if not p0:
                     p0 = float(p)
 
-                all_pvals = calc_sf_all(v_arr, n_arr, p)
-                for idx, k in enumerate(names_arr):
-                    prots_spc_basic[k] = all_pvals[idx]
+                n_change = set(protsN[k] for k in unstable_prots)
+                for n_val in n_change:
+                    for k in n_map_dict[n_val]:
+                        v = prots_spc[k]
+                        if n_val not in best_match_dict or v > prots_spc[best_match_dict[n_val]]:
+                            best_match_dict[n_val] = k
+                n_arr_small = []
+                names_arr_small = []
+                v_arr_small = []
+                for k, v in best_match_dict.iteritems():
+                    n_arr_small.append(k)
+                    names_arr_small.append(v)
+                    v_arr_small.append(prots_spc[v])
 
+                prots_spc_basic = dict()
+                all_pvals = calc_sf_all(v_arr_small, n_arr_small, p)
+                for idx, k in enumerate(names_arr_small):
+                    prots_spc_basic[k] = all_pvals[idx]
 
                 best_prot = utils.keywithmaxval(prots_spc_basic)
 
                 best_score = prots_spc_basic[best_prot]
                 unstable_prots = set()
-                if best_prot not in prots_spc_basic2:
-                    prots_spc_basic2[best_prot] = best_score
+                if best_prot not in prots_spc_final:
+                    prots_spc_final[best_prot] = best_score
                     banned_pids = set()
                     for pep in prots_spc2[best_prot]:
                         for pid in pep_pid[pep]:
@@ -704,20 +779,37 @@ def process_peptides(args):
                     for pid in banned_pids:
                         for pep in pid_pep[pid]:
                             banned_dict[pep] -= 1
-                            if banned_dict[pep] <= 0:
+                            if banned_dict[pep] == 0:
                                 for bprot in pept_prot[pep]:
+                                    tmp_spc_new[bprot] -= 1
                                     unstable_prots.add(bprot)
                 else:
-                    break
 
-                prot_fdr = aux.fdr(prots_spc_basic2.items(), is_decoy=isdecoy)
-                if prot_fdr >= 12.5 * fdr:
+                    v_arr = np.array([prots_spc[k] for k in names_arr])
+                    all_pvals = calc_sf_all(v_arr, n_arr, p)
+                    for idx, k in enumerate(names_arr):
+                        prots_spc_basic[k] = all_pvals[idx]
+
                     for k, v in prots_spc_basic.iteritems():
-                        if k not in prots_spc_basic2:
-                            prots_spc_basic2[k] = v
+                        if k not in prots_spc_final:
+                            prots_spc_final[k] = v
+
                     break
 
+                prot_fdr = aux.fdr(prots_spc_final.items(), is_decoy=isdecoy)
+                if prot_fdr >= 12.5 * fdr:
 
+                    v_arr = np.array([prots_spc[k] for k in names_arr])
+                    all_pvals = calc_sf_all(v_arr, n_arr, p)
+                    for idx, k in enumerate(names_arr):
+                        prots_spc_basic[k] = all_pvals[idx]
+
+                    for k, v in prots_spc_basic.iteritems():
+                        if k not in prots_spc_final:
+                            prots_spc_final[k] = v
+                    break
+
+        prots_spc_basic2 = copy(prots_spc_final)
         prots_spc_final = dict()
 
         if n == 0:
@@ -745,6 +837,9 @@ def process_peptides(args):
                 # for rtt_koef in [3, ]:
                 qin.put((mass_koef, rtt_koef))
 
+        # qin.put((1.0, 1.0))
+        # qin.put(None)
+
         for _ in range(n):
             qin.put(None)
 
@@ -766,6 +861,8 @@ def process_peptides(args):
 
         for p in procs:
             p.join()
+        # worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2)
+        # prots_spc_final, prots_spc_copy = qout.get()
 
         for k in prots_spc_final.keys():
             prots_spc_final[k] = np.mean(prots_spc_final[k])
@@ -850,41 +947,6 @@ def process_peptides(args):
 
 def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2):
 
-    # p1 = set(resdict['seqs'])
-
-    # prots_spc2 = defaultdict(set)
-    # for pep, proteins in pept_prot.iteritems():
-    #     if pep in p1:
-    #         for protein in proteins:
-    #             prots_spc2[protein].add(pep)
-
-    # for k in protsN:
-    #     if k not in prots_spc2:
-    #         prots_spc2[k] = set([])
-    # prots_spc2 = dict(prots_spc2)
-
-    # top100decoy_N = sum([val for key, val in protsN.items() if isdecoy_key(key)])
-
-    # names_arr = np.array(prots_spc2.keys())
-    # n_arr = np.array([protsN[k] for k in names_arr])
-
-    # prots_spc = dict((k, len(v)) for k, v in prots_spc2.iteritems())
-    
-    # decoy_set = set()
-    # for k in protsN:
-    #     if isdecoy_key(k):
-    #         decoy_set.add(k)
-
-    # v_arr = np.array([prots_spc[k] for k in names_arr])
-
-    # top100decoy_score_tmp = [prots_spc.get(dprot, 0) for dprot in decoy_set]
-    # p = float(sum(top100decoy_score_tmp)) / top100decoy_N
-
-    # prots_spc_basic2 = dict()
-    # all_pvals = calc_sf_all(v_arr, n_arr, p)
-    # for idx, k in enumerate(names_arr):
-    #     prots_spc_basic2[k] = all_pvals[idx]
-
     for item in iter(qin.get, None):
         mass_koef, rtt_koef = item
 
@@ -897,13 +959,6 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
         e_ind = rt_diff2 <= r_k
         resdict2 = filter_results(resdict2, e_ind)
 
-        # features_dict = dict()
-        # for pep, pid in zip(resdict2['seqs'], resdict2['ids']):
-        #     for bprot in pept_prot[pep]:
-        #         prot_score = prots_spc_basic2[bprot]
-        #         if prot_score > features_dict.get(pid, [0, ])[-1]:
-        #             features_dict[pid] = (pep, bprot, prot_score)
-
         features_dict = dict()
         for pep in set(resdict2['seqs']):
             for bprot in pept_prot[pep]:
@@ -911,35 +966,7 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                 if prot_score > features_dict.get(pep, [-1, ])[-1]:
                     features_dict[pep] = (bprot, prot_score)
 
-        # prots_spc2 = defaultdict(set)
-        # for k, v in features_dict.iteritems():
-        #     prots_spc2[v[1]].add(v[0])
-        # for k in protsN:
-        #     if k not in prots_spc2:
-        #         prots_spc2[k] = set([])
-
-        # prots_spc = dict((k, len(v)) for k, v in prots_spc2.iteritems())
-
-        # decoy_set = set()
-        # for k in protsN:
-        #     if isdecoy_key(k):
-        #         decoy_set.add(k)
-
-        # names_arr = np.array(prots_spc2.keys())
-        # v_arr = np.array([prots_spc[k] for k in names_arr])
-        # n_arr = np.array([protsN[k] for k in names_arr])
-
-        # top100decoy_score_tmp = [prots_spc.get(dprot, 0) for dprot in decoy_set]
-        # top100decoy_N = sum([protsN[dprot] for dprot in decoy_set])
-        # p = float(sum(top100decoy_score_tmp)) / top100decoy_N
-
         prots_spc_basic = dict()
-        # all_pvals = calc_sf_all(v_arr, n_arr, p)
-        # for idx, k in enumerate(names_arr):
-        #     prots_spc_basic[k] = all_pvals[idx]
-
-        # prots_spc_copy = prots_spc
-        # prots_spc_final = prots_spc_basic
 
         p1 = set(resdict2['seqs'])
 
@@ -965,8 +992,20 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
             tmp_spc_new = False
             decoy_set = False
 
-            while(len(p1)):
+            while 1:
                 if not prots_spc2:
+
+                    best_match_dict = dict()
+                    n_map_dict = defaultdict(list)
+                    for k, v in protsN.iteritems():
+                        n_map_dict[v].append(k)
+
+                    decoy_set = set()
+                    for k in protsN:
+                        if isdecoy_key(k):
+                            decoy_set.add(k)
+                    decoy_set = list(decoy_set)
+                    
 
                     prots_spc2 = defaultdict(set)
                     for pep, proteins in pept_prot.iteritems():
@@ -986,34 +1025,45 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                     names_arr = np.array(prots_spc2.keys())
                     n_arr = np.array([protsN[k] for k in names_arr])
 
-                if not tmp_spc_new:
-                    tmp_spc_new = dict((k, sum(banned_dict.get(l, 1) > 0 for l in v) if k in unstable_prots else tmp_spc.get(k, 0)) for k, v in prots_spc2.iteritems())
-                else:
-                    for k, v in recalc_spc(banned_dict, unstable_prots, prots_spc2).iteritems():
-                        tmp_spc_new[k] = v
-                
+                    tmp_spc_new = dict((k, len(v)) for k, v in prots_spc2.iteritems())
+
+
+                    top100decoy_score_tmp = [tmp_spc_new.get(dprot, 0) for dprot in decoy_set]
+                    top100decoy_score_tmp_sum = float(sum(top100decoy_score_tmp))
+
                 tmp_spc = tmp_spc_new
                 prots_spc = tmp_spc_new
                 if not prots_spc_copy:
                     prots_spc_copy = deepcopy(prots_spc)
 
-                if not decoy_set:
-                    decoy_set = set()
-                    for k in protsN:
-                        if isdecoy_key(k):
-                            decoy_set.add(k)
-
-                v_arr = np.array([prots_spc[k] for k in names_arr])
-
-                top100decoy_score_tmp = [prots_spc.get(dprot, 0) for dprot in decoy_set]
+                for idx, v in enumerate(decoy_set):
+                    if v in unstable_prots:
+                        top100decoy_score_tmp_sum -= top100decoy_score_tmp[idx]
+                        top100decoy_score_tmp[idx] = prots_spc.get(v, 0)
+                        top100decoy_score_tmp_sum += top100decoy_score_tmp[idx]
                 p = float(sum(top100decoy_score_tmp)) / top100decoy_N
+                p = top100decoy_score_tmp_sum / top100decoy_N
                 if not p0:
                     p0 = float(p)
 
-                all_pvals = calc_sf_all(v_arr, n_arr, p)
-                for idx, k in enumerate(names_arr):
-                    prots_spc_basic[k] = all_pvals[idx]
+                n_change = set(protsN[k] for k in unstable_prots)
+                for n_val in n_change:
+                    for k in n_map_dict[n_val]:
+                        v = prots_spc[k]
+                        if n_val not in best_match_dict or v > prots_spc[best_match_dict[n_val]]:
+                            best_match_dict[n_val] = k
+                n_arr_small = []
+                names_arr_small = []
+                v_arr_small = []
+                for k, v in best_match_dict.iteritems():
+                    n_arr_small.append(k)
+                    names_arr_small.append(v)
+                    v_arr_small.append(prots_spc[v])
 
+                prots_spc_basic = dict()
+                all_pvals = calc_sf_all(v_arr_small, n_arr_small, p)
+                for idx, k in enumerate(names_arr_small):
+                    prots_spc_basic[k] = all_pvals[idx]
 
                 best_prot = utils.keywithmaxval(prots_spc_basic)
 
@@ -1028,16 +1078,33 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                     for pid in banned_pids:
                         for pep in pid_pep[pid]:
                             banned_dict[pep] -= 1
-                            if banned_dict[pep] <= 0:
+                            if banned_dict[pep] == 0:
                                 best_prot_val = features_dict[pep][0]
                                 for bprot in pept_prot[pep]:
                                     if bprot == best_prot_val:
+                                        tmp_spc_new[bprot] -= 1
                                         unstable_prots.add(bprot)
                 else:
+
+                    v_arr = np.array([prots_spc[k] for k in names_arr])
+                    all_pvals = calc_sf_all(v_arr, n_arr, p)
+                    for idx, k in enumerate(names_arr):
+                        prots_spc_basic[k] = all_pvals[idx]
+
+                    for k, v in prots_spc_basic.iteritems():
+                        if k not in prots_spc_final:
+                            prots_spc_final[k] = v
+
                     break
 
                 prot_fdr = aux.fdr(prots_spc_final.items(), is_decoy=isdecoy)
                 if prot_fdr >= 12.5 * fdr:
+
+                    v_arr = np.array([prots_spc[k] for k in names_arr])
+                    all_pvals = calc_sf_all(v_arr, n_arr, p)
+                    for idx, k in enumerate(names_arr):
+                        prots_spc_basic[k] = all_pvals[idx]
+
                     for k, v in prots_spc_basic.iteritems():
                         if k not in prots_spc_final:
                             prots_spc_final[k] = v
