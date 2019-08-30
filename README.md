@@ -17,11 +17,11 @@ Algorithm can be run with following command:
 The script output contains files: all identified proteins (filename_proteins_full.csv), filtered proteins (filename_proteins.csv), all matched peptide match fingerprints (filename_PFMs.csv).
 
 Citing ms1searchpy
------
+-------------------
 Ivanov et al. MS/MS-Free Protein Identification in Complex Mixtures Using Multiple Enzymes with Complementary Specificity. doi: 10.1021/acs.jproteome.7b00365
 
 Installation
------
+-------------
 Using the pip:
 
     pip install ms1searchpy
