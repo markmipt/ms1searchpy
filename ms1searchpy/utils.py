@@ -97,6 +97,19 @@ def prot_gen(args):
         for p in f:
             yield p
 
+def prepare_decoy_db(args):
+    add_decoy = args['ad']
+    if add_decoy:
+        prefix = args['prefix']
+        db = args['d']
+        out1, out2 = os.path.splitext(db)
+        out_db = out1 + '_shuffled' + out2
+        print(out_db)
+        fasta.write_decoy_db(db, open(out_db, 'w'), mode='shuffle', prefix=prefix).close()
+        args['d'] = out_db
+        args['ad'] = 0
+    return args
+
 seen_target = set()
 seen_decoy = set()
 def prot_peptides(prot_seq, enzyme, mc, minlen, maxlen, is_decoy, dont_use_seen_peptides=False):

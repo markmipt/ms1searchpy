@@ -185,6 +185,7 @@ def process_file(args):
     # ftype = fname.rsplit('.', 1)[-1].lower()
     utils.seen_target.clear()
     utils.seen_decoy.clear()
+    args = utils.prepare_decoy_db(args)
     return process_peptides(args)
 
 
