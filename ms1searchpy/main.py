@@ -32,7 +32,7 @@ except:
 
 from .utils import calc_sf_all, recalc_spc
 
-def worker_RT(qin, qout, shift, step, RC=False, elude_path=False, ns=False, nr=False):
+def worker_RT(qin, qout, shift, step, RC=False, elude_path=False, ns=False, nr=False, win_sys=False):
 
 
 
@@ -69,8 +69,11 @@ def worker_RT(qin, qout, shift, step, RC=False, elude_path=False, ns=False, nr=F
             item = qin[start+shift]
             pepdict[item] = achrom.calculate_RT(item, RC)
             start += step
-    qout.put(pepdict)
-    qout.put(None)
+    if win_sys:
+        return pepdict
+    else:
+        qout.put(pepdict)
+        qout.put(None)
 
 def noisygaus(x, a, x0, sigma, b):
     return a * exp(-(x - x0) ** 2 / (2 * sigma ** 2)) + b
@@ -572,14 +575,13 @@ def process_peptides(args):
             RT_right = max(rt_diff_tmp)
 
             start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
-            print(start_width, 'SW')
             XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
             if np.isinf(covvalue):
                 XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
             if np.isinf(covvalue):
                 XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
             print 'Calibrated RT shift: ', XRT_shift
-            print 'Calibrated RT sigma in ppm: ', XRT_sigma
+            print 'Calibrated RT sigma: ', XRT_sigma
 
             aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
         else:
@@ -592,14 +594,13 @@ def process_peptides(args):
             RT_right = max(rt_diff_tmp)
 
             start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
-            print(start_width, 'SW')
             XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
             if np.isinf(covvalue):
                 XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
             if np.isinf(covvalue):
                 XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
             print 'Calibrated RT shift: ', XRT_shift
-            print 'Calibrated RT sigma in ppm: ', XRT_sigma
+            print 'Calibrated RT sigma: ', XRT_sigma
 
         print aa, bb, RR, ss
 
@@ -614,25 +615,34 @@ def process_peptides(args):
 
     n = args['nproc']
 
-    qin = list(p1)
-    qout = Queue()
-    procs = []
-    for i in range(n):
+
+    if n == 1 or os.name == 'nt':
+        qin = list(p1)
+        qout = []
         if elude_path:
-            p = Process(target=worker_RT, args=(qin, qout, i, n, False, elude_path, ns, nr))
+            pepdict = worker_RT(qin, qout, 0, 1, False, elude_path, ns, nr, True)
         else:
-            p = Process(target=worker_RT, args=(qin, qout, i, n, RC, False, False, False))
-        p.start()
-        procs.append(p)
+            pepdict = worker_RT(qin, qout, 0, 1, RC, False, False, False, True)
+    else:
+        qin = list(p1)
+        qout = Queue()
+        procs = []
+        for i in range(n):
+            if elude_path:
+                p = Process(target=worker_RT, args=(qin, qout, i, n, False, elude_path, ns, nr))
+            else:
+                p = Process(target=worker_RT, args=(qin, qout, i, n, RC, False, False, False))
+            p.start()
+            procs.append(p)
 
-    pepdict = dict()
-    for _ in range(n):
-        for item in iter(qout.get, None):
-            for k, v in item.iteritems():
-                pepdict[k] = v
+        pepdict = dict()
+        for _ in range(n):
+            for item in iter(qout.get, None):
+                for k, v in item.iteritems():
+                    pepdict[k] = v
 
-    for p in procs:
-        p.join()
+        for p in procs:
+            p.join()
 
 
     rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
@@ -818,40 +828,16 @@ def process_peptides(args):
                 n = cpu_count()
             except NotImplementedError:
                 n = 1
-        
-        
-        qin = Queue()
-        qout = Queue()
 
-        # for mc in [2, 3, 4, 5, ]:
-        # for mc in [0, 1]:
-            # for mass_koef in [3, 2, 1, 0.5, 0.25, 0.1]:
-            #     for rtt_koef in [3, 2, 1, 0.5, 0.25, 0.1]:
-            # for mass_koef in [1.0, 0.8, 0.6, 0.4, 0.2]:
-            #     for rtt_koef in [1.0, 0.8, 0.6, 0.4, 0.2]:
-        for mass_koef in np.arange(1.0, 0.2, -0.33):
-            for rtt_koef in np.arange(1.0, 0.2, -0.33):
-            # for mass_koef in np.arange(0.5, 0.0, -0.1):
-            #     for rtt_koef in np.arange(0.5, 0.0, -0.1):
-            # for mass_koef in np.arange(1.0, 0.0, -0.05):
-                # for rtt_koef in np.arange(1.0, 0.0, -0.25):
-                # for rtt_koef in [3, ]:
-                qin.put((mass_koef, rtt_koef))
-
-        # qin.put((1.0, 1.0))
-        # qin.put(None)
-
-        for _ in range(n):
-            qin.put(None)
-
-        procs = []
-        for proc_num in range(n):
-            p = Process(target=worker, args=(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2))
-            p.start()
-            procs.append(p)
-
-        for _ in range(n):
-            for item, item2 in iter(qout.get, None):
+        if n == 1 or os.name == 'nt':
+            qin = []
+            qout = []
+            for mass_koef in np.arange(1.0, 0.2, -0.33):
+                for rtt_koef in np.arange(1.0, 0.2, -0.33):
+                    qin.append((mass_koef, rtt_koef))
+            qout = worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2, True)
+            
+            for item, item2 in qout:
                 if item2:
                     prots_spc_copy = item2
                 for k in protsN:
@@ -860,10 +846,37 @@ def process_peptides(args):
                     else:
                         prots_spc_final[k].append(item.get(k, 0.0))
 
-        for p in procs:
-            p.join()
-        # worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2)
-        # prots_spc_final, prots_spc_copy = qout.get()
+        else:
+            qin = Queue()
+            qout = Queue()
+
+            for mass_koef in np.arange(1.0, 0.2, -0.33):
+                for rtt_koef in np.arange(1.0, 0.2, -0.33):
+                    qin.put((mass_koef, rtt_koef))
+
+            for _ in range(n):
+                qin.put(None)
+
+            procs = []
+            for proc_num in range(n):
+                p = Process(target=worker, args=(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2))
+                p.start()
+                procs.append(p)
+
+            for _ in range(n):
+                for item, item2 in iter(qout.get, None):
+                    if item2:
+                        prots_spc_copy = item2
+                    for k in protsN:
+                        if k not in prots_spc_final:
+                            prots_spc_final[k] = [item.get(k, 0.0), ]
+                        else:
+                            prots_spc_final[k].append(item.get(k, 0.0))
+
+            for p in procs:
+                p.join()
+            # worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2)
+            # prots_spc_final, prots_spc_copy = qout.get()
 
         for k in prots_spc_final.keys():
             prots_spc_final[k] = np.mean(prots_spc_final[k])
@@ -946,9 +959,9 @@ def process_peptides(args):
     final_iteration(resdict, mass_diff, rt_diff, protsN, args)
 
 
-def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2):
+def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2, win_sys=False):
 
-    for item in iter(qin.get, None):
+    for item in (iter(qin.get, None) if not win_sys else qin):
         mass_koef, rtt_koef = item
 
         m_k = scoreatpercentile(mass_diff, mass_koef * 100)
@@ -1118,6 +1131,11 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
             item2 = prots_spc_copy
         else:
             item2 = False
-
-        qout.put((prots_spc_final, item2))
-    qout.put(None)
+        if not win_sys:
+            qout.put((prots_spc_final, item2))
+        else:
+            qout.append((prots_spc_final, item2))
+    if not win_sys:
+        qout.put(None)
+    else:
+        return qout
