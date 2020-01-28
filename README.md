@@ -37,7 +37,7 @@ Dependencies
 Links
 -----
 
-- BitBucket repo & issue tracker: https://bitbucket.org/markmipt/ms1searchpy
-- Mailing list: pyteomics@googlegroups.com
+- GitHub repo & issue tracker: https://github.com/markmipt/ms1searchpy
+- Mailing list: markmipt@gmail.com
 
 - Dinosaur repo: https://github.com/fickludd/dinosaur
