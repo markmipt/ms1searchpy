@@ -17,7 +17,7 @@ setup(
     author_email         = 'pyteomics@googlegroups.com',
     install_requires     = ['pyteomics[XML]', 'scipy', 'numpy', 'sklearn', 'matplotlib', 'pandas', 'seaborn'],
     classifiers          = ['Intended Audience :: Science/Research',
-                            'Programming Language :: Python :: 2.7',
+                            'Programming Language :: Python :: 3.8',
                             'Topic :: Education',
                             'Topic :: Scientific/Engineering :: Bio-Informatics',
                             'Topic :: Scientific/Engineering :: Chemistry',
