@@ -574,6 +574,9 @@ def process_peptides(args):
             RT_left = -min(rt_diff_tmp)
             RT_right = max(rt_diff_tmp)
 
+            # import random
+            # random.shuffle(rt_diff_tmp)
+
             start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
             XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
             if np.isinf(covvalue):
@@ -647,6 +650,7 @@ def process_peptides(args):
 
     rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
     rt_diff = resdict['rt'] - rt_pred
+    # random.shuffle(rt_diff)
     e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
     zs_all = zs_all + e_all
     r = 9.0#16.0#9.0
@@ -901,8 +905,9 @@ def process_peptides(args):
                         del prots_spc[k]
                         checked.add(prefix + k)
 
-        filtered_prots = aux.filter(prots_spc.items(), fdr=fdr, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1, full_output=True)
-
+        filtered_prots = aux.filter(prots_spc.items(), fdr=fdr, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1, full_output=True, correction=1)
+        if len(filtered_prots) < 1:
+            filtered_prots = aux.filter(prots_spc.items(), fdr=fdr, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1, full_output=True, correction=0)
         identified_proteins = 0
 
         for x in filtered_prots:
