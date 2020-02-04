@@ -38,15 +38,15 @@ def worker_RT(qin, qout, shift, step, RC=False, elude_path=False, ns=False, nr=F
 
     pepdict = dict()    
     if elude_path:
-        outtrain = tempfile.NamedTemporaryFile(suffix='.txt')
-        outres = tempfile.NamedTemporaryFile(suffix='.txt')
+        outtrain = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
+        outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
         outres_name = outres.name
         outres.close()
         for seq, RT in zip(ns, nr):
             outtrain.write(seq + '\t' + str(RT) + '\n')
         outtrain.flush()
 
-        outtest = tempfile.NamedTemporaryFile(suffix='.txt')
+        outtest = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
 
         maxval = len(qin)
         start = 0
@@ -365,8 +365,8 @@ def process_peptides(args):
                 prots_spc2[k] = set([])
         prots_spc = dict((k, len(v)) for k, v in prots_spc2.items())
 
-        names_arr = np.array(prots_spc.keys())
-        v_arr = np.array(prots_spc.values())
+        names_arr = np.array(list(prots_spc.keys()))
+        v_arr = np.array(list(prots_spc.values()))
         n_arr = np.array([protsN[k] for k in prots_spc])
 
         top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
@@ -380,7 +380,7 @@ def process_peptides(args):
             prots_spc[k] = all_pvals[idx]
 
         checked = set()
-        for k, v in prots_spc.items():
+        for k, v in list(prots_spc.items()):
             if k not in checked:
                 if isdecoy_key(k):
                     if prots_spc.get(k.replace(prefix, ''), -1e6) > v:
@@ -457,8 +457,8 @@ def process_peptides(args):
                 prots_spc2[k] = set([])
         prots_spc = dict((k, len(v)) for k, v in prots_spc2.items())
 
-        names_arr = np.array(prots_spc.keys())
-        v_arr = np.array(prots_spc.values())
+        names_arr = np.array(list(prots_spc.keys()))
+        v_arr = np.array(list(prots_spc.values()))
         n_arr = np.array([protsN[k] for k in prots_spc])
 
         top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
@@ -472,7 +472,7 @@ def process_peptides(args):
             prots_spc[k] = all_pvals[idx]
 
         checked = set()
-        for k, v in prots_spc.items():
+        for k, v in list(prots_spc.items()):
             if k not in checked:
                 if isdecoy_key(k):
                     if prots_spc.get(k.replace(prefix, ''), -1e6) > v:
@@ -544,8 +544,8 @@ def process_peptides(args):
         RC, outmask = get_RCs2(true_seqs, true_rt)
 
         if elude_path:
-            outtrain = tempfile.NamedTemporaryFile(suffix='.txt')
-            outres = tempfile.NamedTemporaryFile(suffix='.txt')
+            outtrain = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
+            outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
             outres_name = outres.name
             outres.close()
             ns = true_seqs[~outmask]
@@ -738,7 +738,7 @@ def process_peptides(args):
 
                     top100decoy_N = sum([val for key, val in protsN.items() if isdecoy_key(key)])
 
-                    names_arr = np.array(prots_spc2.keys())
+                    names_arr = np.array(list(prots_spc2.keys()))
                     n_arr = np.array([protsN[k] for k in names_arr])
 
                     tmp_spc_new = dict((k, len(v)) for k, v in prots_spc2.items())
@@ -894,7 +894,7 @@ def process_peptides(args):
                 output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
 
         checked = set()
-        for k, v in prots_spc.items():
+        for k, v in list(prots_spc.items()):
             if k not in checked:
                 if isdecoy_key(k):
                     if prots_spc.get(k.replace(prefix, ''), -1e6) > v:
@@ -1041,7 +1041,7 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
 
                     top100decoy_N = sum([val for key, val in protsN.items() if isdecoy_key(key)])
 
-                    names_arr = np.array(prots_spc2.keys())
+                    names_arr = np.array(list(prots_spc2.keys()))
                     n_arr = np.array([protsN[k] for k in names_arr])
 
                     tmp_spc_new = dict((k, len(v)) for k, v in prots_spc2.items())
