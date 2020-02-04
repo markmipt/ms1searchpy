@@ -205,7 +205,7 @@ def peptide_processor(peptide, **kwargs):
         dm_r = acc_r * m / 1.0e6
     start = nmasses.searchsorted(m - dm_l)
     end = nmasses.searchsorted(m + dm_r)
-    for i in xrange(start, end):
+    for i in range(start, end):
         peak_id = ids[i]
         I = Is[i]
         massdiff = (m - nmasses[i]) / m * 1e6

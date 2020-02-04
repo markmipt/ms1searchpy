@@ -17,9 +17,9 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
         advpath = '--advParams=' + os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Dinosaur/adv.txt')
         subprocess.call(['java', '-Djava.awt.headless=true', '-jar', os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Dinosaur/Dinosaur-1.1.3.free.jar'), advpath, '--concurrency=12', fname])
         fname = os.path.splitext(fname)[0] + '.features.tsv'
-    with open(fname, 'rb') as infile:
+    with open(fname, 'r') as infile:
         csvreader = csv.reader(infile, delimiter='\t')
-        header = csvreader.next()
+        header = next(csvreader)#.next()
 
         mass_ind = header.index('massCalib')
         # mass_ind = header.index('mostAbundantMz')
