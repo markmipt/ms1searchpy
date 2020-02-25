@@ -18,7 +18,7 @@ The script output contains files: all identified proteins (filename_proteins_ful
 
 Citing ms1searchpy
 -------------------
-Ivanov et al. MS/MS-Free Protein Identification in Complex Mixtures Using Multiple Enzymes with Complementary Specificity. doi: 10.1021/acs.jproteome.7b00365
+Ivanov et al. DirectMS1: MS/MS-free identification of 1000 proteins of cellular proteomes in 5 minutes. https://doi.org/10.1021/acs.analchem.9b05095
 
 Installation
 -------------
