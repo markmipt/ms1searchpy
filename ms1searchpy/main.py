@@ -322,6 +322,9 @@ def process_peptides(args):
     elude_path = args['elude']
     elude_path = elude_path.strip()
 
+    deeplc_path = args['deeplc']
+    deeplc_path = deeplc_path.strip()
+
     args['enzyme'] = utils.get_enzyme(args['e'])
 
     ms1results = []
@@ -543,7 +546,10 @@ def process_peptides(args):
 
         RC, outmask = get_RCs2(true_seqs, true_rt)
 
-        if elude_path:
+# ~/virtualenv_deeplc/bin/deeplc --file_pred ms1_all.txt --file_cal ms1_top.txt --file_pred_out test_out.txt
+        if deeplc_path:
+
+
             outtrain = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
             outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
             outres_name = outres.name
@@ -554,19 +560,31 @@ def process_peptides(args):
             ll = len(ns)
             ns = ns[:ll]
             nr = nr[:ll]
+
+            # train_dict = {}
+
+            outtrain.write('seq,modifications,tr\n')
             for seq, RT in zip(ns, nr):
-                outtrain.write(seq + '\t' + str(RT) + '\n')
+                # train_dict[seq] = RT
+                mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
+                # df1['modifications'] = df1['seq'].apply(lambda x: '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(x) if aa == 'C']))
+                outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
             outtrain.flush()
 
-            subprocess.call([elude_path, '-t', outtrain.name, '-e', outtrain.name, '-a', '-g', '-o', outres_name])
+            subprocess.call([deeplc_path, '--file_pred', outtrain.name, '--file_cal', outtrain.name, '--file_pred_out', outres_name])
+            # subprocess.call([elude_path, '-t', outtrain.name, '-e', outtrain.name, '-a', '-g', '-o', outres_name])
             pepdict = dict()
             train_RT = []
             train_seq = []
-            for x in open(outres_name).readlines()[3:]:
-                seq, RT, RTexp = x.strip().split('\t')
+            for x in open(outres_name).readlines()[1:]:
+                # print(x.strip())
+                _, seq, _, RTexp, RT = x.strip().split(',')
                 pepdict[seq] = float(RT)
                 train_seq.append(seq)
                 train_RT.append(float(RTexp))
+                # train_RT.append(float(train_dict[seq]))
+
+
             train_RT = np.array(train_RT)
             RT_pred = np.array([pepdict[s] for s in train_seq])
 
@@ -587,23 +605,70 @@ def process_peptides(args):
             print('Calibrated RT sigma: ', XRT_sigma)
 
             aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
+
         else:
-            RC = achrom.get_RCs_vary_lcp(true_seqs[~outmask], true_rt[~outmask])
-            RT_pred = np.array([achrom.calculate_RT(s, RC) for s in true_seqs])
-            aa, bb, RR, ss = aux.linear_regression(RT_pred, true_rt)
 
-            rt_diff_tmp = RT_pred - true_rt
-            RT_left = -min(rt_diff_tmp)
-            RT_right = max(rt_diff_tmp)
+            if elude_path:
+                outtrain = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
+                outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
+                outres_name = outres.name
+                outres.close()
+                ns = true_seqs[~outmask]
+                nr = true_rt[~outmask]
+                print(len(ns))
+                ll = len(ns)
+                ns = ns[:ll]
+                nr = nr[:ll]
+                for seq, RT in zip(ns, nr):
+                    outtrain.write(seq + '\t' + str(RT) + '\n')
+                outtrain.flush()
 
-            start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
-            XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
-            if np.isinf(covvalue):
-                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
-            if np.isinf(covvalue):
-                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
-            print('Calibrated RT shift: ', XRT_shift)
-            print('Calibrated RT sigma: ', XRT_sigma)
+                subprocess.call([elude_path, '-t', outtrain.name, '-e', outtrain.name, '-a', '-g', '-o', outres_name])
+                pepdict = dict()
+                train_RT = []
+                train_seq = []
+                for x in open(outres_name).readlines()[3:]:
+                    seq, RT, RTexp = x.strip().split('\t')
+                    pepdict[seq] = float(RT)
+                    train_seq.append(seq)
+                    train_RT.append(float(RTexp))
+                train_RT = np.array(train_RT)
+                RT_pred = np.array([pepdict[s] for s in train_seq])
+
+                rt_diff_tmp = RT_pred - train_RT
+                RT_left = -min(rt_diff_tmp)
+                RT_right = max(rt_diff_tmp)
+
+                # import random
+                # random.shuffle(rt_diff_tmp)
+
+                start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
+                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
+                if np.isinf(covvalue):
+                    XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
+                if np.isinf(covvalue):
+                    XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
+                print('Calibrated RT shift: ', XRT_shift)
+                print('Calibrated RT sigma: ', XRT_sigma)
+
+                aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
+            else:
+                RC = achrom.get_RCs_vary_lcp(true_seqs[~outmask], true_rt[~outmask])
+                RT_pred = np.array([achrom.calculate_RT(s, RC) for s in true_seqs])
+                aa, bb, RR, ss = aux.linear_regression(RT_pred, true_rt)
+
+                rt_diff_tmp = RT_pred - true_rt
+                RT_left = -min(rt_diff_tmp)
+                RT_right = max(rt_diff_tmp)
+
+                start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
+                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
+                if np.isinf(covvalue):
+                    XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
+                if np.isinf(covvalue):
+                    XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
+                print('Calibrated RT shift: ', XRT_shift)
+                print('Calibrated RT sigma: ', XRT_sigma)
 
         print(aa, bb, RR, ss)
 
@@ -618,34 +683,69 @@ def process_peptides(args):
 
     n = args['nproc']
 
+    if deeplc_path:
 
-    if n == 1 or os.name == 'nt':
-        qin = list(p1)
-        qout = []
-        if elude_path:
-            pepdict = worker_RT(qin, qout, 0, 1, False, elude_path, ns, nr, True)
-        else:
-            pepdict = worker_RT(qin, qout, 0, 1, RC, False, False, False, True)
-    else:
-        qin = list(p1)
-        qout = Queue()
-        procs = []
-        for i in range(n):
-            if elude_path:
-                p = Process(target=worker_RT, args=(qin, qout, i, n, False, elude_path, ns, nr))
-            else:
-                p = Process(target=worker_RT, args=(qin, qout, i, n, RC, False, False, False))
-            p.start()
-            procs.append(p)
 
         pepdict = dict()
-        for _ in range(n):
-            for item in iter(qout.get, None):
-                for k, v in item.items():
-                    pepdict[k] = v
 
-        for p in procs:
-            p.join()
+        outtrain = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
+        outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
+        outres_name = outres.name
+        outres.close()
+
+
+        outtrain.write('seq,modifications,tr\n')
+        for seq, RT in zip(ns, nr):
+            mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
+            outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
+        outtrain.flush()
+
+        outtest = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
+
+
+        outtest.write('seq,modifications\n')
+        for seq in p1:
+            mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
+            outtest.write(seq + ',' + str(mods_tmp) + '\n')
+        outtest.flush()
+
+        subprocess.call([deeplc_path, '--file_pred', outtest.name, '--file_cal', outtrain.name, '--file_pred_out', outres_name])
+        # subprocess.call([elude_path, '-t', outtrain.name, '-e', outtrain.name, '-a', '-g', '-o', outres_name])
+        for x in open(outres_name).readlines()[1:]:
+            _, seq, _, RT = x.strip().split(',')
+            pepdict[seq] = float(RT)
+
+        outtest.close()
+        outtrain.close()
+    else:
+
+        if n == 1 or os.name == 'nt':
+            qin = list(p1)
+            qout = []
+            if elude_path:
+                pepdict = worker_RT(qin, qout, 0, 1, False, elude_path, ns, nr, True)
+            else:
+                pepdict = worker_RT(qin, qout, 0, 1, RC, False, False, False, True)
+        else:
+            qin = list(p1)
+            qout = Queue()
+            procs = []
+            for i in range(n):
+                if elude_path:
+                    p = Process(target=worker_RT, args=(qin, qout, i, n, False, elude_path, ns, nr))
+                else:
+                    p = Process(target=worker_RT, args=(qin, qout, i, n, RC, False, False, False))
+                p.start()
+                procs.append(p)
+
+            pepdict = dict()
+            for _ in range(n):
+                for item in iter(qout.get, None):
+                    for k, v in item.items():
+                        pepdict[k] = v
+
+            for p in procs:
+                p.join()
 
 
     rt_pred = np.array([pepdict[s] for s in resdict['seqs']])

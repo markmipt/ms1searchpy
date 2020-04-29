@@ -32,6 +32,7 @@ def run():
     parser.add_argument('-prefix', help='decoy prefix', default='DECOY_')
     parser.add_argument('-nproc',   help='number of processes', default=1, type=int)
     parser.add_argument('-elude', help='path to elude binary file. If empty, the built-in additive model will be used for RT prediction', default='')
+    parser.add_argument('-deeplc', help='path to deeplc', default='')
     args = vars(parser.parse_args())
 
     main.process_file(args)
