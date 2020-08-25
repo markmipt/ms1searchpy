@@ -31,6 +31,117 @@ except:
     pass
 
 from .utils import calc_sf_all, recalc_spc
+# from .utils import recalc_spc
+
+import lightgbm as lgb
+import pandas as pd
+from sklearn.model_selection import train_test_split
+
+
+
+
+
+
+# from __future__ import division
+import pandas as pd
+from pyteomics import pepxml, achrom, auxiliary as aux, mass, fasta, mzid, parser
+from pyteomics import electrochem
+import numpy as np
+import random
+SEED = 42
+# from catboost import CatBoostClassifier, CatBoostRegressor
+from sklearn.model_selection import train_test_split
+from os import path, mkdir
+from collections import Counter, defaultdict
+import warnings
+import pylab as plt
+warnings.formatwarning = lambda msg, *args, **kw: str(msg) + '\n'
+
+import pandas as pd
+# from catboost import CatBoostClassifier, CatBoostRegressor
+from sklearn.model_selection import train_test_split, KFold
+import os
+from collections import Counter, defaultdict
+from scipy.stats import scoreatpercentile
+from sklearn.isotonic import IsotonicRegression
+import warnings
+import numpy as np
+
+import matplotlib
+import numpy
+import pandas
+import random
+import sklearn
+# import xgboost
+import matplotlib.pyplot as plt
+
+from sklearn import (
+    feature_extraction, feature_selection, decomposition, linear_model,
+    model_selection, metrics, svm
+)
+
+import scipy
+# import eli5
+from scipy.stats import rankdata
+import pickle
+from copy import deepcopy
+import csv
+
+from scipy.stats import rankdata
+import lightgbm as lgb
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from itertools import chain
+import time as timemodule
+import ast
+from sklearn import metrics
+
+
+
+
+from scipy.stats import binom
+def calc_sf_all_2(v, n, p):
+    sf_values = -np.log10(binom.sf(v, n, p))
+    sf_values[np.isinf(sf_values)] = max(sf_values[~np.isinf(sf_values)])
+    return sf_values
+
+
+        
+SEED = 50
+
+def get_cat_model(df, hyperparameters, feature_columns, train, test):
+    
+#     train = df[df['era'].isin(train_eras)]
+#     test = df[df['era'].isin(test_eras)]
+    feature_columns = list(feature_columns)
+    dtrain = lgb.Dataset(get_X_array(train, feature_columns), get_Y_array(train), feature_name=feature_columns, free_raw_data=False)
+    dvalid = lgb.Dataset(get_X_array(test, feature_columns), get_Y_array(test), feature_name=feature_columns, free_raw_data=False)
+    np.random.seed(SEED)
+    evals_result = {}
+    model = lgb.train(hyperparameters, dtrain, num_boost_round=20000, valid_sets=(dvalid,), valid_names=('valid',), verbose_eval=False,
+                early_stopping_rounds=100, evals_result=evals_result)
+    return model
+
+def get_X_array(df, feature_columns):
+    return df.loc[:, feature_columns].values
+
+def get_Y_array(df):
+    return df.loc[:, 'mass diff'].values
+
+def get_features(dataframe):
+    feature_columns = dataframe.columns
+    columns_to_remove = []
+    allowed_features = {
+        'mz',
+        'RT',
+        'Intensity',
+    }
+    for feature in feature_columns:
+        if feature not in allowed_features:
+            columns_to_remove.append(feature)
+    feature_columns = feature_columns.drop(columns_to_remove)
+    return feature_columns
 
 def worker_RT(qin, qout, shift, step, RC=False, elude_path=False, ns=False, nr=False, win_sys=False):
 
@@ -209,7 +320,7 @@ def peptide_processor(peptide, **kwargs):
         peak_id = ids[i]
         I = Is[i]
         massdiff = (m - nmasses[i]) / m * 1e6
-        results.append((seqm, massdiff, rts[i], peak_id, I, Scans[i], Isotopes[i], mzraw[i], avraw[i], charges[i]))
+        results.append((seqm, massdiff, rts[i], peak_id, I, Scans[i], Isotopes[i], mzraw[i], avraw[i], charges[i], imraw[i]))
     return results
 
 
@@ -223,6 +334,7 @@ def prepare_peptide_processor(fname, args):
     global Isotopes
     global mzraw
     global avraw
+    global imraw
     nmasses = []
     rts = []
     charges = []
@@ -232,6 +344,7 @@ def prepare_peptide_processor(fname, args):
     Isotopes = []
     mzraw = []
     avraw = []
+    imraw = []
 
     min_ch = args['cmin']
     max_ch = args['cmax']
@@ -240,7 +353,7 @@ def prepare_peptide_processor(fname, args):
     min_scans = args['sc']
 
     print('Reading spectra ...')
-    for m, RT, c, peak_id, I, nScans, nIsotopes, mzr, avr in utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
+    for m, RT, c, peak_id, I, nScans, nIsotopes, mzr, avr, im in utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
         nmasses.append(m)
         rts.append(RT)
         charges.append(c)
@@ -250,6 +363,7 @@ def prepare_peptide_processor(fname, args):
         Isotopes.append(nIsotopes)
         mzraw.append(mzr)
         avraw.append(avr)
+        imraw.append(im)
 
     print(len(nmasses))
 
@@ -263,6 +377,7 @@ def prepare_peptide_processor(fname, args):
     Isotopes = np.array(Isotopes)[i]
     mzraw = np.array(mzraw)[i]
     avraw = np.array(avraw)[i]
+    imraw = np.array(imraw)[i]
 
     fmods = args['fmods']
     aa_mass = mass.std_aa_mass
@@ -300,6 +415,7 @@ def get_results(ms1results):
         'mzraw',
         'av',
         'ch',
+        'im',
     ]
     for label, val in zip(labels, zip(*ms1results)):
         resdict[label] = np.array(val)
@@ -314,6 +430,7 @@ def filter_results(resultdict, idx):
 def process_peptides(args):
     fname = args['file']
     fdr = args['fdr'] / 100
+    min_isotopes_calibration = args['ci']
     try:
         outpath = args['outpath']
     except:
@@ -350,7 +467,7 @@ def process_peptides(args):
     # e_ind = resdict['mc'] == 0
     # resdict2 = filter_results(resdict, e_ind)
 
-    e_ind = resdict['Isotopes'] >= 4
+    e_ind = resdict['Isotopes'] >= min_isotopes_calibration
     # e_ind = resdict['Isotopes'] >= 1
     resdict2 = filter_results(resdict, e_ind)
 
@@ -397,6 +514,8 @@ def process_peptides(args):
         filtered_prots = aux.filter(prots_spc.items(), fdr=fdr, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
                                     full_output=True)
 
+        print(len(filtered_prots))
+
         identified_proteins = 0
 
         for x in filtered_prots:
@@ -413,6 +532,8 @@ def process_peptides(args):
             if any(protein in true_prots for protein in proteins):
                 true_seqs.append(pep)
 
+        # true_seqs = list(resdict2['seqs'])
+
         e_ind = np.in1d(resdict2['seqs'], true_seqs)
 
         true_seqs = resdict2['seqs'][e_ind]
@@ -420,21 +541,108 @@ def process_peptides(args):
         true_md = np.array(true_md)
         true_isotopes.extend(resdict2['Isotopes'][e_ind])
         true_isotopes = np.array(true_isotopes)
+        true_intensities = np.array(resdict2['Is'][e_ind])
+        true_rt = np.array(resdict2['rt'][e_ind])
+        true_mz = np.array(resdict2['mzraw'][e_ind])
 
-        e_ind = true_isotopes >= 4
-        # e_ind = true_isotopes >= 1
-        true_md = true_md[e_ind]
-        true_seqs = true_seqs[e_ind]
+        import pickle
+        pickle.dump(true_md, open('/home/mark/true_md.pickle', 'wb'))
+        pickle.dump(true_intensities, open('/home/mark/true_intensities.pickle', 'wb'))
+        pickle.dump(true_rt, open('/home/mark/true_rt.pickle', 'wb'))
+        pickle.dump(true_mz, open('/home/mark/true_mz.pickle', 'wb'))
+
+        df1 = pd.DataFrame()
+        df1['mass diff'] = true_md# * true_mz / 1e6
+        df1['mz'] = true_mz
+        df1['RT'] = true_rt
+        df1['Intensity'] = true_intensities
+        df1['seqs'] = true_seqs
+        df1['orig_md'] = true_md
 
         mass_left = args['ptol']
         mass_right = args['ptol']
 
-        mass_shift, mass_sigma, covvalue = calibrate_mass(0.001, mass_left, mass_right, true_md)
-        if np.isinf(covvalue):
+        try:
+            mass_shift, mass_sigma, covvalue = calibrate_mass(0.001, mass_left, mass_right, true_md)
+        # if np.isinf(covvalue):
+        except:
             mass_shift, mass_sigma, covvalue = calibrate_mass(0.01, mass_left, mass_right, true_md)
+
+        # df1 = df1[df1['mass diff'].apply(lambda x: abs(x-mass_shift)/mass_sigma <= 3)]
+
+        # # # mass_sigma = mass_sigma * 2
+        # mass_shift = 0
+        # mass_sigma = 1.65
+
         print('Calibrated mass shift: ', mass_shift)
         print('Calibrated mass sigma in ppm: ', mass_sigma)
-        # mass_sigma= mass_sigma * 1.1
+
+        # bestparams = {'boosting_type': 'gbdt',
+        # 'num_leaves': 759,
+        # 'learning_rate': 0.0027160024022013338,
+        # 'subsample_for_bin': 3510,
+        # 'min_child_samples': 286,
+        # 'reg_alpha': 0.8775510204081632,
+        # 'reg_lambda': 0.6326530612244897,
+        # 'colsample_bytree': 0.9500000000000001,
+        # 'subsample': 0.66,
+        # 'is_unbalance': False,
+        # 'metric': 'rmse',
+        # 'n_estimators': 552}
+
+        # # bestparams = {'boosting_type': 'gbdt',
+        # # 'num_leaves': 7,
+        # # 'learning_rate': 0.01,
+        # # 'metric': 'rmse',
+        # # 'verbose': 10}
+
+        # train_df, test_df = train_test_split(df1, train_size=0.5)
+        # feature_columns = list(get_features(train_df))
+        # model = get_cat_model(df1, bestparams, feature_columns, train_df, test_df)
+
+        # # true_md = (model.predict(get_X_array(test_df, feature_columns)) - get_Y_array(test_df)) / test_df['mz'].values * 1e6
+        # true_md = -(model.predict(get_X_array(test_df, feature_columns)) - get_Y_array(test_df))
+        # # true_md = get_Y_array(test_df)
+        # true_seqs = test_df['seqs']
+
+
+        # # # e_ind = true_isotopes >= 4
+        # # e_ind = true_isotopes >= 1
+        # # true_md = true_md[e_ind]
+        # # true_seqs = true_seqs[e_ind]
+
+        # mass_left = args['ptol']
+        # mass_right = args['ptol']
+
+        # mass_shift, mass_sigma, covvalue = calibrate_mass(0.001, mass_left, mass_right, true_md)
+        # if np.isinf(covvalue):
+        #     mass_shift, mass_sigma, covvalue = calibrate_mass(0.01, mass_left, mass_right, true_md)
+
+        # # mass_sigma = mass_sigma * 2
+
+        # print('Calibrated mass shift: ', mass_shift)
+        # print('Calibrated mass sigma in ppm: ', mass_sigma)
+        # # mass_sigma= mass_sigma * 1.1
+
+        # true_md = resdict['md']
+        # true_mz = resdict['mzraw']
+        # true_rt = resdict['rt']
+        # true_intensities = resdict['Is']
+
+        # df1 = pd.DataFrame()
+        # df1['mass diff'] = true_md# * true_mz / 1e6
+        # df1['mz'] = true_mz
+        # df1['RT'] = true_rt
+        # df1['Intensity'] = true_intensities
+        # df1['orig_md'] = true_md
+
+        # print(resdict['md'][:35])
+
+        # # resdict['md'] = (model.predict(get_X_array(df1, feature_columns)) - get_Y_array(df1)) / df1['mz'].values * 1e6
+        # resdict['md'] = -(model.predict(get_X_array(df1, feature_columns)) - get_Y_array(df1))
+        # # resdict['md'] = get_Y_array(df1)
+
+        # print(resdict['md'][:35])
 
         e_all = abs(resdict['md'] - mass_shift) / (mass_sigma)
         r = 3.0
@@ -498,6 +706,13 @@ def process_peptides(args):
 
 
         print('Running RT prediction...')
+
+
+        e_ind = resdict['Isotopes'] >= min_isotopes_calibration
+        # e_ind = resdict['Isotopes'] >= 1
+        resdict2 = filter_results(resdict, e_ind)
+
+
         true_seqs = []
         true_rt = []
         true_isotopes = []
@@ -518,7 +733,7 @@ def process_peptides(args):
         zs_all_tmp = e_all ** 2
 
         # e_ind = true_isotopes >= 1
-        e_ind = true_isotopes >= 4
+        e_ind = true_isotopes >= min_isotopes_calibration
         true_seqs = true_seqs[e_ind]
         true_rt = true_rt[e_ind]
         true_isotopes = true_isotopes[e_ind]
@@ -529,9 +744,9 @@ def process_peptides(args):
         true_rt = true_rt[e_ind]
         true_isotopes = true_isotopes[e_ind]
 
-        true_seqs = true_seqs[:1000]
-        true_rt = true_rt[:1000]
-        true_isotopes = true_isotopes[:1000]
+        true_seqs = true_seqs[:2500]
+        true_rt = true_rt[:2500]
+        true_isotopes = true_isotopes[:2500]
 
         best_seq = defaultdict(list)
         newseqs = []
@@ -544,7 +759,7 @@ def process_peptides(args):
         true_seqs = np.array(newseqs)
         true_rt = np.array(newRTs)
 
-        RC, outmask = get_RCs2(true_seqs, true_rt)
+        # RC, outmask = get_RCs2(true_seqs, true_rt)
 
 # ~/virtualenv_deeplc/bin/deeplc --file_pred ms1_all.txt --file_cal ms1_top.txt --file_pred_out test_out.txt
         if deeplc_path:
@@ -554,8 +769,10 @@ def process_peptides(args):
             outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
             outres_name = outres.name
             outres.close()
-            ns = true_seqs[~outmask]
-            nr = true_rt[~outmask]
+            # ns = true_seqs[~outmask]
+            # nr = true_rt[~outmask]
+            ns = true_seqs
+            nr = true_rt
             print(len(ns))
             ll = len(ns)
             ns = ns[:ll]
@@ -595,14 +812,26 @@ def process_peptides(args):
             # import random
             # random.shuffle(rt_diff_tmp)
 
-            start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
-            XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
+            try:
+                start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 100
+                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
+            except:
+                start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
+                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
             if np.isinf(covvalue):
                 XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
             if np.isinf(covvalue):
                 XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
             print('Calibrated RT shift: ', XRT_shift)
             print('Calibrated RT sigma: ', XRT_sigma)
+
+            ns = np.array(ns)
+            nr = np.array(nr)
+            idx = np.abs((rt_diff_tmp) - XRT_shift) <= 3 * XRT_sigma
+            ns = ns[idx]
+            nr = nr[idx]
+            RT_pred = RT_pred[idx]
+            train_RT = train_RT[idx]
 
             aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
 
@@ -613,8 +842,10 @@ def process_peptides(args):
                 outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
                 outres_name = outres.name
                 outres.close()
-                ns = true_seqs[~outmask]
-                nr = true_rt[~outmask]
+                # ns = true_seqs[~outmask]
+                # nr = true_rt[~outmask]
+                ns = true_seqs
+                nr = true_rt
                 print(len(ns))
                 ll = len(ns)
                 ns = ns[:ll]
@@ -653,7 +884,8 @@ def process_peptides(args):
 
                 aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
             else:
-                RC = achrom.get_RCs_vary_lcp(true_seqs[~outmask], true_rt[~outmask])
+                # RC = achrom.get_RCs_vary_lcp(true_seqs[~outmask], true_rt[~outmask])
+                RC = achrom.get_RCs_vary_lcp(true_seqs, true_rt)
                 RT_pred = np.array([achrom.calculate_RT(s, RC) for s in true_seqs])
                 aa, bb, RR, ss = aux.linear_regression(RT_pred, true_rt)
 
@@ -772,475 +1004,1418 @@ def process_peptides(args):
             output.write('\t'.join((k, str(v))) + '\n')
    
     with open(base_out_name + '_PFMs.csv', 'w') as output:
-        output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tnScans\tnIsotopes\tproteins\tm/z\tRT\taveragineCorr\tcharge\n')
-        for seq, md, rtd, peak_id, I, nScans, nIsotopes, mzr, rtr, av, ch in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['ids'], resdict['Is'], resdict['Scans'], resdict['Isotopes'], resdict['mzraw'], resdict['rt'], resdict['av'], resdict['ch']):
-            output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), str(nScans), str(nIsotopes), ';'.join(pept_prot[seq]), str(mzr), str(rtr), str(av), str(ch))) + '\n')
+        output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tnScans\tnIsotopes\tproteins\tm/z\tRT\taveragineCorr\tcharge\tion_mobility\n')
+        for seq, md, rtd, peak_id, I, nScans, nIsotopes, mzr, rtr, av, ch, im in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['ids'], resdict['Is'], resdict['Scans'], resdict['Isotopes'], resdict['mzraw'], resdict['rt'], resdict['av'], resdict['ch'], resdict['im']):
+            output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), str(nScans), str(nIsotopes), ';'.join(pept_prot[seq]), str(mzr), str(rtr), str(av), str(ch), str(im))) + '\n')
             
     mass_diff = np.abs(resdict['md'] - mass_shift) / (mass_sigma)
     rt_diff = np.abs(resdict['rt'] - rt_pred) / RT_sigma
 
-    def final_iteration(resdict, mass_diff, rt_diff, protsN, args):
-        n = args['nproc']
+    import pickle
+    pickle.dump(resdict, open('/home/mark/resdict.pickle', 'wb'))
+    pickle.dump(mass_diff, open('/home/mark/mass_diff.pickle', 'wb'))
+    pickle.dump(rt_diff, open('/home/mark/rt_diff.pickle', 'wb'))
+    pickle.dump(pept_prot, open('/home/mark/pept_prot.pickle', 'wb'))
+    pickle.dump(protsN, open('/home/mark/protsN.pickle', 'wb'))
 
 
-        prots_spc_basic = dict()
 
-        p1 = set(resdict['seqs'])
-
-        pep_pid = defaultdict(set)
-        pid_pep = defaultdict(set)
-        banned_dict = dict()
-        for pep, pid in zip(resdict['seqs'], resdict['ids']):
-            pep_pid[pep].add(pid)
-            pid_pep[pid].add(pep)
-            if pep in banned_dict:
-                banned_dict[pep] += 1
-            else:
-                banned_dict[pep] = 1
-
-        if len(p1):
-            prots_spc_final = dict()
-            prots_spc_copy = False
-            prots_spc2 = False
-            unstable_prots = set()
-            p0 = False
-
-            names_arr = False
-            tmp_spc_new = False
-            decoy_set = False
-
-            while 1:
-                if not prots_spc2:
-
-                    best_match_dict = dict()
-                    n_map_dict = defaultdict(list)
-                    for k, v in protsN.items():
-                        n_map_dict[v].append(k)
-
-                    decoy_set = set()
-                    for k in protsN:
-                        if isdecoy_key(k):
-                            decoy_set.add(k)
-                    decoy_set = list(decoy_set)
-                    
-
-                    prots_spc2 = defaultdict(set)
-                    for pep, proteins in pept_prot.items():
-                        if pep in p1:
-                            for protein in proteins:
-                                prots_spc2[protein].add(pep)
-
-                    for k in protsN:
-                        if k not in prots_spc2:
-                            prots_spc2[k] = set([])
-                    prots_spc2 = dict(prots_spc2)
-                    unstable_prots = set(prots_spc2.keys())
-
-                    top100decoy_N = sum([val for key, val in protsN.items() if isdecoy_key(key)])
-
-                    names_arr = np.array(list(prots_spc2.keys()))
-                    n_arr = np.array([protsN[k] for k in names_arr])
-
-                    tmp_spc_new = dict((k, len(v)) for k, v in prots_spc2.items())
+    prefix = 'DECOY_'
+    isdecoy = lambda x: x[0].startswith(prefix)
+    isdecoy_key = lambda x: x.startswith(prefix)
+    escore = lambda x: -x[1]
+    fdr = 0.01
 
 
-                    top100decoy_score_tmp = [tmp_spc_new.get(dprot, 0) for dprot in decoy_set]
-                    top100decoy_score_tmp_sum = float(sum(top100decoy_score_tmp))
+    SEED = 42
 
-                tmp_spc = tmp_spc_new
-                prots_spc = tmp_spc_new
-                if not prots_spc_copy:
-                    prots_spc_copy = deepcopy(prots_spc)
+    # Hyperparameter grid
+    param_grid = {
+    #     'boosting_type': ['gbdt', 'goss', 'dart'],
+    #     'boosting_type': ['gbdt', 'goss'],
+        'boosting_type': ['gbdt', ],
+    #     'boosting_type': ['dart', ],
+        'num_leaves': list(range(10, 1000)),
+        'learning_rate': list(np.logspace(np.log10(0.01), np.log10(0.3), base = 10, num = 1000)),
+        'subsample_for_bin': list(range(10, 10000, 100)),
+        'min_child_samples': list(range(1, 2500, 5)),
 
-                for idx, v in enumerate(decoy_set):
-                    if v in unstable_prots:
-                        top100decoy_score_tmp_sum -= top100decoy_score_tmp[idx]
-                        top100decoy_score_tmp[idx] = prots_spc.get(v, 0)
-                        top100decoy_score_tmp_sum += top100decoy_score_tmp[idx]
-                p = float(sum(top100decoy_score_tmp)) / top100decoy_N
-                p = top100decoy_score_tmp_sum / top100decoy_N
-                if not p0:
-                    p0 = float(p)
+        # 'subsample_for_bin': list(range(1, 1000, 10)),
+        # 'min_child_samples': list(range(1, 250, 5)),
 
-                n_change = set(protsN[k] for k in unstable_prots)
-                for n_val in n_change:
-                    for k in n_map_dict[n_val]:
-                        v = prots_spc[k]
-                        if n_val not in best_match_dict or v > prots_spc[best_match_dict[n_val]]:
-                            best_match_dict[n_val] = k
-                n_arr_small = []
-                names_arr_small = []
-                v_arr_small = []
-                for k, v in best_match_dict.items():
-                    n_arr_small.append(k)
-                    names_arr_small.append(v)
-                    v_arr_small.append(prots_spc[v])
+        'reg_alpha': list(np.linspace(0, 1)),
+        'reg_lambda': list(np.linspace(0, 1)),
+        'colsample_bytree': list(np.linspace(0.01, 1, 100)),
+        'subsample': list(np.linspace(0.01, 1, 100)),
+        'is_unbalance': [True, False],
+        'metric': ['rmse', ],
+        'verbose': [-1, ],
+    }
 
-                prots_spc_basic = dict()
-                all_pvals = calc_sf_all(v_arr_small, n_arr_small, p)
-                for idx, k in enumerate(names_arr_small):
-                    prots_spc_basic[k] = all_pvals[idx]
+    def get_X_array(df, feature_columns):
+        return df.loc[:, feature_columns].values
 
-                best_prot = utils.keywithmaxval(prots_spc_basic)
+    def get_Y_array_pfms(df):
+        return df.loc[:, 'decoy'].values
 
-                best_score = prots_spc_basic[best_prot]
-                unstable_prots = set()
-                if best_prot not in prots_spc_final:
-                    prots_spc_final[best_prot] = best_score
-                    banned_pids = set()
-                    for pep in prots_spc2[best_prot]:
-                        for pid in pep_pid[pep]:
-                            banned_pids.add(pid)
-                    for pid in banned_pids:
-                        for pep in pid_pep[pid]:
-                            banned_dict[pep] -= 1
-                            if banned_dict[pep] == 0:
-                                for bprot in pept_prot[pep]:
-                                    tmp_spc_new[bprot] -= 1
-                                    unstable_prots.add(bprot)
-                else:
+    def get_features_Is(dataframe):
+        feature_columns = dataframe.columns
+        columns_to_remove = []
+        for feature in feature_columns:
+            if feature not in ['plen', 'mass', 'pI', 'charge_theor']:
+                if not feature.startswith('c_'):
+                    columns_to_remove.append(feature)
+        feature_columns = feature_columns.drop(columns_to_remove)
+        return feature_columns
 
-                    v_arr = np.array([prots_spc[k] for k in names_arr])
-                    all_pvals = calc_sf_all(v_arr, n_arr, p)
-                    for idx, k in enumerate(names_arr):
-                        prots_spc_basic[k] = all_pvals[idx]
+    def get_features_FAIMS(dataframe):
+        feature_columns = dataframe.columns
+        columns_to_remove = []
+        for feature in feature_columns:
+            if feature not in ['plen', 'mass', 'pI', 'charge_theor', 'mzraw', 'nIsotopes']:
+                if not feature.startswith('c_'):
+                    columns_to_remove.append(feature)
+        feature_columns = feature_columns.drop(columns_to_remove)
+        return feature_columns
 
-                    for k, v in prots_spc_basic.items():
-                        if k not in prots_spc_final:
-                            prots_spc_final[k] = v
+    def get_Y_array_Is(df):
+        return df.loc[:, 'IntensityNorm'].values
 
-                    break
+    def get_Y_array_FAIMS(df):
+        return df.loc[:, 'im'].values
 
-                prot_fdr = aux.fdr(prots_spc_final.items(), is_decoy=isdecoy)
-                if prot_fdr >= 12.5 * fdr:
+    def get_features_pfms(dataframe):
+        feature_columns = dataframe.columns
+        columns_to_remove = []
+        banned_features = {
+            'ids',
+            'seqs',
+            'decoy',
+            'preds',
+            'av',
+            'best_prot_rank',
+            'Is',
+            'Scans',
+            'Isotopes',
+            # 'IntensityNorm',
+            # 'IntensityNorm_predicted',
+            'proteins',
+            'peptide',
+            'bestprotein',
+            # 'IntensityNorm_diff',
+            # 'charge_theor',
+            # 'pI',
+            'mass',
+            # 'mzraw',
 
-                    v_arr = np.array([prots_spc[k] for k in names_arr])
-                    all_pvals = calc_sf_all(v_arr, n_arr, p)
-                    for idx, k in enumerate(names_arr):
-                        prots_spc_basic[k] = all_pvals[idx]
-
-                    for k, v in prots_spc_basic.items():
-                        if k not in prots_spc_final:
-                            prots_spc_final[k] = v
-                    break
-
-        prots_spc_basic2 = copy(prots_spc_final)
-        prots_spc_final = dict()
-
-        if n == 0:
-            try:
-                n = cpu_count()
-            except NotImplementedError:
-                n = 1
-
-        if n == 1 or os.name == 'nt':
-            qin = []
-            qout = []
-            for mass_koef in np.arange(1.0, 0.2, -0.33):
-                for rtt_koef in np.arange(1.0, 0.2, -0.33):
-                    qin.append((mass_koef, rtt_koef))
-            qout = worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2, True)
             
-            for item, item2 in qout:
-                if item2:
-                    prots_spc_copy = item2
-                for k in protsN:
-                    if k not in prots_spc_final:
-                        prots_spc_final[k] = [item.get(k, 0.0), ]
-                    else:
-                        prots_spc_final[k].append(item.get(k, 0.0))
+        }
+        for feature in feature_columns:
+            if feature in banned_features or feature.startswith('c_'):
+                columns_to_remove.append(feature)
+        feature_columns = feature_columns.drop(columns_to_remove)
+        return feature_columns
 
-        else:
-            qin = Queue()
-            qout = Queue()
+    # def get_features_pfms(dataframe):
+    #     feature_columns = dataframe.columns
+    #     columns_to_remove = []
+    #     banned_features = {
+    #         'rt_diff',
+    #         'mass_diff',
+            
+    #     }
+    #     for feature in feature_columns:
+    #         if feature not in banned_features:
+    #             columns_to_remove.append(feature)
+    #     feature_columns = feature_columns.drop(columns_to_remove)
+    #     return feature_columns
 
-            for mass_koef in np.arange(1.0, 0.2, -0.33):
-                for rtt_koef in np.arange(1.0, 0.2, -0.33):
-                    qin.put((mass_koef, rtt_koef))
+    def objective_pfms(df, hyperparameters, iteration):
+        """Objective function for grid and random search. Returns
+        the cross validation score from a set of hyperparameters."""
+        
+        all_res = []
+        all_iters = []
+        
+        # Number of estimators will be found using early stopping
+        if 'n_estimators' in hyperparameters.keys():
+            del hyperparameters['n_estimators']
+        
+        feature_columns = get_features_pfms(df)
+        print(feature_columns)
+        kf = KFold(n_splits=3, shuffle=True, random_state=SEED+1)
+        
+        for sp1 in kf.split(df):
+            train_df = df.iloc[sp1[0]]
+            test_df = df.iloc[sp1[1]]
+            model = get_cat_model_pfms(df, hyperparameters, feature_columns, train_df, test_df)
+            all_iters.append(model.best_iteration)
+            
+            test_df['preds'] = model.predict(get_X_array(test_df, feature_columns))
+            all_res.append(len(aux.filter(test_df, fdr=0.1, key='preds', is_decoy='decoy')))
+        shr_v = np.min(all_res)
+        hyperparameters['n_estimators'] = int(np.mean(all_iters))
+        
+        return [shr_v, hyperparameters, iteration]
 
-            for _ in range(n):
-                qin.put(None)
+    def random_search_pfms(df, param_grid, out_file, max_evals):
+        """Random search for hyperparameter optimization. 
+        Writes result of search to csv file every search iteration."""
+        
+        
+        # Dataframe for results
+        results = pd.DataFrame(columns = ['sharpe', 'params', 'iteration'],
+                                    index = list(range(max_evals)))
+        for i in range(max_evals):
 
-            procs = []
-            for proc_num in range(n):
-                p = Process(target=worker, args=(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2))
-                p.start()
-                procs.append(p)
+            print('%d/%d' % (i+1, max_evals))
+            
+            # Choose random hyperparameters
+            random_params = {k: random.sample(v, 1)[0] for k, v in param_grid.items()}
+            random_params['subsample'] = 1.0 if random_params['boosting_type'] == 'goss' else random_params['subsample']
 
-            for _ in range(n):
-                for item, item2 in iter(qout.get, None):
-                    if item2:
-                        prots_spc_copy = item2
-                    for k in protsN:
-                        if k not in prots_spc_final:
-                            prots_spc_final[k] = [item.get(k, 0.0), ]
-                        else:
-                            prots_spc_final[k].append(item.get(k, 0.0))
+            # Evaluate randomly selected hyperparameters
+            eval_results = objective_pfms(df, random_params, i)
+            results.loc[i, :] = eval_results
 
-            for p in procs:
-                p.join()
-            # worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2)
-            # prots_spc_final, prots_spc_copy = qout.get()
+            # open connection (append option) and write results
+            of_connection = open(out_file, 'a')
+            writer = csv.writer(of_connection)
+            writer.writerow(eval_results)
+            
+            # make sure to close connection
+            of_connection.close()
+            
+        # Sort with best score on top
+        results.sort_values('sharpe', ascending = False, inplace = True)
+        results.reset_index(inplace = True)
 
-        for k in prots_spc_final.keys():
-            prots_spc_final[k] = np.mean(prots_spc_final[k])
+        return results 
 
-        prots_spc = prots_spc_final
-        sortedlist_spc = sorted(prots_spc.items(), key=operator.itemgetter(1))[::-1]
-        with open(base_out_name + '_proteins_full.csv', 'w') as output:
-            output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
-            for x in sortedlist_spc:
-                # output.write('\t'.join((x[0], str(x[1]), str(protsN[x[0]]))) + '\n')
-                output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
+    def random_search_prots(df, param_grid, out_file, max_evals):
+        """Random search for hyperparameter optimization. 
+        Writes result of search to csv file every search iteration."""
+        
+        
+        # Dataframe for results
+        results = pd.DataFrame(columns = ['sharpe', 'params', 'iteration'],
+                                    index = list(range(max_evals)))
+        for i in range(max_evals):
 
-        checked = set()
-        for k, v in list(prots_spc.items()):
-            if k not in checked:
-                if isdecoy_key(k):
-                    if prots_spc.get(k.replace(prefix, ''), -1e6) > v:
-                        del prots_spc[k]
-                        checked.add(k.replace(prefix, ''))
-                else:
-                    if prots_spc.get(prefix + k, -1e6) > v:
-                        del prots_spc[k]
-                        checked.add(prefix + k)
+            print('%d/%d' % (i+1, max_evals))
+            
+            # Choose random hyperparameters
+            random_params = {k: random.sample(v, 1)[0] for k, v in param_grid.items()}
+            random_params['subsample'] = 1.0 if random_params['boosting_type'] == 'goss' else random_params['subsample']
 
-        filtered_prots = aux.filter(prots_spc.items(), fdr=fdr, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1, full_output=True, correction=1)
-        if len(filtered_prots) < 1:
-            filtered_prots = aux.filter(prots_spc.items(), fdr=fdr, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1, full_output=True, correction=0)
-        identified_proteins = 0
+            # Evaluate randomly selected hyperparameters
+            eval_results = objective_prots(df, random_params, i)
+            results.loc[i, :] = eval_results
 
-        for x in filtered_prots:
-            identified_proteins += 1
+            # open connection (append option) and write results
+            of_connection = open(out_file, 'a')
+            writer = csv.writer(of_connection)
+            writer.writerow(eval_results)
+            
+            # make sure to close connection
+            of_connection.close()
+            
+        # Sort with best score on top
+        results.sort_values('sharpe', ascending = False, inplace = True)
+        results.reset_index(inplace = True)
 
-        print('TOP 5 identified proteins:')
-        print('dbname\tscore\tnum matched peptides\tnum theoretical peptides')
-        for x in filtered_prots[:5]:
-            # print '\t'.join((str(x[0]), str(x[1]), str(protsN[x[0]])))
-            print('\t'.join((str(x[0]), str(x[1]), str(int(prots_spc_copy[x[0]])), str(protsN[x[0]]))))
-        print('results:%s;number of identified proteins = %d' % (fname, identified_proteins, ))
-        print('R=', r)
-        with open(base_out_name + '_proteins.csv', 'w') as output:
-            output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
-            for x in filtered_prots:
-                # output.write('\t'.join((x[0], str(x[1]), str(protsN[x[0]]))) + '\n')
-                output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
+        return results 
+
+    def get_cat_model_pfms(df, hyperparameters, feature_columns, train, test):
+        
+    #     train = df[df['era'].isin(train_eras)]
+    #     test = df[df['era'].isin(test_eras)]
+        feature_columns = list(feature_columns)
+        dtrain = lgb.Dataset(get_X_array(train, feature_columns), get_Y_array_pfms(train), feature_name=feature_columns, free_raw_data=False)
+        dvalid = lgb.Dataset(get_X_array(test, feature_columns), get_Y_array_pfms(test), feature_name=feature_columns, free_raw_data=False)
+        np.random.seed(SEED)
+        evals_result = {}
+        model = lgb.train(hyperparameters, dtrain, num_boost_round=20000, valid_sets=(dvalid,), valid_names=('valid',), verbose_eval=False,
+                    early_stopping_rounds=100, evals_result=evals_result)
+        return model
+
+    def get_cat_model_prots(df, hyperparameters, feature_columns, train, test):
+        
+    #     train = df[df['era'].isin(train_eras)]
+    #     test = df[df['era'].isin(test_eras)]
+        feature_columns = list(feature_columns)
+        dtrain = lgb.Dataset(get_X_array(train, feature_columns), get_Y_array_prots(train), feature_name=feature_columns, free_raw_data=False)
+        dvalid = lgb.Dataset(get_X_array(test, feature_columns), get_Y_array_prots(test), feature_name=feature_columns, free_raw_data=False)
+        np.random.seed(SEED)
+        evals_result = {}
+        model = lgb.train(hyperparameters, dtrain, num_boost_round=20000, valid_sets=(dvalid,), valid_names=('valid',), verbose_eval=False,
+                    early_stopping_rounds=100, evals_result=evals_result)
+        return model
+
+    def get_cat_model_final_pfms(df, hyperparameters, feature_columns):
+        feature_columns = list(feature_columns)
+        train = df
+        dtrain = lgb.Dataset(get_X_array(train, feature_columns), get_Y_array_pfms(train), feature_name=feature_columns, free_raw_data=False)
+        np.random.seed(SEED)
+        model = lgb.train(hyperparameters, dtrain)
+        return model
+
+    def get_cat_model_final_prots(df, hyperparameters, feature_columns):
+        feature_columns = list(feature_columns)
+        train = df
+        dtrain = lgb.Dataset(get_X_array(train, feature_columns), get_Y_array_prots(train), feature_name=feature_columns, free_raw_data=False)
+        np.random.seed(SEED)
+        model = lgb.train(hyperparameters, dtrain)
+        return model
+
+    def get_cat_model_final_Is(df, hyperparameters, feature_columns):
+        feature_columns = list(feature_columns)
+        train = df
+        dtrain = lgb.Dataset(get_X_array(train, feature_columns), get_Y_array_Is(train), feature_name=feature_columns, free_raw_data=False)
+        np.random.seed(SEED)
+        model = lgb.train(hyperparameters, dtrain)
+        return model
+
+    def get_cat_model_final_FAIMS(df, hyperparameters, feature_columns):
+        feature_columns = list(feature_columns)
+        train = df
+        dtrain = lgb.Dataset(get_X_array(train, feature_columns), get_Y_array_FAIMS(train), feature_name=feature_columns, free_raw_data=False)
+        np.random.seed(SEED)
+        model = lgb.train(hyperparameters, dtrain)
+        return model
+
+    def get_Y_array_prots(df):
+        return df.loc[:, 'decoy'].values
+
+    def get_features_prots(dataframe):
+        feature_columns = dataframe.columns
+        columns_to_remove = []
+        banned_features = {
+            'dbname',
+            'decoy',
+            'preds',
+        }
+        for feature in feature_columns:
+            if feature in banned_features or not feature.startswith('sf_peptide'):
+                columns_to_remove.append(feature)
+        feature_columns = feature_columns.drop(columns_to_remove)
+        return feature_columns
+
+    TARGET_NAME = 'decoy'
+    PREDICTION_NAME = 'preds'
+
+    def objective_prots(df, hyperparameters, iteration):
+        """Objective function for grid and random search. Returns
+        the cross validation score from a set of hyperparameters."""
+        
+        all_res = []
+        all_iters = []
+        
+        # Number of estimators will be found using early stopping
+        if 'n_estimators' in hyperparameters.keys():
+            del hyperparameters['n_estimators']
+        
+        feature_columns = get_features_prots(df)
+        kf = KFold(n_splits=3, shuffle=True, random_state=SEED+1)
+        
+        for sp1 in kf.split(df):
+            train_df = df.iloc[sp1[0]]
+            test_df = df.iloc[sp1[1]]
+            model = get_cat_model_prots(df, hyperparameters, feature_columns, train_df, test_df)
+            all_iters.append(model.best_iteration)
+            
+            test_df[PREDICTION_NAME] = model.predict(get_X_array(test_df, feature_columns))
+            all_res.append(len(aux.filter(test_df, fdr=0.1, key='preds', is_decoy='decoy')))
+    #         all_res.append(test_df[[TARGET_NAME, PREDICTION_NAME]])
+    #     test_df6 = pd.concat(all_res)
+        
+    #     fpr, tpr, thresholds = metrics.roc_curve(test_df6[TARGET_NAME], test_df6[PREDICTION_NAME])
+    #     shr_v = metrics.auc(fpr, tpr)
+        shr_v = np.min(all_res)
+        hyperparameters['n_estimators'] = int(np.mean(all_iters))
+        
+        return [shr_v, hyperparameters, iteration]
 
 
-        fig = plt.figure(figsize=(16, 12))
-        DPI = fig.get_dpi()
-        fig.set_size_inches(2000.0/float(DPI), 2000.0/float(DPI))
+    df1 = pd.DataFrame()
+    for k in resdict.keys():
+        # if k == 'Is':
+        #     df1[k] = np.log10(resdict[k])
+        # else:
+        df1[k] = resdict[k]
+    df1['mass_diff'] = mass_diff
+    df1['rt_diff'] = rt_diff
+    df1['decoy'] = df1['seqs'].apply(lambda x: all(z.startswith(prefix) for z in pept_prot[x]))
 
-        df0 = pd.read_table(os.path.splitext(fname)[0].replace('.features', '') + '.features' + '.tsv')
+    print(sum(df1['decoy']), sum(~df1['decoy']))
 
-        # Features RT distribution
-        # TODO add matched features and matched to 1% FDR proteins features
-        ax = fig.add_subplot(3, 1, 1)
-        bns = np.arange(0, df0['rtApex'].max() + 1, 1)
-        ax.hist(df0['rtApex'], bins = bns)
-        ax.set_xlabel('RT, min', size=16)
-        ax.set_ylabel('# features', size=16)
+    # df1['ids_count'] = df1.groupby('ids')['seqs'].transform('count')
+    df1['peptide'] = df1['seqs']
 
-        # Features mass distribution
+    all_dbnames = []
+    all_theor_peptides = []
+    for item in protsN.items():
+        all_dbnames.append(item[0])
+        all_theor_peptides.append(item[1])
+        
+        
+    df2 = pd.DataFrame()
+    df2['dbname'] = all_dbnames
+    df2['theor peptides'] = all_theor_peptides
+    df2 = df2[df2['theor peptides'] >= 5]
 
-        # TODO add matched features and matched to 1% FDR proteins features
-        ax = fig.add_subplot(3, 1, 2)
-        bns = np.arange(0, df0['massCalib'].max() + 6, 5)
-        ax.hist(df0['massCalib'], bins = bns)
-        ax.set_xlabel('neutral mass, Da', size=16)
-        ax.set_ylabel('# features', size=16)
+    df3 = df1.copy()
 
-        # Features intensity distribution
+    df3['proteins'] = df3['seqs'].apply(lambda x: pept_prot[x])
 
-        # TODO add matched features and matched to 1% FDR proteins features
-        ax = fig.add_subplot(3, 1, 3)
-        bns = np.arange(np.log10(df0['intensityApex'].min()) - 0.5, np.log10(df0['intensityApex'].max()) + 0.5, 0.5)
-        ax.hist(np.log10(df0['intensityApex']), bins = bns)
-        ax.set_xlabel('log10(Intensity)', size=16)
-        ax.set_ylabel('# features', size=16)
+    df3 = df3.assign(proteins=df3.proteins).explode('proteins').reset_index(drop=True)
 
-        plt.savefig(base_out_name + '.png')
+    tmp = df3.groupby('proteins')['seqs'].agg(['count', ])
+    tmp2 = df3.groupby('proteins')['seqs'].nunique()
 
-    final_iteration(resdict, mass_diff, rt_diff, protsN, args)
+    df2['decoy'] = df2['dbname'].apply(lambda x: x.startswith('DECOY_'))
+
+    df2 = df2.set_index(keys='dbname')
+
+    df2['PSMs_total'] = tmp['count']
+    df2['peptides_total'] = tmp2
+
+    p_psms = df2[df2['decoy']]['PSMs_total'].sum() / df2[df2['decoy']]['theor peptides'].sum()
+    p_peptides = df2[df2['decoy']]['peptides_total'].sum() / df2[df2['decoy']]['theor peptides'].sum()
+    df2['sf_psm_total'] = calc_sf_all_2(df2['PSMs_total'].values, df2['theor peptides'].values, p_psms)
+    df2['sf_peptide_total'] = calc_sf_all_2(df2['peptides_total'].values, df2['theor peptides'].values, p_peptides)
+
+    df2['dbname'] = df2.index
+
+    protein_ranks = dict()
+    cur_r = 1
+    for z in df2.sort_values(by='sf_peptide_total', ascending=False)[['dbname']].values:
+        protein_ranks[z[0]] = cur_r
+        cur_r += 1
+    worst_rank = cur_r + 1
+
+    def get_protein_with_max_score(proteins):
+        maxscore = 0
+        best_prot = 'Unknown'
+        for prot in proteins:
+            curscore = protein_ranks.get(prot, 0)
+            if curscore > maxscore:
+                maxscore = curscore
+                best_prot = prot
+        return best_prot
 
 
-def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2, win_sys=False):
+    df1['proteins'] = df1['seqs'].apply(lambda x: pept_prot[x])
+    df1['bestprotein'] = df1['proteins'].apply(get_protein_with_max_score)
+    df1["IntensityNorm"] = df1['Is'].values / df1.groupby("bestprotein")['Is'].transform(lambda x: x.median())
+    mass_dict = {}
+    pI_dict = {}
+    charge_dict = {}
+    for pep in set(df1['peptide']):
+        try:
+            mass_dict[pep] = mass.fast_mass2(pep)
+            pI_dict[pep] = electrochem.pI(pep)
+            charge_dict[pep] = electrochem.charge(pep, pH=7.0)
+        except:
+            mass_dict[pep] = 0
+            pI_dict[pep] = 0
+            charge_dict[pep] = 0
 
-    for item in (iter(qin.get, None) if not win_sys else qin):
-        mass_koef, rtt_koef = item
 
-        m_k = scoreatpercentile(mass_diff, mass_koef * 100)
-        e_ind = mass_diff <= m_k
-        resdict2 = filter_results(resdict, e_ind)
-        rt_diff2 = rt_diff[e_ind]
+    for aa in mass.std_aa_mass:
+        df1['c_%s' % (aa, )] = df1['peptide'].apply(lambda x: x.count(aa))
+    df1['c_DP'] = df1['peptide'].apply(lambda x: x.count('DP'))
+    df1['c_KP'] = df1['peptide'].apply(lambda x: x.count('KP'))
+    df1['c_RP'] = df1['peptide'].apply(lambda x: x.count('RP'))
 
-        r_k = scoreatpercentile(rt_diff2, rtt_koef * 100)
-        e_ind = rt_diff2 <= r_k
-        resdict2 = filter_results(resdict2, e_ind)
+    df1['plen'] = df1['peptide'].apply(lambda z: len(z))
+    df1['mass'] = df1['peptide'].apply(lambda x: mass_dict[x])
+    df1['pI'] = df1['peptide'].apply(lambda x: pI_dict[x])
+    df1['charge_theor'] = df1['peptide'].apply(lambda x: charge_dict[x])
 
-        features_dict = dict()
-        for pep in set(resdict2['seqs']):
-            for bprot in pept_prot[pep]:
-                prot_score = prots_spc_basic2[bprot]
-                if prot_score > features_dict.get(pep, [-1, ])[-1]:
-                    features_dict[pep] = (bprot, prot_score)
 
-        prots_spc_basic = dict()
+    df1t5 = df1.sort_values(by='Is', ascending=False).copy()
+    df1t5 = df1t5.drop_duplicates(subset='peptide', keep='first')    
+    df1t5 = df1[df1.groupby('bestprotein').peptide.transform('count')>5]
 
-        p1 = set(resdict2['seqs'])
+    random_results = pd.read_csv('/home/mark/notebooks/test_randomCV_MS1Intensity.csv')
+    random_results = random_results[random_results['auc'] != 'auc']
+    random_results['params'] = random_results['params'].apply(lambda x: ast.literal_eval(x))
+    random_results['boosts'] = random_results['params'].apply(lambda x: int(x['n_estimators']))
+    convert_dict = {'auc': float, 
+                } 
+    random_results = random_results.astype(convert_dict) 
 
-        pep_pid = defaultdict(set)
-        pid_pep = defaultdict(set)
-        banned_dict = dict()
-        for pep, pid in zip(resdict2['seqs'], resdict2['ids']):
-            pep_pid[pep].add(pid)
-            pid_pep[pid].add(pep)
-            if pep in banned_dict:
-                banned_dict[pep] += 1
-            else:
-                banned_dict[pep] = 1
+    random_results['auc_per_boost'] = random_results['auc'].values / random_results['boosts'].values
 
-        if len(p1):
-            prots_spc_final = dict()
-            prots_spc_copy = False
-            prots_spc2 = False
-            unstable_prots = set()
-            p0 = False
+    bestparams = random_results.sort_values(by='auc',ascending=True)['params'].values[0]
+    # bestparams['n_estimators'] = int(bestparams['n_estimators'] * 1.5)
+    bestparams['num_threads'] = 6
 
-            names_arr = False
-            tmp_spc_new = False
-            decoy_set = False
 
-            while 1:
-                if not prots_spc2:
 
-                    best_match_dict = dict()
-                    n_map_dict = defaultdict(list)
-                    for k, v in protsN.items():
-                        n_map_dict[v].append(k)
+    # print('Start Machine Learning on Is...')
 
-                    decoy_set = set()
-                    for k in protsN:
-                        if isdecoy_key(k):
-                            decoy_set.add(k)
-                    decoy_set = list(decoy_set)
+
+    # feature_columns_Is = get_features_Is(df1t5)
+
+    # kf = KFold(n_splits=3, shuffle=True, random_state=SEED)
+
+    # test_res = []
+    # for sp1 in kf.split(df1):
+    #     train_df = df1.iloc[sp1[0]]
+    #     test_df = df1.iloc[sp1[1]]
+
+    #     model = get_cat_model_final_Is(train_df, bestparams, feature_columns_Is)
+        
+    #     df1.loc[sp1[1], 'IntensityNorm_predicted'] = model.predict(get_X_array(test_df, feature_columns_Is))
+
+    # # model = get_cat_model_final_Is(df1t5, bestparams, feature_columns_Is)
+    # # df1['IntensityNorm_predicted'] = model.predict(get_X_array(df1, feature_columns_Is))
+    # df1['IntensityNorm_diff'] = df1['IntensityNorm_predicted'] - df1['IntensityNorm']
+
+    # # df1['plen'] = df1['seqs'].apply(lambda x: len(x))
+
+
+
+
+
+    # print('Start Machine Learning on FAIMS...')
+
+
+    # random_results = pd.read_csv('/home/mark/notebooks/test_randomCV_FAIMS.csv')
+    # random_results = random_results[random_results['auc'] != 'auc']
+    # random_results['params'] = random_results['params'].apply(lambda x: ast.literal_eval(x))
+    # random_results['boosts'] = random_results['params'].apply(lambda x: int(x['n_estimators']))
+    # convert_dict = {'auc': float, 
+    #             } 
+    # random_results = random_results.astype(convert_dict) 
+
+    # random_results['auc_per_boost'] = random_results['auc'].values / random_results['boosts'].values
+
+    # bestparams = random_results.sort_values(by='auc',ascending=True)['params'].values[0]
+    # bestparams['n_estimators'] = int(bestparams['n_estimators'] * 1.5)
+    # bestparams['num_threads'] = 6
+
+    # feature_columns_FAIMS = get_features_FAIMS(df1)
+
+    # # kf = KFold(n_splits=3, shuffle=True, random_state=SEED)
+
+    # # test_res = []
+    # # for sp1 in kf.split(df1):
+    # #     train_df = df1.iloc[sp1[0]]
+    # #     test_df = df1.iloc[sp1[1]]
+
+    # #     model = get_cat_model_final_Is(train_df, bestparams, feature_columns_Is)
+        
+    # #     df1.loc[sp1[1], 'IntensityNorm_predicted'] = model.predict(get_X_array(test_df, feature_columns_Is))
+
+    # df1_top = df1[df1['bestprotein'].apply(lambda x: protein_ranks.get(x, 1e6) <= 100)]
+
+    # model = get_cat_model_final_Is(df1_top, bestparams, feature_columns_FAIMS)
+    # df1['im_predicted'] = model.predict(get_X_array(df1, feature_columns_FAIMS))
+    # df1['im_diff'] = df1['im_predicted'] - df1['im']
+
+    # # df1['plen'] = df1['seqs'].apply(lambda x: len(x))
+
+
+
+    print('Start Machine Learning on PFMs...')
+
+    print(get_features_pfms(df1))
+
+    MAX_EVALS = 25
+    out_file = 'test_randomCV_PFMs_2.csv'
+    of_connection = open(out_file, 'w')
+    writer = csv.writer(of_connection)
+
+    # Write column names
+    headers = ['auc', 'params', 'iteration']
+    writer.writerow(headers)
+    of_connection.close()
+
+    # df = df.reset_index(drop=True)
+
+    random_results = random_search_pfms(df1, param_grid, out_file, MAX_EVALS)
+
+    random_results = pd.read_csv(out_file)
+    random_results = random_results[random_results['auc'] != 'auc']
+    random_results['params'] = random_results['params'].apply(lambda x: ast.literal_eval(x))
+    random_results['boosts'] = random_results['params'].apply(lambda x: int(x['n_estimators']))
+    convert_dict = {'auc': float, 
+                } 
+    random_results = random_results.astype(convert_dict) 
+
+    random_results['auc_per_boost'] = random_results['auc'].values / random_results['boosts'].values
+
+    bestparams = random_results.sort_values(by='auc',ascending=False)['params'].values[0]
+    bestparams['num_threads'] = 6
+    print(random_results.sort_values(by='auc',ascending=False)['auc'].values[0])
+
+    kf = KFold(n_splits=3, shuffle=True, random_state=SEED)
+
+    test_res = []
+    for sp1 in kf.split(df1):
+        train_df = df1.iloc[sp1[0]]
+        test_df = df1.iloc[sp1[1]]
+
+        feature_columns = list(get_features_pfms(train_df))
+        model = get_cat_model_final_pfms(train_df, bestparams, feature_columns)
+        
+        df1.loc[sp1[1], 'preds'] = model.predict(get_X_array(test_df, feature_columns))
+
+    # df1['pc'] = df1.groupby('ids')['preds'].transform('count')
+    # df1.loc[df1['pc'] > 1, 'preds'] = df1.loc[df1['pc'] > 1, 'preds'] - df1.loc[df1['pc'] > 1, :].groupby('ids')['preds'].transform('median')
+        
+    df1['qpreds'] = pd.qcut(df1['preds'], 10, labels=range(10)) 
+    df1['proteins'] = df1['seqs'].apply(lambda x: ';'.join(pept_prot[x]))
+
+    df1.to_csv(base_out_name + '_PFMs_ML.csv', sep='\t', index=False)
+     
+        
+    all_dbnames = []
+    all_theor_peptides = []
+    for item in protsN.items():
+        all_dbnames.append(item[0])
+        all_theor_peptides.append(item[1])
+        
+        
+    df2 = pd.DataFrame()
+    df2['dbname'] = all_dbnames
+    df2['theor peptides'] = all_theor_peptides
+    df2 = df2[df2['theor peptides'] >= 5]
+
+    df3 = df1.copy()
+
+    df3['proteins'] = df3['seqs'].apply(lambda x: pept_prot[x])
+
+    df3 = df3.assign(proteins=df3.proteins).explode('proteins').reset_index(drop=True)
+
+    tmp = df3.groupby('proteins')['preds'].agg(['mean', 'count'])
+    tmp2 = df3.groupby('proteins')['seqs'].nunique()
+
+    df2['decoy'] = df2['dbname'].apply(lambda x: x.startswith('DECOY_'))
+
+    df2 = df2.set_index(keys='dbname')
+
+
+
+    df2['av_score_total'] = tmp['mean']
+    df2['PSMs_total'] = tmp['count']
+    df2['peptides_total'] = tmp2
+
+    p_psms = df2[df2['decoy']]['PSMs_total'].sum() / df2[df2['decoy']]['theor peptides'].sum()
+    p_peptides = df2[df2['decoy']]['peptides_total'].sum() / df2[df2['decoy']]['theor peptides'].sum()
+    df2['sf_psm_total'] = calc_sf_all_2(df2['PSMs_total'].values, df2['theor peptides'].values, p_psms)
+    df2['sf_peptide_total'] = calc_sf_all_2(df2['peptides_total'].values, df2['theor peptides'].values, p_peptides)
+
+
+    df2['dbname'] = df2.index
+
+    protein_ranks = dict()
+    cur_r = 1
+    for z in df2.sort_values(by='sf_peptide_total', ascending=False)[['dbname']].values:
+        protein_ranks[z[0]] = cur_r
+        cur_r += 1
+    worst_rank = cur_r + 1
+
+        
+    df2 = pd.DataFrame()
+    df2['dbname'] = all_dbnames
+    df2['theor peptides'] = all_theor_peptides
+    df2 = df2[df2['theor peptides'] >= 5]
+
+    df3 = df1.copy()
+
+    df3['best_prot_rank'] = df3['seqs'].apply(lambda x: min(protein_ranks.get(z, worst_rank) for z in pept_prot[x]))
+
+    df3 = df3.sort_values(by='best_prot_rank', ascending=True)
+    df3 = df3.drop_duplicates(subset=['ids'])
+    df3 = df3.reset_index()
+    df3 = df3.drop(columns='index')
+
+    df3['proteins'] = df3['seqs'].apply(lambda x: pept_prot[x])
+
+    df3 = df3.assign(proteins=df3.proteins).explode('proteins').reset_index(drop=True)
+
+    tmp = df3.groupby('proteins')['preds'].agg(['mean', 'count'])
+    tmp2 = df3.groupby('proteins')['seqs'].nunique()
+
+    df2['decoy'] = df2['dbname'].apply(lambda x: x.startswith('DECOY_'))
+
+    df2 = df2.set_index(keys='dbname')
+
+    # from scipy.stats import binom
+    # def calc_sf_all(v, n, p):
+    #     sf_values = -np.log10(binom.sf(v, n, p))
+    #     sf_values[np.isinf(sf_values)] = max(sf_values[~np.isinf(sf_values)])
+    #     return sf_values
+
+    df2['av_score_total'] = tmp['mean']
+    df2['PSMs_total'] = tmp['count']
+    df2['peptides_total'] = tmp2
+
+    p_psms = df2[df2['decoy']]['PSMs_total'].sum() / df2[df2['decoy']]['theor peptides'].sum()
+    p_peptides = df2[df2['decoy']]['peptides_total'].sum() / df2[df2['decoy']]['theor peptides'].sum()
+    df2['sf_psm_total'] = calc_sf_all_2(df2['PSMs_total'].values, df2['theor peptides'].values, p_psms)
+    df2['sf_peptide_total'] = calc_sf_all_2(df2['peptides_total'].values, df2['theor peptides'].values, p_peptides)
+
+    for qval in range(10):
+        qqq = df3[df3['qpreds'] <= qval]
+        tmp = qqq.groupby('proteins')['preds'].agg(['mean', 'count'])
+        tmp2 = qqq.groupby('proteins')['seqs'].nunique()
+        
+        df2['PSMs_%s' % (qval, )] = tmp['count']
+        df2['peptides_%s' % (qval, )] = tmp2
+        df2['av_score_%s' % (qval, )] = tmp['mean']
+        
+        for cc in df2.columns:
+            if cc.startswith('PSMs_'):
+                df2[cc] = df2[cc].fillna(value=0)
+            elif cc.startswith('peptides_'):
+                df2[cc] = df2[cc].fillna(value=0)
+            elif cc.startswith('av_score'):
+                df2[cc] = df2[cc].fillna(value=df2[cc].max())
+        
+        p_psms = df2[df2['decoy']]['PSMs_%s' % (qval, )].sum() / df2[df2['decoy']]['theor peptides'].sum()
+        p_peptides = df2[df2['decoy']]['peptides_%s' % (qval, )].sum() / df2[df2['decoy']]['theor peptides'].sum()
+        df2['sf_psm_%s' % (qval, )] = calc_sf_all_2(df2['PSMs_%s' % (qval, )].values, df2['theor peptides'].values, p_psms)
+        df2['sf_peptide_%s' % (qval, )] = calc_sf_all_2(df2['peptides_%s' % (qval, )].values, df2['theor peptides'].values, p_peptides)
+        
+    for cc in df2.columns:
+        if cc.startswith('PSMs_'):
+            df2[cc] = df2[cc].fillna(value=0)
+        elif cc.startswith('peptides_'):
+            df2[cc] = df2[cc].fillna(value=0)
+        elif cc.startswith('av_score'):
+            df2[cc] = df2[cc].fillna(value=df2[cc].max())
+        elif cc.startswith('sf_'):
+            df2[cc] = df2[cc].fillna(value=0)
+            
+    df2['dbname'] = df2.index
+
+    df2 = df2.reset_index(drop=True)
+
+    from sklearn.preprocessing import quantile_transform
+    feature_columns = list(get_features_prots(df2))
+    for fc in feature_columns:
+        df2[fc] = quantile_transform(df2[[fc]], n_quantiles=300, random_state=0)
+
+
+
+    # Hyperparameter grid
+    param_grid_prots = {
+    #     'boosting_type': ['gbdt', 'goss', 'dart'],
+    #     'boosting_type': ['gbdt', 'goss'],
+        'boosting_type': ['gbdt', ],
+    #     'boosting_type': ['dart', ],
+        'num_leaves': list(range(10, 1000)),
+        'learning_rate': list(np.logspace(np.log10(0.01), np.log10(0.3), base = 10, num = 1000)),
+        'subsample_for_bin': list(range(1, 500, 5)),
+        'min_child_samples': list(range(1, 150, 1)),
+        'reg_alpha': list(np.linspace(0, 1)),
+        'reg_lambda': list(np.linspace(0, 1)),
+        'colsample_bytree': list(np.linspace(0.01, 1, 100)),
+        'subsample': list(np.linspace(0.01, 1, 100)),
+        'is_unbalance': [True, False],
+        'metric': ['rmse', ],
+        'verbose': [-1, ],
+    }
+
+    print('Start Machine Learning on proteins...')
+    MAX_EVALS = 1
+    out_file = 'test_randomCV_proteins2.csv'
+    of_connection = open(out_file, 'w')
+    writer = csv.writer(of_connection)
+
+    # Write column names
+    headers = ['auc', 'params', 'iteration']
+    writer.writerow(headers)
+    of_connection.close()
+
+    # df = df.reset_index(drop=True)
+
+    random_results = random_search_prots(df2, param_grid_prots, out_file, MAX_EVALS)
+    random_results = pd.read_csv('test_randomCV_proteins2.csv')
+    random_results = random_results[random_results['auc'] != 'auc']
+    random_results['params'] = random_results['params'].apply(lambda x: ast.literal_eval(x))
+    random_results['boosts'] = random_results['params'].apply(lambda x: int(x['n_estimators']))
+    convert_dict = {'auc': float, 
+                } 
+    random_results = random_results.astype(convert_dict) 
+
+    random_results['auc_per_boost'] = random_results['auc'].values / random_results['boosts'].values
+
+    bestparams = random_results.sort_values(by='auc',ascending=False)['params'].values[0]
+    bestparams['num_threads'] = 6
+    best_auc = random_results.sort_values(by='auc',ascending=False)['auc'].values[0]
+    print(best_auc)
+
+    if best_auc >= 100000:
+
+        kf = KFold(n_splits=3, shuffle=True, random_state=SEED)
+
+        test_res = []
+        for sp1 in kf.split(df2):
+            train_df = df2.iloc[sp1[0]]
+            test_df = df2.iloc[sp1[1]]
+
+            feature_columns = list(get_features_prots(train_df))
+            model = get_cat_model_final_prots(train_df, bestparams, feature_columns)
+            
+            df2.loc[sp1[1], 'preds'] = model.predict(get_X_array(test_df, feature_columns))
+
+        
+        df2['preds'] = df2['preds'].max() - df2['preds']
+
+    else:
+        print('Skipping ML for proteins, use simple binomial scores')
+        cols_for_sum = []
+        for cc in df2.columns:
+            if cc.startswith('sf_peptide'):
+                cols_for_sum.append(cc)
+        df2['preds'] = df2[cols_for_sum].sum(axis=1)
+
+
+    df2 = df2.rename({'preds': 'score', 'peptides_total': 'matched peptides', 'theor peptides': 'theoretical peptides'}, axis='columns')
+    df2.to_csv(base_out_name + '_proteins_full.csv', sep='\t', index=False, columns=['dbname', 'score', 'matched peptides', 'theoretical peptides'])
+
+    df2['basedbname'] = df2['dbname'].apply(lambda x: x.replace('DECOY_', ''))
+    df2 = df2.sort_values(by='score', ascending=False)
+    df2 = df2.drop_duplicates(subset=['basedbname'])
+
+    df2f = aux.filter(df2, fdr=fdr, key='score', is_decoy='decoy', reverse=True)
+    df2f.to_csv(base_out_name + '_proteins.csv', sep='\t', index=False, columns=['dbname', 'score', 'matched peptides', 'theoretical peptides'])
+
+
+
+
+#     p1 = set(resdict['seqs'])
+
+#     prots_spc2 = defaultdict(set)
+#     for pep, proteins in pept_prot.items():
+#         if pep in p1:
+#             for protein in proteins:
+#                 prots_spc2[protein].add(pep)
+
+#     for k in protsN:
+#         if k not in prots_spc2:
+#             prots_spc2[k] = set([])
+#     prots_spc = dict((k, len(v)) for k, v in prots_spc2.items())
+
+#     names_arr = np.array(list(prots_spc.keys()))
+#     v_arr = np.array(list(prots_spc.values()))
+#     n_arr = np.array([protsN[k] for k in prots_spc])
+
+#     top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
+#     top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
+#     p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
+#     print('p=%s' % (np.mean(top100decoy_score) / np.mean(top100decoy_N)))
+
+#     prots_spc = dict()
+#     all_pvals = calc_sf_all(v_arr, n_arr, p)
+#     for idx, k in enumerate(names_arr):
+#         prots_spc[k] = all_pvals[idx]
+
+#     # checked = set()
+#     # for k, v in list(prots_spc.items()):
+#     #     if k not in checked:
+#     #         if isdecoy_key(k):
+#     #             if prots_spc.get(k.replace(prefix, ''), -1e6) > v:
+#     #                 del prots_spc[k]
+#     #                 checked.add(k.replace(prefix, ''))
+#     #         else:
+#     #             if prots_spc.get(prefix + k, -1e6) > v:
+#     #                 del prots_spc[k]
+#     #                 checked.add(prefix + k)
+
+#     # filtered_prots = aux.qvalues(prots_spc.items(), key=escore, is_decoy=isdecoy, remove_decoy=False, formula=1,
+#     #                             full_output=True)
+
+#     # pqmap = dict()
+#     # for z in filtered_prots:
+#     #     qval = z[2]
+#     #     pdbname = z[3][0]
+#     #     pqmap[pdbname] = qval
+#     # #     print(qval, pdbname)
+#     # #     break
+
+#     # df1 = pd.DataFrame()
+#     # for k in resdict.keys():
+#     #     if k == 'Is':
+#     #         df1[k] = np.log10(resdict[k])
+#     #     else:
+#     #         df1[k] = resdict[k]
+#     # df1['mass_diff'] = mass_diff
+#     # df1['rt_diff'] = rt_diff
+#     # df1['decoy'] = df1['seqs'].apply(lambda x: all(z.startswith(prefix) for z in pept_prot[x]))
+
+#     # df1['peak_rank_md'] = df1.groupby("ids")["mass_diff"].rank("dense", ascending=True)
+#     # df1['peak_rank_rd'] = df1.groupby("ids")["rt_diff"].rank("dense", ascending=True)
+
+#     def get_X_array(df, feature_columns):
+#         return df.loc[:, feature_columns].values
+
+#     def get_Y_array(df):
+#         return df.loc[:, 'decoy'].values
+
+#     def get_features(dataframe):
+#         feature_columns = dataframe.columns
+#         columns_to_remove = []
+#         banned_features = {
+#             'ids',
+#             'seqs',
+#             'decoy',
+#             'preds',
+#         }
+#         for feature in feature_columns:
+#             if feature in banned_features:
+#                 columns_to_remove.append(feature)
+#         feature_columns = feature_columns.drop(columns_to_remove)
+#         return feature_columns
+
+#     bestparams = {'boosting_type': 'gbdt',
+#     'num_leaves': 850,
+#     'learning_rate': 0.01534511205602959,
+#     #  'subsample_for_bin': 6910,
+#     #  'min_child_samples': 306,
+#     'reg_alpha': 0.26530612244897955,
+#     'reg_lambda': 0.24489795918367346,
+#     'colsample_bytree': 0.54,
+#     'subsample': 0.3,
+#     'is_unbalance': False,
+#     'metric': 'rmse',
+#     'n_estimators': 289}
+
+#     SEED = 50
+
+#     def get_cat_model_final(df, hyperparameters, feature_columns):
+#         feature_columns = list(feature_columns)
+#         train = df
+#         dtrain = lgb.Dataset(get_X_array(train, feature_columns), get_Y_array(train), feature_name=feature_columns, free_raw_data=False)
+#         np.random.seed(SEED)
+#         model = lgb.train(hyperparameters, dtrain)
+#         return model
+
+#     # kf = KFold(n_splits=3, shuffle=True, random_state=SEED)
+
+#     # test_res = []
+#     # for sp1 in kf.split(df1):
+#     #     train_df = df1.iloc[sp1[0]]
+#     #     test_df = df1.iloc[sp1[1]]
+
+#     #     feature_columns = list(get_features(train_df))
+#     #     model = get_cat_model_final(train_df, bestparams, feature_columns)
+        
+#     #     df1.loc[sp1[1], 'preds'] = model.predict(get_X_array(test_df, feature_columns))
+#     #     test_df['searchScore'] = model.predict(get_X_array(test_df, feature_columns))
+
+#     # mass_diff = df1['preds'].values
+
+
+#     # i_diff = resdict['Is']
+
+#     def final_iteration(resdict, mass_diff, rt_diff, protsN, args):
+#         n = args['nproc']
+
+
+#         prots_spc_basic = dict()
+
+#         p1 = set(resdict['seqs'])
+
+#         pep_pid = defaultdict(set)
+#         pid_pep = defaultdict(set)
+#         banned_dict = dict()
+#         for pep, pid in zip(resdict['seqs'], resdict['ids']):
+#             pep_pid[pep].add(pid)
+#             pid_pep[pid].add(pep)
+#             if pep in banned_dict:
+#                 banned_dict[pep] += 1
+#             else:
+#                 banned_dict[pep] = 1
+
+#         if len(p1):
+#             prots_spc_final = dict()
+#             prots_spc_copy = False
+#             prots_spc2 = False
+#             unstable_prots = set()
+#             p0 = False
+
+#             names_arr = False
+#             tmp_spc_new = False
+#             decoy_set = False
+
+#             while 1:
+#                 if not prots_spc2:
+
+#                     best_match_dict = dict()
+#                     n_map_dict = defaultdict(list)
+#                     for k, v in protsN.items():
+#                         n_map_dict[v].append(k)
+
+#                     decoy_set = set()
+#                     for k in protsN:
+#                         if isdecoy_key(k):
+#                             decoy_set.add(k)
+#                     decoy_set = list(decoy_set)
                     
 
-                    prots_spc2 = defaultdict(set)
-                    for pep, proteins in pept_prot.items():
-                        if pep in p1:
-                            for protein in proteins:
-                                if protein == features_dict[pep][0]:
-                                    prots_spc2[protein].add(pep)
+#                     prots_spc2 = defaultdict(set)
+#                     for pep, proteins in pept_prot.items():
+#                         if pep in p1:
+#                             for protein in proteins:
+#                                 prots_spc2[protein].add(pep)
 
-                    for k in protsN:
-                        if k not in prots_spc2:
-                            prots_spc2[k] = set([])
-                    prots_spc2 = dict(prots_spc2)
-                    unstable_prots = set(prots_spc2.keys())
+#                     for k in protsN:
+#                         if k not in prots_spc2:
+#                             prots_spc2[k] = set([])
+#                     prots_spc2 = dict(prots_spc2)
+#                     unstable_prots = set(prots_spc2.keys())
 
-                    top100decoy_N = sum([val for key, val in protsN.items() if isdecoy_key(key)])
+#                     top100decoy_N = sum([val for key, val in protsN.items() if isdecoy_key(key)])
 
-                    names_arr = np.array(list(prots_spc2.keys()))
-                    n_arr = np.array([protsN[k] for k in names_arr])
+#                     names_arr = np.array(list(prots_spc2.keys()))
+#                     n_arr = np.array([protsN[k] for k in names_arr])
 
-                    tmp_spc_new = dict((k, len(v)) for k, v in prots_spc2.items())
+#                     tmp_spc_new = dict((k, len(v)) for k, v in prots_spc2.items())
 
 
-                    top100decoy_score_tmp = [tmp_spc_new.get(dprot, 0) for dprot in decoy_set]
-                    top100decoy_score_tmp_sum = float(sum(top100decoy_score_tmp))
+#                     top100decoy_score_tmp = [tmp_spc_new.get(dprot, 0) for dprot in decoy_set]
+#                     top100decoy_score_tmp_sum = float(sum(top100decoy_score_tmp))
 
-                tmp_spc = tmp_spc_new
-                prots_spc = tmp_spc_new
-                if not prots_spc_copy:
-                    prots_spc_copy = deepcopy(prots_spc)
+#                 tmp_spc = tmp_spc_new
+#                 prots_spc = tmp_spc_new
+#                 if not prots_spc_copy:
+#                     prots_spc_copy = deepcopy(prots_spc)
 
-                for idx, v in enumerate(decoy_set):
-                    if v in unstable_prots:
-                        top100decoy_score_tmp_sum -= top100decoy_score_tmp[idx]
-                        top100decoy_score_tmp[idx] = prots_spc.get(v, 0)
-                        top100decoy_score_tmp_sum += top100decoy_score_tmp[idx]
-                p = float(sum(top100decoy_score_tmp)) / top100decoy_N
-                p = top100decoy_score_tmp_sum / top100decoy_N
-                if not p0:
-                    p0 = float(p)
+#                 for idx, v in enumerate(decoy_set):
+#                     if v in unstable_prots:
+#                         top100decoy_score_tmp_sum -= top100decoy_score_tmp[idx]
+#                         top100decoy_score_tmp[idx] = prots_spc.get(v, 0)
+#                         top100decoy_score_tmp_sum += top100decoy_score_tmp[idx]
+#                 p = float(sum(top100decoy_score_tmp)) / top100decoy_N
+#                 p = top100decoy_score_tmp_sum / top100decoy_N
+#                 if not p0:
+#                     p0 = float(p)
 
-                n_change = set(protsN[k] for k in unstable_prots)
-                for n_val in n_change:
-                    for k in n_map_dict[n_val]:
-                        v = prots_spc[k]
-                        if n_val not in best_match_dict or v > prots_spc[best_match_dict[n_val]]:
-                            best_match_dict[n_val] = k
-                n_arr_small = []
-                names_arr_small = []
-                v_arr_small = []
-                for k, v in best_match_dict.items():
-                    n_arr_small.append(k)
-                    names_arr_small.append(v)
-                    v_arr_small.append(prots_spc[v])
+#                 n_change = set(protsN[k] for k in unstable_prots)
+#                 for n_val in n_change:
+#                     for k in n_map_dict[n_val]:
+#                         v = prots_spc[k]
+#                         if n_val not in best_match_dict or v > prots_spc[best_match_dict[n_val]]:
+#                             best_match_dict[n_val] = k
+#                 n_arr_small = []
+#                 names_arr_small = []
+#                 v_arr_small = []
+#                 for k, v in best_match_dict.items():
+#                     n_arr_small.append(k)
+#                     names_arr_small.append(v)
+#                     v_arr_small.append(prots_spc[v])
 
-                prots_spc_basic = dict()
-                all_pvals = calc_sf_all(v_arr_small, n_arr_small, p)
-                for idx, k in enumerate(names_arr_small):
-                    prots_spc_basic[k] = all_pvals[idx]
+#                 prots_spc_basic = dict()
+#                 all_pvals = calc_sf_all(v_arr_small, n_arr_small, p)
+#                 for idx, k in enumerate(names_arr_small):
+#                     prots_spc_basic[k] = all_pvals[idx]
 
-                best_prot = utils.keywithmaxval(prots_spc_basic)
+#                 best_prot = utils.keywithmaxval(prots_spc_basic)
 
-                best_score = prots_spc_basic[best_prot]
-                unstable_prots = set()
-                if best_prot not in prots_spc_final:
-                    prots_spc_final[best_prot] = best_score
-                    banned_pids = set()
-                    for pep in prots_spc2[best_prot]:
-                        for pid in pep_pid[pep]:
-                            banned_pids.add(pid)
-                    for pid in banned_pids:
-                        for pep in pid_pep[pid]:
-                            banned_dict[pep] -= 1
-                            if banned_dict[pep] == 0:
-                                best_prot_val = features_dict[pep][0]
-                                for bprot in pept_prot[pep]:
-                                    if bprot == best_prot_val:
-                                        tmp_spc_new[bprot] -= 1
-                                        unstable_prots.add(bprot)
-                else:
+#                 best_score = prots_spc_basic[best_prot]
+#                 unstable_prots = set()
+#                 if best_prot not in prots_spc_final:
+#                     prots_spc_final[best_prot] = best_score
+#                     banned_pids = set()
+#                     for pep in prots_spc2[best_prot]:
+#                         for pid in pep_pid[pep]:
+#                             banned_pids.add(pid)
+#                     for pid in banned_pids:
+#                         for pep in pid_pep[pid]:
+#                             banned_dict[pep] -= 1
+#                             if banned_dict[pep] == 0:
+#                                 for bprot in pept_prot[pep]:
+#                                     tmp_spc_new[bprot] -= 1
+#                                     unstable_prots.add(bprot)
+#                 else:
 
-                    v_arr = np.array([prots_spc[k] for k in names_arr])
-                    all_pvals = calc_sf_all(v_arr, n_arr, p)
-                    for idx, k in enumerate(names_arr):
-                        prots_spc_basic[k] = all_pvals[idx]
+#                     v_arr = np.array([prots_spc[k] for k in names_arr])
+#                     all_pvals = calc_sf_all(v_arr, n_arr, p)
+#                     for idx, k in enumerate(names_arr):
+#                         prots_spc_basic[k] = all_pvals[idx]
 
-                    for k, v in prots_spc_basic.items():
-                        if k not in prots_spc_final:
-                            prots_spc_final[k] = v
+#                     for k, v in prots_spc_basic.items():
+#                         if k not in prots_spc_final:
+#                             prots_spc_final[k] = v
 
-                    break
+#                     break
 
-                try:
-                    prot_fdr = aux.fdr(prots_spc_final.items(), is_decoy=isdecoy)
-                except ZeroDivisionError:
-                    prot_fdr = 100.0
-                if prot_fdr >= 12.5 * fdr:
+#                 prot_fdr = aux.fdr(prots_spc_final.items(), is_decoy=isdecoy)
+#                 if prot_fdr >= 12.5 * fdr:
 
-                    v_arr = np.array([prots_spc[k] for k in names_arr])
-                    all_pvals = calc_sf_all(v_arr, n_arr, p)
-                    for idx, k in enumerate(names_arr):
-                        prots_spc_basic[k] = all_pvals[idx]
+#                     v_arr = np.array([prots_spc[k] for k in names_arr])
+#                     all_pvals = calc_sf_all(v_arr, n_arr, p)
+#                     for idx, k in enumerate(names_arr):
+#                         prots_spc_basic[k] = all_pvals[idx]
 
-                    for k, v in prots_spc_basic.items():
-                        if k not in prots_spc_final:
-                            prots_spc_final[k] = v
-                    break
+#                     for k, v in prots_spc_basic.items():
+#                         if k not in prots_spc_final:
+#                             prots_spc_final[k] = v
+#                     break
 
-        if mass_koef + rtt_koef >= 1.99:
-            item2 = prots_spc_copy
-        else:
-            item2 = False
-        if not win_sys:
-            qout.put((prots_spc_final, item2))
-        else:
-            qout.append((prots_spc_final, item2))
-    if not win_sys:
-        qout.put(None)
-    else:
-        return qout
+#         prots_spc_basic2 = copy(prots_spc_final)
+#         prots_spc_final = dict()
+
+#         if n == 0:
+#             try:
+#                 n = cpu_count()
+#             except NotImplementedError:
+#                 n = 1
+
+#         if n == 1 or os.name == 'nt':
+#             qin = []
+#             qout = []
+#             for mass_koef in np.arange(1.0, 0.2, -0.33):
+#                 for rtt_koef in np.arange(1.0, 0.2, -0.33):
+#                     qin.append((mass_koef, rtt_koef))
+#             qout = worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2, True)
+            
+#             for item, item2 in qout:
+#                 if item2:
+#                     prots_spc_copy = item2
+#                 for k in protsN:
+#                     if k not in prots_spc_final:
+#                         prots_spc_final[k] = [item.get(k, 0.0), ]
+#                     else:
+#                         prots_spc_final[k].append(item.get(k, 0.0))
+
+#         else:
+#             qin = Queue()
+#             qout = Queue()
+
+#             for mass_koef in np.arange(1.0, 0.2, -0.33):
+#                 for rtt_koef in np.arange(1.0, 0.2, -0.33):
+#                     qin.put((mass_koef, rtt_koef))
+
+#             for _ in range(n):
+#                 qin.put(None)
+
+#             procs = []
+#             for proc_num in range(n):
+#                 p = Process(target=worker, args=(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2))
+#                 p.start()
+#                 procs.append(p)
+
+#             for _ in range(n):
+#                 for item, item2 in iter(qout.get, None):
+#                     if item2:
+#                         prots_spc_copy = item2
+#                     for k in protsN:
+#                         if k not in prots_spc_final:
+#                             prots_spc_final[k] = [item.get(k, 0.0), ]
+#                         else:
+#                             prots_spc_final[k].append(item.get(k, 0.0))
+
+#             for p in procs:
+#                 p.join()
+#             # worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2)
+#             # prots_spc_final, prots_spc_copy = qout.get()
+
+#         for k in prots_spc_final.keys():
+#             prots_spc_final[k] = np.mean(prots_spc_final[k])
+
+#         prots_spc = prots_spc_final
+#         sortedlist_spc = sorted(prots_spc.items(), key=operator.itemgetter(1))[::-1]
+#         with open(base_out_name + '_proteins_full.csv', 'w') as output:
+#             output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
+#             for x in sortedlist_spc:
+#                 # output.write('\t'.join((x[0], str(x[1]), str(protsN[x[0]]))) + '\n')
+#                 output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
+
+#         checked = set()
+#         for k, v in list(prots_spc.items()):
+#             if k not in checked:
+#                 if isdecoy_key(k):
+#                     if prots_spc.get(k.replace(prefix, ''), -1e6) > v:
+#                         del prots_spc[k]
+#                         checked.add(k.replace(prefix, ''))
+#                 else:
+#                     if prots_spc.get(prefix + k, -1e6) > v:
+#                         del prots_spc[k]
+#                         checked.add(prefix + k)
+
+#         filtered_prots = aux.filter(prots_spc.items(), fdr=fdr, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1, full_output=True, correction=1)
+#         if len(filtered_prots) < 1:
+#             filtered_prots = aux.filter(prots_spc.items(), fdr=fdr, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1, full_output=True, correction=0)
+#         identified_proteins = 0
+
+#         for x in filtered_prots:
+#             identified_proteins += 1
+
+#         print('TOP 5 identified proteins:')
+#         print('dbname\tscore\tnum matched peptides\tnum theoretical peptides')
+#         for x in filtered_prots[:5]:
+#             # print '\t'.join((str(x[0]), str(x[1]), str(protsN[x[0]])))
+#             print('\t'.join((str(x[0]), str(x[1]), str(int(prots_spc_copy[x[0]])), str(protsN[x[0]]))))
+#         print('results:%s;number of identified proteins = %d' % (fname, identified_proteins, ))
+#         print('R=', r)
+#         with open(base_out_name + '_proteins.csv', 'w') as output:
+#             output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
+#             for x in filtered_prots:
+#                 # output.write('\t'.join((x[0], str(x[1]), str(protsN[x[0]]))) + '\n')
+#                 output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
+
+
+#         fig = plt.figure(figsize=(16, 12))
+#         DPI = fig.get_dpi()
+#         fig.set_size_inches(2000.0/float(DPI), 2000.0/float(DPI))
+
+#         df0 = pd.read_table(os.path.splitext(fname)[0].replace('.features', '') + '.features' + '.tsv')
+
+#         # Features RT distribution
+#         # TODO add matched features and matched to 1% FDR proteins features
+#         ax = fig.add_subplot(3, 1, 1)
+#         bns = np.arange(0, df0['rtApex'].max() + 1, 1)
+#         ax.hist(df0['rtApex'], bins = bns)
+#         ax.set_xlabel('RT, min', size=16)
+#         ax.set_ylabel('# features', size=16)
+
+#         # Features mass distribution
+
+#         # TODO add matched features and matched to 1% FDR proteins features
+#         ax = fig.add_subplot(3, 1, 2)
+#         bns = np.arange(0, df0['massCalib'].max() + 6, 5)
+#         ax.hist(df0['massCalib'], bins = bns)
+#         ax.set_xlabel('neutral mass, Da', size=16)
+#         ax.set_ylabel('# features', size=16)
+
+#         # Features intensity distribution
+
+#         # TODO add matched features and matched to 1% FDR proteins features
+#         ax = fig.add_subplot(3, 1, 3)
+#         bns = np.arange(np.log10(df0['intensityApex'].min()) - 0.5, np.log10(df0['intensityApex'].max()) + 0.5, 0.5)
+#         ax.hist(np.log10(df0['intensityApex']), bins = bns)
+#         ax.set_xlabel('log10(Intensity)', size=16)
+#         ax.set_ylabel('# features', size=16)
+
+#         plt.savefig(base_out_name + '.png')
+
+#     final_iteration(resdict, mass_diff, rt_diff, protsN, args)
+
+
+# def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2, win_sys=False):
+
+#     for item in (iter(qin.get, None) if not win_sys else qin):
+#         print(item)
+#         mass_koef, rtt_koef = item
+
+#         # rtt_koef = 1.0
+
+#         m_k = scoreatpercentile(mass_diff, mass_koef * 100)
+#         e_ind = mass_diff <= m_k
+#         resdict2 = filter_results(resdict, e_ind)
+#         rt_diff2 = rt_diff[e_ind]
+#         # i_diff2 = i_diff[e_ind]
+
+#         # r_k = scoreatpercentile(rt_diff2, rtt_koef * 100)
+#         # e_ind = rt_diff2 <= r_k
+#         # resdict2 = filter_results(resdict2, e_ind)
+#         # i_diff3 = i_diff2[e_ind]
+
+#         # r_k = scoreatpercentile(-i_diff3, i_koef * 100)
+#         # e_ind = -i_diff3 <= r_k
+#         # resdict2 = filter_results(resdict2, e_ind)
+
+
+
+#         # m_k = scoreatpercentile(mass_diff, mass_koef * 100)
+#         # r_k = scoreatpercentile(rt_diff, rtt_koef * 100)
+#         # i_k = scoreatpercentile(-i_diff, i_koef * 100)
+#         # e_ind1 = mass_diff <= m_k
+#         # e_ind2 = rt_diff <= r_k
+#         # e_ind3 = -i_diff <= i_k
+#         # e_ind = e_ind1 & e_ind2 & e_ind3
+
+#         # print(len(e_ind), sum(e_ind))
+
+#         # resdict2 = filter_results(resdict, e_ind)
+
+
+
+#         # resdict2 = filter_results(resdict, e_ind)
+#         # rt_diff2 = rt_diff[e_ind]
+#         # i_diff2 = i_diff[e_ind]
+
+#         r_k = scoreatpercentile(rt_diff2, rtt_koef * 100)
+#         e_ind = rt_diff2 <= r_k
+#         resdict2 = filter_results(resdict2, e_ind)
+#         # i_diff3 = i_diff2[e_ind]
+
+#         # r_k = scoreatpercentile(-i_diff3, i_koef * 100)
+#         # e_ind = -i_diff3 <= r_k
+#         # resdict2 = filter_results(resdict2, e_ind)
+
+
+#         features_dict = dict()
+#         for pep in set(resdict2['seqs']):
+#             for bprot in pept_prot[pep]:
+#                 prot_score = prots_spc_basic2[bprot]
+#                 if prot_score > features_dict.get(pep, [-1, ])[-1]:
+#                     features_dict[pep] = (bprot, prot_score)
+
+#         prots_spc_basic = dict()
+
+#         p1 = set(resdict2['seqs'])
+
+#         pep_pid = defaultdict(set)
+#         pid_pep = defaultdict(set)
+#         banned_dict = dict()
+#         for pep, pid in zip(resdict2['seqs'], resdict2['ids']):
+#             pep_pid[pep].add(pid)
+#             pid_pep[pid].add(pep)
+#             if pep in banned_dict:
+#                 banned_dict[pep] += 1
+#             else:
+#                 banned_dict[pep] = 1
+
+#         if len(p1):
+#             prots_spc_final = dict()
+#             prots_spc_copy = False
+#             prots_spc2 = False
+#             unstable_prots = set()
+#             p0 = False
+
+#             names_arr = False
+#             tmp_spc_new = False
+#             decoy_set = False
+
+#             while 1:
+#                 if not prots_spc2:
+
+#                     best_match_dict = dict()
+#                     n_map_dict = defaultdict(list)
+#                     for k, v in protsN.items():
+#                         n_map_dict[v].append(k)
+
+#                     decoy_set = set()
+#                     for k in protsN:
+#                         if isdecoy_key(k):
+#                             decoy_set.add(k)
+#                     decoy_set = list(decoy_set)
+                    
+
+#                     prots_spc2 = defaultdict(set)
+#                     for pep, proteins in pept_prot.items():
+#                         if pep in p1:
+#                             for protein in proteins:
+#                                 if protein == features_dict[pep][0]:
+#                                     prots_spc2[protein].add(pep)
+
+#                     for k in protsN:
+#                         if k not in prots_spc2:
+#                             prots_spc2[k] = set([])
+#                     prots_spc2 = dict(prots_spc2)
+#                     unstable_prots = set(prots_spc2.keys())
+
+#                     top100decoy_N = sum([val for key, val in protsN.items() if isdecoy_key(key)])
+
+#                     names_arr = np.array(list(prots_spc2.keys()))
+#                     n_arr = np.array([protsN[k] for k in names_arr])
+
+#                     tmp_spc_new = dict((k, len(v)) for k, v in prots_spc2.items())
+
+
+#                     top100decoy_score_tmp = [tmp_spc_new.get(dprot, 0) for dprot in decoy_set]
+#                     top100decoy_score_tmp_sum = float(sum(top100decoy_score_tmp))
+
+#                 tmp_spc = tmp_spc_new
+#                 prots_spc = tmp_spc_new
+#                 if not prots_spc_copy:
+#                     prots_spc_copy = deepcopy(prots_spc)
+
+#                 for idx, v in enumerate(decoy_set):
+#                     if v in unstable_prots:
+#                         top100decoy_score_tmp_sum -= top100decoy_score_tmp[idx]
+#                         top100decoy_score_tmp[idx] = prots_spc.get(v, 0)
+#                         top100decoy_score_tmp_sum += top100decoy_score_tmp[idx]
+#                 p = float(sum(top100decoy_score_tmp)) / top100decoy_N
+#                 p = top100decoy_score_tmp_sum / top100decoy_N
+#                 if not p0:
+#                     p0 = float(p)
+
+#                 n_change = set(protsN[k] for k in unstable_prots)
+#                 for n_val in n_change:
+#                     for k in n_map_dict[n_val]:
+#                         v = prots_spc[k]
+#                         if n_val not in best_match_dict or v > prots_spc[best_match_dict[n_val]]:
+#                             best_match_dict[n_val] = k
+#                 n_arr_small = []
+#                 names_arr_small = []
+#                 v_arr_small = []
+#                 for k, v in best_match_dict.items():
+#                     n_arr_small.append(k)
+#                     names_arr_small.append(v)
+#                     v_arr_small.append(prots_spc[v])
+
+#                 prots_spc_basic = dict()
+#                 all_pvals = calc_sf_all(v_arr_small, n_arr_small, p)
+#                 for idx, k in enumerate(names_arr_small):
+#                     prots_spc_basic[k] = all_pvals[idx]
+
+#                 best_prot = utils.keywithmaxval(prots_spc_basic)
+
+#                 best_score = prots_spc_basic[best_prot]
+#                 unstable_prots = set()
+#                 if best_prot not in prots_spc_final:
+#                     prots_spc_final[best_prot] = best_score
+#                     banned_pids = set()
+#                     for pep in prots_spc2[best_prot]:
+#                         for pid in pep_pid[pep]:
+#                             banned_pids.add(pid)
+#                     for pid in banned_pids:
+#                         for pep in pid_pep[pid]:
+#                             banned_dict[pep] -= 1
+#                             if banned_dict[pep] == 0:
+#                                 best_prot_val = features_dict[pep][0]
+#                                 for bprot in pept_prot[pep]:
+#                                     if bprot == best_prot_val:
+#                                         tmp_spc_new[bprot] -= 1
+#                                         unstable_prots.add(bprot)
+#                 else:
+
+#                     v_arr = np.array([prots_spc[k] for k in names_arr])
+#                     all_pvals = calc_sf_all(v_arr, n_arr, p)
+#                     for idx, k in enumerate(names_arr):
+#                         prots_spc_basic[k] = all_pvals[idx]
+
+#                     for k, v in prots_spc_basic.items():
+#                         if k not in prots_spc_final:
+#                             prots_spc_final[k] = v
+
+#                     break
+
+#                 try:
+#                     prot_fdr = aux.fdr(prots_spc_final.items(), is_decoy=isdecoy)
+#                 except ZeroDivisionError:
+#                     prot_fdr = 100.0
+#                 if prot_fdr >= 12.5 * fdr:
+
+#                     v_arr = np.array([prots_spc[k] for k in names_arr])
+#                     all_pvals = calc_sf_all(v_arr, n_arr, p)
+#                     for idx, k in enumerate(names_arr):
+#                         prots_spc_basic[k] = all_pvals[idx]
+
+#                     for k, v in prots_spc_basic.items():
+#                         if k not in prots_spc_final:
+#                             prots_spc_final[k] = v
+#                     break
+
+#         if mass_koef + rtt_koef >= 1.99:
+#             item2 = prots_spc_copy
+#         else:
+#             item2 = False
+#         if not win_sys:
+#             qout.put((prots_spc_final, item2))
+#         else:
+#             qout.append((prots_spc_final, item2))
+#     if not win_sys:
+#         qout.put(None)
+#     else:
+#         return qout
