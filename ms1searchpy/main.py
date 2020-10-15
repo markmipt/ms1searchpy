@@ -1,5 +1,4 @@
 import os
-import pickle
 from . import utils
 import numpy as np
 from scipy.stats import scoreatpercentile
@@ -71,7 +70,6 @@ from sklearn import (
 
 import scipy
 from scipy.stats import rankdata
-import pickle
 from copy import deepcopy
 import csv
 
@@ -533,7 +531,7 @@ def prepare_peptide_processor(fname, args):
         avraw.append(avr)
         imraw.append(im)
 
-    print(len(nmasses))
+    print('Number of peptide isotopic clusters: %d' % (len(nmasses), ))
 
     i = np.argsort(nmasses)
     nmasses = np.array(nmasses)[i]
@@ -611,7 +609,6 @@ def process_peptides(args):
         base_out_name = os.path.splitext(fname)[0]
 
     out_log = open(base_out_name + '_log.txt', 'w')
-    print(base_out_name + '_log.txt')
     out_log.close()
     out_log = open(base_out_name + '_log.txt', 'w')
 
@@ -660,12 +657,8 @@ def process_peptides(args):
     # e_ind = resdict['Isotopes'] >= 1
     resdict2 = filter_results(resdict, e_ind)
 
-    print(len(resdict2['seqs']))
-
     e_ind = resdict2['mc'] == 0
     resdict2 = filter_results(resdict2, e_ind)
-
-    print(len(resdict2['seqs']))
 
     p1 = set(resdict2['seqs'])
 
@@ -710,10 +703,6 @@ def process_peptides(args):
         filtered_prots = aux.filter(prots_spc.items(), fdr=fdr, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
                                     full_output=True)
 
-        print(sorted(prots_spc.items(), key=lambda x: -x[1])[:15])
-
-        print(len(filtered_prots))
-
         identified_proteins = 0
 
         for x in filtered_prots:
@@ -726,9 +715,6 @@ def process_peptides(args):
         e_ind = resdict['mc'] == 0
         resdict2 = filter_results(resdict, e_ind)
 
-        print(len(resdict2['seqs']))
-
-
         true_md = []
         true_isotopes = []
         true_seqs = []
@@ -736,8 +722,6 @@ def process_peptides(args):
         for pep, proteins in pept_prot.items():
             if any(protein in true_prots for protein in proteins):
                 true_seqs.append(pep)
-
-        # true_seqs = list(resdict2['seqs'])
 
         e_ind = np.in1d(resdict2['seqs'], true_seqs)
 
@@ -750,14 +734,8 @@ def process_peptides(args):
         true_rt = np.array(resdict2['rt'][e_ind])
         true_mz = np.array(resdict2['mzraw'][e_ind])
 
-        import pickle
-        pickle.dump(true_md, open('/home/mark/true_md.pickle', 'wb'))
-        pickle.dump(true_intensities, open('/home/mark/true_intensities.pickle', 'wb'))
-        pickle.dump(true_rt, open('/home/mark/true_rt.pickle', 'wb'))
-        pickle.dump(true_mz, open('/home/mark/true_mz.pickle', 'wb'))
-
         df1 = pd.DataFrame()
-        df1['mass diff'] = true_md# * true_mz / 1e6
+        df1['mass diff'] = true_md
         df1['mz'] = true_mz
         df1['RT'] = true_rt
         df1['Intensity'] = true_intensities
@@ -914,48 +892,33 @@ def process_peptides(args):
             outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
             outres_name = outres.name
             outres.close()
-            # ns = true_seqs[~outmask]
-            # nr = true_rt[~outmask]
             ns = true_seqs
             nr = true_rt
-            print(len(ns))
+            print('Peptides used for RT prediction: %d' % (len(ns), ))
             ns2 = true_seqs2
             nr2 = true_rt2
-            print(len(ns2))
-            # ll = len(ns)
-            # ns = ns[:ll]
-            # nr = nr[:ll]
-
-            # train_dict = {}
 
             outtrain.write('seq,modifications,tr\n')
             for seq, RT in zip(ns2, nr2):
-                # train_dict[seq] = RT
                 mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
-                # df1['modifications'] = df1['seq'].apply(lambda x: '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(x) if aa == 'C']))
                 outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
             outtrain.flush()
 
             outcalib.write('seq,modifications,tr\n')
             for seq, RT in zip(ns, nr):
-                # train_dict[seq] = RT
                 mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
-                # df1['modifications'] = df1['seq'].apply(lambda x: '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(x) if aa == 'C']))
                 outcalib.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
             outcalib.flush()
 
             subprocess.call([deeplc_path, '--file_pred', outcalib.name, '--file_cal', outtrain.name, '--file_pred_out', outres_name])
-            # subprocess.call([elude_path, '-t', outtrain.name, '-e', outtrain.name, '-a', '-g', '-o', outres_name])
             pepdict = dict()
             train_RT = []
             train_seq = []
             for x in open(outres_name).readlines()[1:]:
-                # print(x.strip())
                 _, seq, _, RTexp, RT = x.strip().split(',')
                 pepdict[seq] = float(RT)
                 train_seq.append(seq)
                 train_RT.append(float(RTexp))
-                # train_RT.append(float(train_dict[seq]))
 
 
             train_RT = np.array(train_RT)
@@ -964,9 +927,6 @@ def process_peptides(args):
             rt_diff_tmp = RT_pred - train_RT
             RT_left = -min(rt_diff_tmp)
             RT_right = max(rt_diff_tmp)
-
-            # import random
-            # random.shuffle(rt_diff_tmp)
 
             try:
                 start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 100
@@ -981,14 +941,6 @@ def process_peptides(args):
             print('Calibrated RT shift: ', XRT_shift)
             print('Calibrated RT sigma: ', XRT_sigma)
 
-            # ns = np.array(ns)
-            # nr = np.array(nr)
-            # idx = np.abs((rt_diff_tmp) - XRT_shift) <= 3 * XRT_sigma
-            # ns = ns[idx]
-            # nr = nr[idx]
-            # RT_pred = RT_pred[idx]
-            # train_RT = train_RT[idx]
-
             aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
 
         else:
@@ -999,17 +951,11 @@ def process_peptides(args):
                 outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
                 outres_name = outres.name
                 outres.close()
-                # ns = true_seqs[~outmask]
-                # nr = true_rt[~outmask]
                 ns = true_seqs
                 nr = true_rt
-                print(len(ns))
+                print('Peptides used for RT prediction: %d' % (len(ns), ))
                 ns2 = true_seqs2
                 nr2 = true_rt2
-                print(len(ns2))
-                # ll = len(ns)
-                # ns = ns[:ll]
-                # nr = nr[:ll]
                 for seq, RT in zip(ns, nr):
                     outtrain.write(seq + '\t' + str(RT) + '\n')
                 outtrain.flush()
@@ -1033,9 +979,6 @@ def process_peptides(args):
                 RT_left = -min(rt_diff_tmp)
                 RT_right = max(rt_diff_tmp)
 
-                # import random
-                # random.shuffle(rt_diff_tmp)
-
                 start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
                 XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
                 if np.isinf(covvalue):
@@ -1051,7 +994,6 @@ def process_peptides(args):
                 nr = true_rt
                 ns2 = true_seqs2
                 nr2 = true_rt2
-                # RC = achrom.get_RCs_vary_lcp(true_seqs[~outmask], true_rt[~outmask])
                 RC = achrom.get_RCs_vary_lcp(ns2, nr2)
                 RT_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
                 train_RT = nr
@@ -1074,8 +1016,8 @@ def process_peptides(args):
 
 
 
-        best_sigma = XRT_sigma#ss
-        RT_sigma = XRT_sigma#best_sigma
+        best_sigma = XRT_sigma
+        RT_sigma = XRT_sigma
 
     else:
         print('No matches found')
@@ -1098,33 +1040,26 @@ def process_peptides(args):
             outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
             outres_name = outres.name
             outres.close()
-            print(len(ns))
+            print('Peptides used for RT prediction: %d' % (len(ns), ))
             ll = len(ns)
             ns = ns[:ll]
             nr = nr[:ll]
 
-            # train_dict = {}
-
             outtrain.write('seq,modifications,tr\n')
             for seq, RT in zip(ns, nr):
-                # train_dict[seq] = RT
                 mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
-                # df1['modifications'] = df1['seq'].apply(lambda x: '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(x) if aa == 'C']))
                 outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
             outtrain.flush()
 
             subprocess.call([deeplc_path, '--file_pred', outtrain.name, '--file_cal', outtrain.name, '--file_pred_out', outres_name])
-            # subprocess.call([elude_path, '-t', outtrain.name, '-e', outtrain.name, '-a', '-g', '-o', outres_name])
             pepdict = dict()
             train_RT = []
             train_seq = []
             for x in open(outres_name).readlines()[1:]:
-                # print(x.strip())
                 _, seq, _, RTexp, RT = x.strip().split(',')
                 pepdict[seq] = float(RT)
                 train_seq.append(seq)
                 train_RT.append(float(RTexp))
-                # train_RT.append(float(train_dict[seq]))
 
 
             train_RT = np.array(train_RT)
@@ -1133,9 +1068,6 @@ def process_peptides(args):
             rt_diff_tmp = RT_pred - train_RT
             RT_left = -min(rt_diff_tmp)
             RT_right = max(rt_diff_tmp)
-
-            # import random
-            # random.shuffle(rt_diff_tmp)
 
             try:
                 start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 100
@@ -1159,10 +1091,6 @@ def process_peptides(args):
                 outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
                 outres_name = outres.name
                 outres.close()
-                # ns = true_seqs[~outmask]
-                # nr = true_rt[~outmask]
-                # ns = true_seqs
-                # nr = true_rt
                 print(len(ns))
                 ll = len(ns)
                 ns = ns[:ll]
@@ -1187,9 +1115,6 @@ def process_peptides(args):
                 RT_left = -min(rt_diff_tmp)
                 RT_right = max(rt_diff_tmp)
 
-                # import random
-                # random.shuffle(rt_diff_tmp)
-
                 start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
                 XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
                 if np.isinf(covvalue):
@@ -1201,7 +1126,6 @@ def process_peptides(args):
 
                 aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
             else:
-                # RC = achrom.get_RCs_vary_lcp(true_seqs[~outmask], true_rt[~outmask])
                 RC = achrom.get_RCs_vary_lcp(ns, nr)
                 RT_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
                 aa, bb, RR, ss = aux.linear_regression(RT_pred, nr)
@@ -1223,8 +1147,8 @@ def process_peptides(args):
 
 
 
-        best_sigma = XRT_sigma#ss
-        RT_sigma = XRT_sigma#best_sigma
+        best_sigma = XRT_sigma
+        RT_sigma = XRT_sigma
 
 
     out_log.write('Calibrated RT shift: %s\n' % (XRT_shift, ))
@@ -1241,18 +1165,15 @@ def process_peptides(args):
         pepdict = dict()
 
         outtrain = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
-        outtrain2 = open('/home/mark/deeplc_train.txt', 'w')
         outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
         outres_name = outres.name
         outres.close()
 
 
         outtrain.write('seq,modifications,tr\n')
-        outtrain2.write('seq,modifications,tr\n')
         for seq, RT in zip(ns, nr):
             mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
             outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
-            outtrain2.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
         outtrain.flush()
 
         outtest = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
@@ -1265,14 +1186,12 @@ def process_peptides(args):
         outtest.flush()
 
         subprocess.call([deeplc_path, '--file_pred', outtest.name, '--file_cal', outtrain.name, '--file_pred_out', outres_name])
-        # subprocess.call([elude_path, '-t', outtrain.name, '-e', outtrain.name, '-a', '-g', '-o', outres_name])
         for x in open(outres_name).readlines()[1:]:
             _, seq, _, RT = x.strip().split(',')
             pepdict[seq] = float(RT)
 
         outtest.close()
         outtrain.close()
-        outtrain2.close()
     else:
 
         if n == 1 or os.name == 'nt':
@@ -1306,10 +1225,9 @@ def process_peptides(args):
 
     rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
     rt_diff = resdict['rt'] - rt_pred
-    # random.shuffle(rt_diff)
     e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
     zs_all = zs_all + e_all
-    r = 9.0#16.0#9.0
+    r = 9.0
     e_ind = e_all <= r
     resdict = filter_results(resdict, e_ind)
     rt_diff = rt_diff[e_ind]
@@ -1327,8 +1245,6 @@ def process_peptides(args):
         for seq, md, rtd, peak_id, I, nScans, nIsotopes, mzr, rtr, av, ch, im in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['ids'], resdict['Is'], resdict['Scans'], resdict['Isotopes'], resdict['mzraw'], resdict['rt'], resdict['av'], resdict['ch'], resdict['im']):
             output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), str(nScans), str(nIsotopes), ';'.join(pept_prot[seq]), str(mzr), str(rtr), str(av), str(ch), str(im))) + '\n')
             
-    # mass_diff = np.abs(resdict['md'] - mass_shift) / (mass_sigma)
-    # rt_diff = np.abs(resdict['rt'] - rt_pred) / RT_sigma
     mass_diff = (resdict['md'] - mass_shift) / (mass_sigma)
     rt_diff = (resdict['rt'] - rt_pred) / RT_sigma
 
@@ -1367,15 +1283,9 @@ def process_peptides(args):
             'decoy',
             'preds',
             'av',
-            'best_prot_rank',
             'Scans',
-            'IntensityNorm',
-            'IntensityNorm_predicted',
             'proteins',
             'peptide',
-            'bestprotein',
-            'IntensityNorm_diff',
-            'im_predicted',
         }
         for feature in feature_columns:
             if feature in banned_features or feature.startswith('c_'):
@@ -1443,9 +1353,6 @@ def process_peptides(args):
         return results 
 
     def get_cat_model_pfms(df, hyperparameters, feature_columns, train, test):
-        
-    #     train = df[df['era'].isin(train_eras)]
-    #     test = df[df['era'].isin(test_eras)]
         feature_columns = list(feature_columns)
         dtrain = lgb.Dataset(get_X_array(train, feature_columns), get_Y_array_pfms(train), feature_name=feature_columns, free_raw_data=False)
         dvalid = lgb.Dataset(get_X_array(test, feature_columns), get_Y_array_pfms(test), feature_name=feature_columns, free_raw_data=False)
@@ -1470,9 +1377,6 @@ def process_peptides(args):
     df1['rt_diff'] = rt_diff
     df1['decoy'] = df1['seqs'].apply(lambda x: all(z.startswith(prefix) for z in pept_prot[x]))
 
-    print(sum(df1['decoy']), sum(~df1['decoy']))
-
-    # df1['ids_count'] = df1.groupby('ids')['seqs'].transform('count')
     df1['peptide'] = df1['seqs']
     mass_dict = {}
     pI_dict = {}
@@ -1505,7 +1409,7 @@ def process_peptides(args):
 
         print('Start Machine Learning on PFMs...')
 
-        print(get_features_pfms(df1))
+        print('Features used for MachineLearning: ', get_features_pfms(df1))
 
         MAX_EVALS = 25
         out_file = 'test_randomCV_PFMs_2.csv'
@@ -1535,8 +1439,6 @@ def process_peptides(args):
         bestparams['num_threads'] = 5
         print(random_results.sort_values(by='auc',ascending=False)['auc'].values[0])
 
-
-
         groups = df1['peptide']
         ix = df1.index.values
         unique = np.unique(groups)
@@ -1564,8 +1466,6 @@ def process_peptides(args):
     resdict['qpreds'] = df1['qpreds'].values
     mass_diff = resdict['qpreds']
     rt_diff = resdict['qpreds']
-
-    pickle.dump(resdict, open('/home/mark/resdict.pickle', 'wb'))
 
     p1 = set(resdict['seqs'])
 
@@ -1600,7 +1500,6 @@ def process_peptides(args):
 def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2, win_sys=False):
 
     for item in (iter(qin.get, None) if not win_sys else qin):
-        print(item)
         mass_koef, rtt_koef = item
         e_ind = mass_diff <= mass_koef
         resdict2 = filter_results(resdict, e_ind)
