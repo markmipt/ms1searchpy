@@ -42,7 +42,6 @@ def run():
             else:
                 try:
                     df2 = pd.read_csv(filen.replace('_PFMs_ML.csv', '_proteins_full.csv'), sep='\t')
-                    # print(df2.head())
                 except:
                     print('Proteins_full file is missing!')
                     break
@@ -71,8 +70,6 @@ def run():
 
     resdict['qpreds'] = df1['qpreds'].values
     resdict['preds'] = df1['preds'].values
-    resdict['IntensityNorm'] = df1['IntensityNorm'].values
-    resdict['IntensityNorm_predicted'] = df1['IntensityNorm_predicted'].values
     resdict['seqs'] = df1['peptide'].values
     resdict['ids'] = df1['ids'].values
 
