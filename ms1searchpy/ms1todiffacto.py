@@ -34,6 +34,7 @@ def run():
     parser.add_argument('-S12', nargs='+', help='input files for S12 sample')
     parser.add_argument('-peptides', help='name of output peptides file', default='peptides.txt')
     parser.add_argument('-samples', help='name of output samples file', default='sample.txt')
+    parser.add_argument('-allowed_prots', help='path to allowed prots', default='')
     parser.add_argument('-out', help='name of diffacto output file', default='diffacto_out.txt')
     parser.add_argument('-norm', help='normalization method. Can be average, median, GMM or None', default='None')
     parser.add_argument('-impute_threshold', help='impute_threshold for missing values fraction', default='0.75')
@@ -49,14 +50,19 @@ def run():
     allowed_prots_top10 = set()
     allowed_peptides = set()
 
-    for i in range(1, 13, 1):
-        sample_num = 'S%d' % (i, )#sample_num in ['S1', 'S2', 'S3', 'S4']:
-        if args[sample_num]:
-            for z in args[sample_num]:
-                df0 = pd.read_table(z)
-                allowed_prots.update(df0['dbname'])
-                # allowed_prots.update(df0['dbname'][:2000].values)
-                allowed_prots_top10.update(df0['dbname'][:10].values)
+    if not args['allowed_prots']:
+
+        for i in range(1, 13, 1):
+            sample_num = 'S%d' % (i, )#sample_num in ['S1', 'S2', 'S3', 'S4']:
+            if args[sample_num]:
+                for z in args[sample_num]:
+                    df0 = pd.read_table(z)
+                    allowed_prots.update(df0['dbname'])
+                    # allowed_prots.update(df0['dbname'][:2000].values)
+                    allowed_prots_top10.update(df0['dbname'][:10].values)
+    else:
+        for prot in open(args['allowed_prots'], 'r'):
+            allowed_prots.add(prot.strip())
 
 
     for i in range(1, 13, 1):
@@ -79,6 +85,7 @@ def run():
 
 
                 df3 = df3[df3['proteins'].apply(lambda x: any(z in allowed_prots for z in x.split(';')))]
+                df3['sequence'] = df3['sequence'] + df3['charge'].astype(str)
                 df3 = df3.groupby('sequence').agg({'Intensity': np.max, 'proteins': lambda x: x.values[0]})
                 df3[label] = df3['Intensity']
                 df3['sequence'] = df3.index
