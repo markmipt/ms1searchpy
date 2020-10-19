@@ -22,6 +22,7 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
         header = next(csvreader)#.next()
 
         mass_ind = header.index('massCalib')
+        # mass_ind = header.index('mass')
         # mass_ind = header.index('mostAbundantMz')
         RT_ind = header.index('rtApex')
         ch_ind = header.index('charge')
@@ -40,10 +41,31 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
             mz_ind = header.index('mz')
         except:
             mz_ind = -1
+
+
+        # try:
+        #     FAIMS_ind = header.index('FAIMS')
+        # except:
+        #     FAIMS_ind = -1
+
+
+        try:
+            FAIMS_ind = header.index('FAIMS')
+        except:
+            FAIMS_ind = -1
+
         try:
             av_ind = header.index('averagineCorr')
+            # av_ind = header.index('intensity_experimental')
         except:
             av_ind = -1
+
+
+        try:
+            mz3_ind = header.index('mz3')
+        except:
+            mz3_ind = -1
+
         idx = 0
         for z in csvreader:
             nm = float(z[mass_ind])
@@ -61,10 +83,14 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
             # nScans = 4
             I = float(z[Int_ind])
             mz = float(z[mz_ind]) if mz_ind >= 0 else 0
-            av = float(z[av_ind]) if av_ind >= 0 else 0
+            mz3 = float(z[mz3_ind]) if mz3_ind >= 0 else 0
+            im = float(z[FAIMS_ind]) if FAIMS_ind >= 0 else 0
+            # av = float(z[av_ind]) if av_ind >= 0 else 0
+            av = str(z[av_ind])
             idx += 1
             if nIsotopes >= min_isotopes and min_ch <= ch <= max_ch and min_scans <= nScans:
-                yield nm, RT, ch, idx, I, nScans, nIsotopes, mz, av
+                yield nm, RT, ch, idx, I, nScans, nIsotopes, mz, av, im
+                # yield nm, RT, ch, idx, I, nScans, nIsotopes, mz, av, mz3
 
 
 def peptide_gen(args):

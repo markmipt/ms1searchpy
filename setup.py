@@ -26,5 +26,7 @@ setup(
     packages             = find_packages(),
     package_data         = {'ms1searchpy': ['Dinosaur/*']},
     entry_points         = {'console_scripts': ['ms1searchpy = ms1searchpy.search:run',
+                                                'ms1combine = ms1searchpy.combine:run',
+                                                'ms1tonsaf = ms1searchpy.ms1tonsaf:run',
                                                 'ms1todiffacto = ms1searchpy.ms1todiffacto:run',]}
     )

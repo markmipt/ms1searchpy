@@ -34,24 +34,35 @@ def run():
     parser.add_argument('-S12', nargs='+', help='input files for S12 sample')
     parser.add_argument('-peptides', help='name of output peptides file', default='peptides.txt')
     parser.add_argument('-samples', help='name of output samples file', default='sample.txt')
+    parser.add_argument('-allowed_prots', help='path to allowed prots', default='')
     parser.add_argument('-out', help='name of diffacto output file', default='diffacto_out.txt')
     parser.add_argument('-norm', help='normalization method. Can be average, median, GMM or None', default='None')
     parser.add_argument('-impute_threshold', help='impute_threshold for missing values fraction', default='0.75')
     parser.add_argument('-min_samples', help='minimum number of samples for peptide usage', default='3')
     args = vars(parser.parse_args())
 
+    # replace_label = '_proteins_full.csv'
+    replace_label = '_proteins.csv'
 
     df_final = False
 
     allowed_prots = set()
+    allowed_prots_top10 = set()
     allowed_peptides = set()
 
-    for i in range(1, 13, 1):
-        sample_num = 'S%d' % (i, )#sample_num in ['S1', 'S2', 'S3', 'S4']:
-        if args[sample_num]:
-            for z in args[sample_num]:
-                df0 = pd.read_table(z)
-                allowed_prots.update(df0['dbname'])
+    if not args['allowed_prots']:
+
+        for i in range(1, 13, 1):
+            sample_num = 'S%d' % (i, )#sample_num in ['S1', 'S2', 'S3', 'S4']:
+            if args[sample_num]:
+                for z in args[sample_num]:
+                    df0 = pd.read_table(z)
+                    allowed_prots.update(df0['dbname'])
+                    # allowed_prots.update(df0['dbname'][:2000].values)
+                    allowed_prots_top10.update(df0['dbname'][:10].values)
+    else:
+        for prot in open(args['allowed_prots'], 'r'):
+            allowed_prots.add(prot.strip())
 
 
     for i in range(1, 13, 1):
@@ -59,10 +70,11 @@ def run():
     # for sample_num in ['S1', 'S2', 'S3', 'S4']:
         if args[sample_num]:
             for z in args[sample_num]:
-                label = z.replace('_proteins.csv', '')
+                label = z.replace(replace_label, '')
                 df1 = pd.read_table(z)
-                df3 = pd.read_table(z.replace('_proteins.csv', '_PFMs.csv'))
-                print(z.replace('_proteins.csv', '_PFMs.csv'))
+                df3 = pd.read_table(z.replace(replace_label, '_PFMs.csv'))
+                print(z)
+                print(z.replace(replace_label, '_PFMs.csv'))
                 print(df3.shape)
                 print(df3.columns)
                 # df1 = pd.read_table(z.replace('_proteins.tsv', '_PSMs.tsv'))
@@ -73,6 +85,7 @@ def run():
 
 
                 df3 = df3[df3['proteins'].apply(lambda x: any(z in allowed_prots for z in x.split(';')))]
+                df3['sequence'] = df3['sequence'] + df3['charge'].astype(str)
                 df3 = df3.groupby('sequence').agg({'Intensity': np.max, 'proteins': lambda x: x.values[0]})
                 df3[label] = df3['Intensity']
                 df3['sequence'] = df3.index
@@ -93,12 +106,20 @@ def run():
                 # df1 = df1[df1['protein'].apply(lambda z: z != '')]
                 # df1 = df1[['peptide', 'protein', label]]
                 if df_final is False:
+                    label_basic = label
                     df_final = df3.reset_index(drop=True)
                 else:
                     df_final = df_final.reset_index(drop=True).merge(df3.reset_index(drop=True), on='peptide', how='outer')#.set_index('peptide')
                     # df_final = df_final.merge(df1, on='peptide', how='outer')
                     df_final.protein_x.fillna(value=df_final.protein_y, inplace=True)
                     df_final['protein'] = df_final['protein_x']
+
+                    # df_final_top100 = df_final[df_final['protein'].apply(lambda x: x in allowed_prots_top10)]
+                    # df_final_top100 = df_final_top100[~df_final_top100[label].isnull() & ~df_final_top100[label_basic].isnull()]
+                    # norm_k = np.median(df_final_top100[label]/df_final_top100[label_basic])
+                    # print(len(df_final_top100))
+                    # print(norm_k)
+
                     df_final = df_final.drop(columns=['protein_x', 'protein_y'])
 
 
@@ -110,6 +131,7 @@ def run():
     cols.remove('proteins')
     cols.insert(0, 'proteins')
     df_final = df_final[cols]
+    # df_final = df_final[(~df_final.isnull()).sum(axis=1) >= 4]
     df_final.fillna(value='')
     df_final.to_csv(args['peptides'], sep=',')
 
@@ -117,7 +139,7 @@ def run():
     for sample_num in ['S1', 'S2', 'S3', 'S4']:
         if args[sample_num]:
             for z in args[sample_num]:
-                label = z.replace('_proteins.csv', '')
+                label = z.replace(replace_label, '')
                 out.write(label + '\t' + sample_num + '\n')
     out.close()
 
