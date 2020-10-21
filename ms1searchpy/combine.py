@@ -64,7 +64,7 @@ def run():
     isdecoy = lambda x: x[0].startswith(prefix)
     isdecoy_key = lambda x: x.startswith(prefix)
     escore = lambda x: -x[1]
-    fdr = args['fdr']
+    fdr = float(args['fdr']) / 100
 
     resdict = dict()
 
