@@ -164,7 +164,9 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
     pep_pid = defaultdict(set)
     pid_pep = defaultdict(set)
     banned_dict = dict()
-    for pep, pid in zip(resdict['seqs'], resdict['ids']):
+    # for pep, pid in zip(resdict['seqs'], resdict['ids']):
+    for pep, pid in zip(resdict['seqs'], [ids[iorig] for iorig in resdict['iorig']]):
+        
         pep_pid[pep].add(pid)
         pid_pep[pid].add(pep)
         if pep in banned_dict:
@@ -485,8 +487,9 @@ def peptide_processor(peptide, **kwargs):
         peak_id = ids[i]
         I = Is[i]
         massdiff = (m - nmasses[i]) / m * 1e6
-        massdiff3 = (m - imraw[i]) / m * 1e6
-        results.append((seqm, massdiff, rts[i], peak_id, I, Scans[i], Isotopes[i], mzraw[i], avraw[i], charges[i], imraw[i], massdiff3))
+        # massdiff3 = (m - imraw[i]) / m * 1e6
+        # results.append((seqm, massdiff, rts[i], peak_id, I, Scans[i], Isotopes[i], mzraw[i], avraw[i], charges[i], imraw[i], massdiff3))
+        results.append((seqm, massdiff, i))#rts[i], peak_id, I, Scans[i], Isotopes[i], mzraw[i], avraw[i], charges[i], imraw[i], massdiff3))
     return results
 
 
@@ -573,15 +576,16 @@ def get_results(ms1results):
     labels = [
         'seqs',
         'md',
-        'rt',
-        'ids',
-        'Is',
-        'Scans',
-        'Isotopes',
-        'mzraw',
-        'av',
-        'ch',
-        'im',
+        'iorig',
+        # 'rt',
+        # 'ids',
+        # 'Is',
+        # 'Scans',
+        # 'Isotopes',
+        # 'mzraw',
+        # 'av',
+        # 'ch',
+        # 'im',
     ]
     for label, val in zip(labels, zip(*ms1results)):
         resdict[label] = np.array(val)
@@ -643,7 +647,7 @@ def process_peptides(args):
     resdict = get_results(ms1results)
     del ms1results
 
-    resdict['mc'] = np.array([parser.num_sites(z, args['enzyme']) for z in resdict['seqs']])
+    # resdict['mc'] = np.array([parser.num_sites(z, args['enzyme']) for z in resdict['seqs']])
     # resdict['mc'] = resdict['im']
 
     isdecoy = lambda x: x[0].startswith(prefix)
@@ -653,12 +657,13 @@ def process_peptides(args):
     # e_ind = resdict['mc'] == 0
     # resdict2 = filter_results(resdict, e_ind)
 
-    e_ind = resdict['Isotopes'] >= min_isotopes_calibration
+    e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
+    # e_ind = resdict['Isotopes'] >= min_isotopes_calibration
     # e_ind = resdict['Isotopes'] >= 1
     resdict2 = filter_results(resdict, e_ind)
 
-    e_ind = resdict2['mc'] == 0
-    resdict2 = filter_results(resdict2, e_ind)
+    # e_ind = resdict2['mc'] == 0
+    # resdict2 = filter_results(resdict2, e_ind)
 
     p1 = set(resdict2['seqs'])
 
@@ -712,8 +717,9 @@ def process_peptides(args):
         print('Running mass recalibration...')
 
 
-        e_ind = resdict['mc'] == 0
-        resdict2 = filter_results(resdict, e_ind)
+        # e_ind = resdict['mc'] == 0
+        # resdict2 = filter_results(resdict, e_ind)
+        resdict2 = resdict
 
         true_md = []
         true_isotopes = []
@@ -728,11 +734,15 @@ def process_peptides(args):
         true_seqs = resdict2['seqs'][e_ind]
         true_md.extend(resdict2['md'][e_ind])
         true_md = np.array(true_md)
-        true_isotopes.extend(resdict2['Isotopes'][e_ind])
+        # true_isotopes.extend(resdict2['Isotopes'][e_ind])
+        true_isotopes.extend(np.array([Isotopes[iorig] for iorig in resdict2['iorig']])[e_ind])
         true_isotopes = np.array(true_isotopes)
-        true_intensities = np.array(resdict2['Is'][e_ind])
-        true_rt = np.array(resdict2['rt'][e_ind])
-        true_mz = np.array(resdict2['mzraw'][e_ind])
+        true_intensities = np.array([Is[iorig] for iorig in resdict2['iorig']])[e_ind]
+        # true_intensities = np.array(resdict2['Is'][e_ind])
+        # true_rt = np.array(resdict2['rt'][e_ind])
+        # true_mz = np.array(resdict2['mzraw'][e_ind])
+        true_rt = np.array([rts[iorig] for iorig in resdict2['iorig']])[e_ind]
+        true_mz = np.array([mzraw[iorig] for iorig in resdict2['iorig']])[e_ind]
 
         df1 = pd.DataFrame()
         df1['mass diff'] = true_md
@@ -763,11 +773,12 @@ def process_peptides(args):
 
         zs_all = e_all[e_ind] ** 2
 
-        e_ind = resdict['mc'] == 0
-        resdict2 = filter_results(resdict, e_ind)
+        # e_ind = resdict['mc'] == 0
+        # resdict2 = filter_results(resdict, e_ind)
 
-        e_ind = resdict2['Isotopes'] >= min_isotopes_calibration
-        resdict2 = filter_results(resdict2, e_ind)
+        # e_ind = resdict2['Isotopes'] >= min_isotopes_calibration
+        e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
+        resdict2 = filter_results(resdict, e_ind)
 
         p1 = set(resdict2['seqs'])
 
@@ -822,12 +833,13 @@ def process_peptides(args):
         print('Running RT prediction...')
 
 
-        e_ind = resdict['Isotopes'] >= min_isotopes_calibration
+        e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
+        # e_ind = resdict['Isotopes'] >= min_isotopes_calibration
         # e_ind = resdict['Isotopes'] >= 1
         resdict2 = filter_results(resdict, e_ind)
 
-        e_ind = resdict2['mc'] == 0
-        resdict2 = filter_results(resdict2, e_ind)
+        # e_ind = resdict2['mc'] == 0
+        # resdict2 = filter_results(resdict2, e_ind)
 
 
         true_seqs = []
@@ -841,9 +853,12 @@ def process_peptides(args):
 
 
         true_seqs = resdict2['seqs'][e_ind]
-        true_rt.extend(resdict2['rt'][e_ind])
+
+        true_rt.extend(np.array([rts[iorig] for iorig in resdict2['iorig']])[e_ind])
+        # true_rt.extend(resdict2['rt'][e_ind])
         true_rt = np.array(true_rt)
-        true_isotopes.extend(resdict2['Isotopes'][e_ind])
+        true_isotopes.extend(np.array([Isotopes[iorig] for iorig in resdict2['iorig']])[e_ind])
+        # true_isotopes.extend(resdict2['Isotopes'][e_ind])
         true_isotopes = np.array(true_isotopes)
 
         e_all = abs(resdict2['md'][e_ind] - mass_shift) / (mass_sigma)
@@ -1224,7 +1239,8 @@ def process_peptides(args):
 
 
     rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
-    rt_diff = resdict['rt'] - rt_pred
+    rt_diff = np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred
+    # rt_diff = resdict['rt'] - rt_pred
     e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
     zs_all = zs_all + e_all
     r = 9.0
@@ -1242,18 +1258,28 @@ def process_peptides(args):
    
     with open(base_out_name + '_PFMs.csv', 'w') as output:
         output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tnScans\tnIsotopes\tproteins\tm/z\tRT\taveragineCorr\tcharge\tion_mobility\n')
-        for seq, md, rtd, peak_id, I, nScans, nIsotopes, mzr, rtr, av, ch, im in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['ids'], resdict['Is'], resdict['Scans'], resdict['Isotopes'], resdict['mzraw'], resdict['rt'], resdict['av'], resdict['ch'], resdict['im']):
+        # for seq, md, rtd, peak_id, I, nScans, nIsotopes, mzr, rtr, av, ch, im in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['ids'], resdict['Is'], resdict['Scans'], resdict['Isotopes'], resdict['mzraw'], resdict['rt'], resdict['av'], resdict['ch'], resdict['im']):
+        for seq, md, rtd, iorig in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['iorig']):
+            peak_id = ids[iorig]
+            I = Is[iorig]
+            nScans = Scans[iorig]
+            nIsotopes = Isotopes[iorig]
+            mzr = mzraw[iorig]
+            rtr = rts[iorig]
+            av = avraw[iorig]
+            ch = charges[iorig]
+            im = imraw[iorig]
             output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), str(nScans), str(nIsotopes), ';'.join(pept_prot[seq]), str(mzr), str(rtr), str(av), str(ch), str(im))) + '\n')
             
     mass_diff = (resdict['md'] - mass_shift) / (mass_sigma)
-    rt_diff = (resdict['rt'] - rt_pred) / RT_sigma
+
+    rt_diff = (np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred) / RT_sigma
+    # rt_diff = (resdict['rt'] - rt_pred) / RT_sigma
 
     prefix = 'DECOY_'
     isdecoy = lambda x: x[0].startswith(prefix)
     isdecoy_key = lambda x: x.startswith(prefix)
     escore = lambda x: -x[1]
-    fdr = 0.01
-
 
     SEED = 42
 
@@ -1278,6 +1304,7 @@ def process_peptides(args):
         feature_columns = dataframe.columns
         columns_to_remove = []
         banned_features = {
+            'iorig',
             'ids',
             'seqs',
             'decoy',
@@ -1373,6 +1400,17 @@ def process_peptides(args):
     df1 = pd.DataFrame()
     for k in resdict.keys():
         df1[k] = resdict[k]
+
+    df1['ids'] = df1['iorig'].apply(lambda x: ids[x])
+    df1['Is'] = df1['iorig'].apply(lambda x: Is[x])
+    # df1['Scans'] = df1['iorig'].apply(lambda x: Scans[x])
+    df1['Isotopes'] = df1['iorig'].apply(lambda x: Isotopes[x])
+    df1['mzraw'] = df1['iorig'].apply(lambda x: mzraw[x])
+    df1['rt'] = df1['iorig'].apply(lambda x: rts[x])
+    # df1['av'] = df1['iorig'].apply(lambda x: avraw[x])
+    # df1['ch'] = df1['iorig'].apply(lambda x: charges[x])
+    df1['im'] = df1['iorig'].apply(lambda x: imraw[x])
+
     df1['mass_diff'] = mass_diff
     df1['rt_diff'] = rt_diff
     df1['decoy'] = df1['seqs'].apply(lambda x: all(z.startswith(prefix) for z in pept_prot[x]))
@@ -1518,7 +1556,8 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
         pep_pid = defaultdict(set)
         pid_pep = defaultdict(set)
         banned_dict = dict()
-        for pep, pid in zip(resdict2['seqs'], resdict2['ids']):
+        # for pep, pid in zip(resdict2['seqs'], resdict2['ids']):
+        for pep, pid in zip(resdict2['seqs'], [ids[iorig] for iorig in resdict2['iorig']]):
             pep_pid[pep].add(pid)
             pid_pep[pid].add(pep)
             if pep in banned_dict:
