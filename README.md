@@ -1,4 +1,4 @@
-DirectMS1 - a proteomics search engine for LC-MS1 spectra
+ms1searchpy - a DirectMS1 proteomics search engine for LC-MS1 spectra
 ---------------------------------------------------------------
 
 The .tsv (or mzML) and .fasta files are required for basic operation of the script.
@@ -36,6 +36,7 @@ Dependencies
 - sklearn
 - lightgbm
 - pandas
+- biosaur
 
 Links
 -----
