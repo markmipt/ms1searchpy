@@ -323,11 +323,9 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
                 prots_spc_copy = item2
             for k in protsN:
                 if k not in prots_spc_final:
-                    prots_spc_final[k] = [item.get(k, [0, 0])[0], ]
-                    prots_spc_final2[k] = [item.get(k, [0, 0])[1], ]
+                    prots_spc_final[k] = [item.get(k, 0.0), ]
                 else:
-                    prots_spc_final[k].append(item.get(k, [0, 0])[0])
-                    prots_spc_final2[k].append(item.get(k, [0, 0])[1])
+                    prots_spc_final[k].append(item.get(k, 0.0))
 
     else:
         qin = Queue()
