@@ -49,7 +49,7 @@ Prepare shuffled!! decoy database. Python code example:
 	from pyteomics import fasta
     fasta.write_decoy_db(source='/home/test/sprot_human.fasta', output=open('/home/test/sprot_human_shuffled.fasta', 'w'), mode='shuffle').close()	
 
-Alternative way is to use -ad option in ms1searchpy for automatic decoy database creation.
+Alternative way is to use -ad 1 option in ms1searchpy for automatic decoy database creation.
 
 Run DirectMS1search:
 
