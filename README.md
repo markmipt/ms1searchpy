@@ -26,6 +26,37 @@ Installation
 Using the pip:
 
     pip install ms1searchpy
+    
+Example for full installation and usage:
+-----------------------------------------
+
+    pip3 install ms1searchpy
+    pip3 install deeplc
+    pip3 install biosaur
+    
+ Convert raw files to mzML: 
+ 
+    msconvert.dock path_to_file.raw -o path_to_output_folder --mzML --filter "peakPicking true 1-" --filter "MS2Deisotope" --filter "zeroSamples removeExtra" --filter "threshold absolute 1 most-intense"
+
+Extract features from mzML:
+
+    biosaur path_to_mzml
+    *OR “biosaur path_to_mzml --faims” for FAIMS data
+    *OR  “biosaur path_to_mzml --negative_mode” for negative ions data
+    
+Prepare shuffled!! decoy database. Python code example:
+
+	from pyteomics import fasta
+    fasta.write_decoy_db(source='/home/test/sprot_human.fasta', output=open('/home/test/sprot_human_shuffled.fasta', 'w'), mode='shuffle').close()	
+
+Alternative way is to use -ad option in ms1searchpy for automatic decoy database creation.
+
+Run DirectMS1search:
+
+	ms1searchpy path_to.features.tsv -d path_to_shuffled.fasta -sc 2 -i 2 -nproc 9 -mc 0 -cmin 1 -ptol 8 -fdr 1 -deeplc ~/virtualenv_deeplc/bin/deeplc -ts 2 -ml 1 -nproc 9
+    
+Enjoy!
+
 
 Dependencies
 ------------
