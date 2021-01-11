@@ -136,7 +136,8 @@ def run():
     df_final.to_csv(args['peptides'], sep=',')
 
     out = open(args['samples'], 'w')
-    for sample_num in ['S1', 'S2', 'S3', 'S4']:
+    for i in range(1, 13, 1):
+        sample_num = 'S%d' % (i, )
         if args[sample_num]:
             for z in args[sample_num]:
                 label = z.replace(replace_label, '')
