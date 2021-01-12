@@ -13,6 +13,7 @@ setup(
     version              = version,
     description          = '''A proteomics search engine for LC-MS1 spectra.''',
     long_description     = (''.join(open('README.md').readlines())),
+    long_description_content_type = 'text/markdown',
     author               = 'Mark Ivanov',
     author_email         = 'pyteomics@googlegroups.com',
     install_requires     = ['pyteomics[XML]', 'scipy', 'numpy', 'sklearn', 'matplotlib', 'pandas', 'seaborn', 'lightgbm'],
