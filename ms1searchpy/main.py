@@ -164,8 +164,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
     pep_pid = defaultdict(set)
     pid_pep = defaultdict(set)
     banned_dict = dict()
-    # for pep, pid in zip(resdict['seqs'], resdict['ids']):
-    for pep, pid in zip(resdict['seqs'], [ids[iorig] for iorig in resdict['iorig']]):
+    for pep, pid in zip(resdict['seqs'], resdict['ids']):
         
         pep_pid[pep].add(pid)
         pid_pep[pid].add(pep)
@@ -235,8 +234,6 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
                     top100decoy_score_tmp_sum += top100decoy_score_tmp[idx]
             p = float(sum(top100decoy_score_tmp)) / top100decoy_N
             p = top100decoy_score_tmp_sum / top100decoy_N
-            if not p0:
-                p0 = float(p)
 
             n_change = set(protsN[k] for k in unstable_prots)
             for n_val in n_change:
@@ -256,6 +253,21 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
             all_pvals = calc_sf_all(v_arr_small, n_arr_small, p)
             for idx, k in enumerate(names_arr_small):
                 prots_spc_basic[k] = all_pvals[idx]
+
+            if not p0:
+                p0 = float(p)
+
+                prots_spc_tmp = dict()
+                v_arr = np.array([prots_spc[k] for k in names_arr])
+                all_pvals = calc_sf_all(v_arr, n_arr, p)
+                for idx, k in enumerate(names_arr):
+                    prots_spc_tmp[k] = all_pvals[idx]
+
+                sortedlist_spc = sorted(prots_spc_tmp.items(), key=operator.itemgetter(1))[::-1]
+                with open(base_out_name + '_proteins_full_noexclusion.csv', 'w') as output:
+                    output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
+                    for x in sortedlist_spc:
+                        output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
 
             best_prot = utils.keywithmaxval(prots_spc_basic)
 
@@ -1406,7 +1418,7 @@ def process_peptides(args):
     df1['mzraw'] = df1['iorig'].apply(lambda x: mzraw[x])
     df1['rt'] = df1['iorig'].apply(lambda x: rts[x])
     # df1['av'] = df1['iorig'].apply(lambda x: avraw[x])
-    # df1['ch'] = df1['iorig'].apply(lambda x: charges[x])
+    df1['ch'] = df1['iorig'].apply(lambda x: charges[x])
     df1['im'] = df1['iorig'].apply(lambda x: imraw[x])
 
     df1['mass_diff'] = mass_diff
@@ -1500,6 +1512,7 @@ def process_peptides(args):
     df1.to_csv(base_out_name + '_PFMs_ML.csv', sep='\t', index=False)
 
     resdict['qpreds'] = df1['qpreds'].values
+    resdict['ids'] = df1['ids'].values
     mass_diff = resdict['qpreds']
     rt_diff = resdict['qpreds']
 
@@ -1554,8 +1567,8 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
         pep_pid = defaultdict(set)
         pid_pep = defaultdict(set)
         banned_dict = dict()
-        # for pep, pid in zip(resdict2['seqs'], resdict2['ids']):
-        for pep, pid in zip(resdict2['seqs'], [ids[iorig] for iorig in resdict2['iorig']]):
+        for pep, pid in zip(resdict2['seqs'], resdict2['ids']):
+        # for pep, pid in zip(resdict2['seqs'], [ids[iorig] for iorig in resdict2['iorig']]):
             pep_pid[pep].add(pid)
             pid_pep[pid].add(pep)
             if pep in banned_dict:

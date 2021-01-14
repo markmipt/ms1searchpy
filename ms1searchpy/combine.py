@@ -64,6 +64,7 @@ def run():
     resdict['preds'] = df1['preds'].values
     resdict['seqs'] = df1['peptide'].values
     resdict['ids'] = df1['ids'].values
+    resdict['iorig'] = df1['iorig'].values
 
     mass_diff = resdict['qpreds']
     rt_diff = resdict['qpreds']
