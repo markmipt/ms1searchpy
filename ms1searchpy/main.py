@@ -118,15 +118,15 @@ def get_features(dataframe):
 def worker_RT(qin, qout, shift, step, RC=False, elude_path=False, ns=False, nr=False, win_sys=False):
     pepdict = dict()    
     if elude_path:
-        outtrain = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
-        outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
-        outres_name = outres.name
-        outres.close()
+        outtrain_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
+        outtrain = open(outtrain_name, 'w')
+        outres_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
         for seq, RT in zip(ns, nr):
             outtrain.write(seq + '\t' + str(RT) + '\n')
-        outtrain.flush()
+        outtrain.close()
 
-        outtest = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
+        outtest_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
+        outtest = open(outtest_name, 'w')
 
         maxval = len(qin)
         start = 0
@@ -134,14 +134,12 @@ def worker_RT(qin, qout, shift, step, RC=False, elude_path=False, ns=False, nr=F
             item = qin[start+shift]
             outtest.write(item + '\n')
             start += step
-        outtest.flush()
+        outtest.close()
 
-        subprocess.call([elude_path, '-t', outtrain.name, '-e', outtest.name, '-a', '-o', outres_name])
+        subprocess.call([elude_path, '-t', outtrain_name, '-e', outtest_name, '-a', '-o', outres_name])
         for x in open(outres_name).readlines()[3:]:
             seq, RT = x.strip().split('\t')
             pepdict[seq] = float(RT)
-        outtest.close()
-        outtrain.close()
     else:
         maxval = len(qin)
         start = 0
@@ -911,12 +909,12 @@ def process_peptides(args):
 
         if args['ts'] != 2 and deeplc_path:
 
-
-            outtrain = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
-            outcalib = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
-            outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
-            outres_name = outres.name
-            outres.close()
+            
+            outtrain_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
+            outtrain = open(outtrain_name, 'w')
+            outcalib_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
+            outcalib = open(outcalib_name, 'w')
+            outres_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
             ns = true_seqs
             nr = true_rt
             print('Peptides used for RT prediction: %d' % (len(ns), ))
@@ -927,15 +925,16 @@ def process_peptides(args):
             for seq, RT in zip(ns2, nr2):
                 mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
                 outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
-            outtrain.flush()
+            outtrain.close()
 
             outcalib.write('seq,modifications,tr\n')
             for seq, RT in zip(ns, nr):
                 mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
                 outcalib.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
-            outcalib.flush()
+            outcalib.close()
 
-            subprocess.call([deeplc_path, '--file_pred', outcalib.name, '--file_cal', outtrain.name, '--file_pred_out', outres_name])
+
+            subprocess.call([deeplc_path, '--file_pred', outcalib_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name])
             pepdict = dict()
             train_RT = []
             train_seq = []
@@ -971,11 +970,14 @@ def process_peptides(args):
         else:
 
             if args['ts'] != 2 and elude_path:
-                outtrain = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
-                outcalib = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
-                outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
-                outres_name = outres.name
-                outres.close()
+
+
+                outtrain_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
+                outtrain = open(outtrain_name, 'w')
+                outcalib_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
+                outcalib = open(outcalib_name, 'w')
+                outres_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
+
                 ns = true_seqs
                 nr = true_rt
                 print('Peptides used for RT prediction: %d' % (len(ns), ))
@@ -983,12 +985,12 @@ def process_peptides(args):
                 nr2 = true_rt2
                 for seq, RT in zip(ns, nr):
                     outtrain.write(seq + '\t' + str(RT) + '\n')
-                outtrain.flush()
+                outtrain.close()
                 for seq, RT in zip(ns, nr):
                     outcalib.write(seq + '\t' + str(RT) + '\n')
-                outcalib.flush()
+                outcalib.close()
 
-                subprocess.call([elude_path, '-t', outtrain.name, '-e', outcalib.name, '-a', '-g', '-o', outres_name])
+                subprocess.call([elude_path, '-t', outtrain_name, '-e', outcalib_name, '-a', '-g', '-o', outres_name])
                 pepdict = dict()
                 train_RT = []
                 train_seq = []
@@ -1061,10 +1063,11 @@ def process_peptides(args):
         if deeplc_path:
 
 
-            outtrain = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
-            outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
-            outres_name = outres.name
-            outres.close()
+
+            outtrain_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
+            outtrain = open(outtrain_name, 'w')
+            outres_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
+
             print('Peptides used for RT prediction: %d' % (len(ns), ))
             ll = len(ns)
             ns = ns[:ll]
@@ -1074,9 +1077,9 @@ def process_peptides(args):
             for seq, RT in zip(ns, nr):
                 mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
                 outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
-            outtrain.flush()
+            outtrain.close()
 
-            subprocess.call([deeplc_path, '--file_pred', outtrain.name, '--file_cal', outtrain.name, '--file_pred_out', outres_name])
+            subprocess.call([deeplc_path, '--file_pred', outtrain_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name])
             pepdict = dict()
             train_RT = []
             train_seq = []
@@ -1112,19 +1115,21 @@ def process_peptides(args):
         else:
 
             if elude_path:
-                outtrain = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
-                outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
-                outres_name = outres.name
-                outres.close()
+
+
+                outtrain_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
+                outtrain = open(outtrain_name, 'w')
+                outres_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
+
                 print(len(ns))
                 ll = len(ns)
                 ns = ns[:ll]
                 nr = nr[:ll]
                 for seq, RT in zip(ns, nr):
                     outtrain.write(seq + '\t' + str(RT) + '\n')
-                outtrain.flush()
+                outtrain.close()
 
-                subprocess.call([elude_path, '-t', outtrain.name, '-e', outtrain.name, '-a', '-g', '-o', outres_name])
+                subprocess.call([elude_path, '-t', outtrain_name, '-e', outtrain_name, '-a', '-g', '-o', outres_name])
                 pepdict = dict()
                 train_RT = []
                 train_seq = []
@@ -1189,34 +1194,32 @@ def process_peptides(args):
 
         pepdict = dict()
 
-        outtrain = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
-        outres = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
-        outres_name = outres.name
-        outres.close()
-
+        outtrain_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
+        outtrain = open(outtrain_name, 'w')
+        outres_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
 
         outtrain.write('seq,modifications,tr\n')
         for seq, RT in zip(ns, nr):
             mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
             outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
-        outtrain.flush()
+        outtrain.close()
 
-        outtest = tempfile.NamedTemporaryFile(suffix='.txt', mode='w')
+
+        outtest_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
+        outtest = open(outtest_name, 'w')
 
 
         outtest.write('seq,modifications\n')
         for seq in p1:
             mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
             outtest.write(seq + ',' + str(mods_tmp) + '\n')
-        outtest.flush()
+        outtest.close()
 
-        subprocess.call([deeplc_path, '--file_pred', outtest.name, '--file_cal', outtrain.name, '--file_pred_out', outres_name])
+        subprocess.call([deeplc_path, '--file_pred', outtest_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name])
         for x in open(outres_name).readlines()[1:]:
             _, seq, _, RT = x.strip().split(',')
             pepdict[seq] = float(RT)
 
-        outtest.close()
-        outtrain.close()
     else:
 
         if n == 1 or os.name == 'nt':
