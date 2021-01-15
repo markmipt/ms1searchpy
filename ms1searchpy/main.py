@@ -934,7 +934,7 @@ def process_peptides(args):
             outcalib.close()
 
 
-            subprocess.call([deeplc_path, '--file_pred', outcalib_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name])
+            subprocess.call(['python', deeplc_path, '--file_pred', outcalib_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name])
             pepdict = dict()
             train_RT = []
             train_seq = []
@@ -1079,7 +1079,7 @@ def process_peptides(args):
                 outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
             outtrain.close()
 
-            subprocess.call([deeplc_path, '--file_pred', outtrain_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name])
+            subprocess.call(['python', deeplc_path, '--file_pred', outtrain_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name])
             pepdict = dict()
             train_RT = []
             train_seq = []
@@ -1215,7 +1215,7 @@ def process_peptides(args):
             outtest.write(seq + ',' + str(mods_tmp) + '\n')
         outtest.close()
 
-        subprocess.call([deeplc_path, '--file_pred', outtest_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name])
+        subprocess.call(['python', deeplc_path, '--file_pred', outtest_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name])
         for x in open(outres_name).readlines()[1:]:
             _, seq, _, RT = x.strip().split(',')
             pepdict[seq] = float(RT)

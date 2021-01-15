@@ -144,7 +144,7 @@ def run():
                 out.write(label + '\t' + sample_num + '\n')
     out.close()
 
-    subprocess.call([args['dif'], '-i', args['peptides'], '-samples', args['samples'], '-out',\
+    subprocess.call(['python', args['dif'], '-i', args['peptides'], '-samples', args['samples'], '-out',\
      args['out'], '-normalize', args['norm'], '-impute_threshold', args['impute_threshold'], '-min_samples', args['min_samples']])
 
 
