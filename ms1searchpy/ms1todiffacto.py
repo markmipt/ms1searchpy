@@ -14,7 +14,7 @@ def run():
 
     Example usage
     -------------
-    $ ms1todiffacto -S1 sample1_1_proteins.csv sample1_n_proteins.csv -S2 sample2_1_proteins.csv sample2_n_proteins.csv
+    $ ms1todiffacto -S1 sample1_1_proteins.tsv sample1_n_proteins.tsv -S2 sample2_1_proteins.tsv sample2_n_proteins.tsv
     -------------
     ''',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -41,8 +41,8 @@ def run():
     parser.add_argument('-min_samples', help='minimum number of samples for peptide usage', default='3')
     args = vars(parser.parse_args())
 
-    # replace_label = '_proteins_full.csv'
-    replace_label = '_proteins.csv'
+    # replace_label = '_proteins_full.tsv'
+    replace_label = '_proteins.tsv'
 
     df_final = False
 
@@ -72,9 +72,9 @@ def run():
             for z in args[sample_num]:
                 label = z.replace(replace_label, '')
                 df1 = pd.read_table(z)
-                df3 = pd.read_table(z.replace(replace_label, '_PFMs.csv'))
+                df3 = pd.read_table(z.replace(replace_label, '_PFMs.tsv'))
                 print(z)
-                print(z.replace(replace_label, '_PFMs.csv'))
+                print(z.replace(replace_label, '_PFMs.tsv'))
                 print(df3.shape)
                 print(df3.columns)
                 # df1 = pd.read_table(z.replace('_proteins.tsv', '_PSMs.tsv'))

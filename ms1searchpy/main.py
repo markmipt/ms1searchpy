@@ -262,7 +262,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
                     prots_spc_tmp[k] = all_pvals[idx]
 
                 sortedlist_spc = sorted(prots_spc_tmp.items(), key=operator.itemgetter(1))[::-1]
-                with open(base_out_name + '_proteins_full_noexclusion.csv', 'w') as output:
+                with open(base_out_name + '_proteins_full_noexclusion.tsv', 'w') as output:
                     output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
                     for x in sortedlist_spc:
                         output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
@@ -372,7 +372,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
 
     prots_spc = prots_spc_final
     sortedlist_spc = sorted(prots_spc.items(), key=operator.itemgetter(1))[::-1]
-    with open(base_out_name + '_proteins_full.csv', 'w') as output:
+    with open(base_out_name + '_proteins_full.tsv', 'w') as output:
         output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
         for x in sortedlist_spc:
             output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
@@ -403,7 +403,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
         print('\t'.join((str(x[0]), str(x[1]), str(int(prots_spc_copy[x[0]])), str(protsN[x[0]]))))
     print('results:%s;number of identified proteins = %d' % (base_out_name, identified_proteins, ))
     # print('R=', r)
-    with open(base_out_name + '_proteins.csv', 'w') as output:
+    with open(base_out_name + '_proteins.tsv', 'w') as output:
         output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
         for x in filtered_prots:
             output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
@@ -1264,12 +1264,12 @@ def process_peptides(args):
     rt_pred = rt_pred[e_ind]
 
 
-    with open(base_out_name + '_protsN.csv', 'w') as output:
+    with open(base_out_name + '_protsN.tsv', 'w') as output:
         output.write('dbname\ttheor peptides\n')
         for k, v in protsN.items():
             output.write('\t'.join((k, str(v))) + '\n')
    
-    with open(base_out_name + '_PFMs.csv', 'w') as output:
+    with open(base_out_name + '_PFMs.tsv', 'w') as output:
         output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tnScans\tnIsotopes\tproteins\tm/z\tRT\taveragineCorr\tcharge\tion_mobility\n')
         # for seq, md, rtd, peak_id, I, nScans, nIsotopes, mzr, rtr, av, ch, im in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['ids'], resdict['Is'], resdict['Scans'], resdict['Isotopes'], resdict['mzraw'], resdict['rt'], resdict['av'], resdict['ch'], resdict['im']):
         for seq, md, rtd, iorig in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['iorig']):
@@ -1463,7 +1463,7 @@ def process_peptides(args):
         print('Features used for MachineLearning: ', get_features_pfms(df1))
 
         MAX_EVALS = 25
-        out_file = 'test_randomCV_PFMs_2.csv'
+        out_file = 'test_randomCV_PFMs_2.tsv'
         of_connection = open(out_file, 'w')
         writer = csv.writer(of_connection)
 
@@ -1512,7 +1512,7 @@ def process_peptides(args):
     df1['qpreds'] = pd.qcut(df1['preds'], 10, labels=range(10)) 
     df1['proteins'] = df1['seqs'].apply(lambda x: ';'.join(pept_prot[x]))
 
-    df1.to_csv(base_out_name + '_PFMs_ML.csv', sep='\t', index=False)
+    df1.to_csv(base_out_name + '_PFMs_ML.tsv', sep='\t', index=False)
 
     resdict['qpreds'] = df1['qpreds'].values
     resdict['ids'] = df1['ids'].values
