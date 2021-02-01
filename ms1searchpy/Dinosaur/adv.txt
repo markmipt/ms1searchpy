@@ -1,8 +1,0 @@
-hillPeakFactorMinLength=800
-hillPeakFactor=4
-hillBatchSize=800
-hillValleyFactor=1.6
-hillMinLength=3
-hillNBoots=600
-maxBootSize=1200
-noHillSplit=True
