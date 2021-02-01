@@ -30,32 +30,40 @@ Using the pip:
 Example for full installation and usage:
 -----------------------------------------
 
-    pip3 install ms1searchpy
-    pip3 install deeplc
-    
  Convert raw files to mzML: 
  
-    msconvert.dock path_to_file.raw -o path_to_output_folder --mzML --filter "peakPicking true 1-" --filter "MS2Deisotope" --filter "zeroSamples removeExtra" --filter "threshold absolute 1 most-intense"
+    msconvert path_to_file.raw -o path_to_output_folder --mzML --filter "peakPicking true 1-" --filter "MS2Deisotope" --filter "zeroSamples removeExtra" --filter "threshold absolute 1 most-intense"
 
-Extract features from mzML:
+There are two suggested ways to install ms1searchpy with all external software (Diffacto, DeepLC) to get the maximum efficiency from ms1searchpy.
 
-    biosaur path_to_mzml
-    *OR “biosaur path_to_mzml --faims” for FAIMS data
-    *OR  “biosaur path_to_mzml --negative_mode” for negative ions data
-    
-Prepare shuffled!! decoy database. Python code example:
+First way is suggested for Linux users: to use the Python virtual environment.
 
-	from pyteomics import fasta
-    fasta.write_decoy_db(source='/home/test/sprot_human.fasta', output=open('/home/test/sprot_human_shuffled.fasta', 'w'), mode='shuffle').close()	
+1. “pip3 install virtualenv”
+2. “virtualenv3 --python=python3.6 /home/mark/env_ms1” . Comment: While ms1searchpy and Diffacto support all versions of Python3.6+, DeepLC works stable only with Python3.6. The name and path to virtual environment is not limited to the example above. 
+3. “source /home/mark/env_ms1/bin/activate” . Comment: to activate the virtual environment. You need to activate it every time when you are going to work with ms1searchpy.
+4. “pip3 install ms1searchpy” . Comment: to install the latest ms1searchpy from PyPi.
+5. “pip3 install deeplc” . Comment: to install the latest ms1searchpy from PyPi.
+6. “pip3 install https://github.com/statisticalbiotechnology/diffacto/archive/master.zip” . Comment: to install the latest ms1searchpy from github. Note, current PyPi diffacto version is outdated and has a critical bug.
+7. “deactivate” . Comment: to deactivate virtual environment.
 
-Alternative way is to use -ad 1 option in ms1searchpy for automatic decoy database creation.
+Examples of using ms1searchpy from virtual environment:
 
-Run DirectMS1search:
+1. “source /home/mark/env_ms1/bin/activate”
+2. “ms1searchpy /home/mark/test.mzML -d /home/mark/sprot_human.fasta -deeplc /home/mark/env_ms1/bin/deeplc -ad 1” . Comment: this command will run ms1searchpy with DeepLC RT prediction. “-ad 1” command creates a shuffled decoy database for FDR estimation. You should use it only once and just use the created database for other searches.
+Or alternative:
+“ms1searchpy /home/mark/test.features.tsv -d /home/mark/sprot_human_shuffled.fasta -deeplc /home/mark/env_ms1/bin/deeplc” . Comment: Instead of mzML file, a file with peptide features could be used with ms1searchpy. This file will be created automatically by ms1searchpy after the first processing of the mzML file.
+3. “ms1todiffacto -dif /home/mark/env_ms1/bin/diffacto -S1 sample1_r1.proteins.tsv sample1_r2.proteins.tsv sample1_r3.proteins.tsv -S2 sample2_r1.proteins.tsv sample2_r2.proteins.tsv sample2_r3.proteins.tsv -norm median -out diffacto_output.tsv -min_samples 3” . Comment: ms1todiffacto command is used to prepare input file for diffacto from ms1searchpy output and to automatically run diffacto.
+4. “deactivate” . Comment: to finish work with ms1searchpy.
 
-	ms1searchpy path_to.features.tsv -d path_to_shuffled.fasta -sc 2 -i 2 -nproc 9 -mc 0 -cmin 1 -ptol 8 -fdr 1 -deeplc ~/virtualenv_deeplc/bin/deeplc -ts 2 -ml 1 -nproc 9
-    
-Enjoy!
 
+
+Alternative way to install and use ms1searchpy is by using docker. This method is suggested for Windows users due to multiple difficulties of installing and using DeepLC under Windows.
+
+1. Install docker. For details: https://docs.docker.com/docker-for-windows/install/
+2. Open terminal. It could be done using Win+R keys combinations and typing “cmd”.
+3. “docker pull abdrakhimov1/ms1searchpy”
+4. “docker tag abdrakhimov1/ms1searchpy name_for_docker_container” . Comment: This is optional to make usage of docker image more convenient. 
+5. “docker run -it -v C:\Users\mark\data_folder:/data name_for_docker_container ms1searchpy data/test.mzML -d data/sprot_human.fasta -deeplc /deeplc/bin/deeplc -ad 1” . Comment: The command to run ms1searchpy using docker is similar to the general ms1searchpy using described in virtualenv section. The main difference is that the command should always start with “docker run -it -v C:\Users\mark\data_folder:/data name_for_docker_container”. The path to the data_folder allows docker to use data from the Windows system inside the docker container. Note, that DeepLC is already installed in the docker container and the default path (/deeplc/bin/deeplc) should be used. Note, the command contains two types of slashes “/” and “\”.
 
 Dependencies
 ------------
