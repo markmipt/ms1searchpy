@@ -64,6 +64,7 @@ Alternative way to install and use ms1searchpy is by using docker. This method i
 3. “docker pull abdrakhimov1/ms1searchpy”
 4. “docker tag abdrakhimov1/ms1searchpy name_for_docker_container” . Comment: This is optional to make usage of docker image more convenient. 
 5. “docker run -it -v C:\Users\mark\data_folder:/data name_for_docker_container ms1searchpy data/test.mzML -d data/sprot_human.fasta -deeplc /deeplc/bin/deeplc -ad 1” . Comment: The command to run ms1searchpy using docker is similar to the general ms1searchpy using described in virtualenv section. The main difference is that the command should always start with “docker run -it -v C:\Users\mark\data_folder:/data name_for_docker_container”. The path to the data_folder allows docker to use data from the Windows system inside the docker container. Note, that DeepLC is already installed in the docker container and the default path (/deeplc/bin/deeplc) should be used. Note, the command contains two types of slashes “/” and “\”.
+6. “docker run -it -v C:\Users\mark\data_folder:/data name_for_docker_container ms1todiffacto -dif diffacto -S1 data/test_s1_r1.proteins.tsv data/test_s1_r2.proteins.tsv data/test_s1_r3.proteins.tsv -S2 data/test_s2_r1.proteins.tsv data/test_s2_r2.proteins.tsv data/test_s2_r3.proteins.tsv -norm median” . Comment: Example of ms1todiffacto usage with docker. Note, that Diffacto is already installed in the docker container and the default path (diffacto) should be used for as -dif argument.
 
 Dependencies
 ------------
