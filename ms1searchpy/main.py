@@ -1326,6 +1326,7 @@ def process_peptides(args):
             'Scans',
             'proteins',
             'peptide',
+            'md',
         }
         for feature in feature_columns:
             if feature in banned_features or feature.startswith('c_'):
