@@ -82,4 +82,6 @@ Links
 - GitHub repo & issue tracker: https://github.com/markmipt/ms1searchpy
 - Mailing list: markmipt@gmail.com
 
+- Diffacto repo: https://github.com/statisticalbiotechnology/diffacto
+- DeepLC repo: https://github.com/compomics/DeepLC
 - Dinosaur repo: https://github.com/fickludd/dinosaur
