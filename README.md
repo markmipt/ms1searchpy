@@ -41,7 +41,7 @@ There are two suggested ways to install ms1searchpy with all external software (
 First way is suggested for Linux users: to use the Python virtual environment.
 
 1. “pip3 install virtualenv”
-2. “virtualenv3 --python=python3.6 /home/mark/env_ms1” . Comment: While ms1searchpy and Diffacto support all versions of Python3.6+, DeepLC works stable only with Python3.6. The name and path to virtual environment is not limited to the example above. 
+2. “virtualenv3 --python=python3.8 /home/mark/env_ms1” . Comment: While ms1searchpy and Diffacto support both versions of Python3.8 and Python3.9, DeepLC works stable only with Python3.8. The name and path to virtual environment is not limited to the example above. 
 3. “source /home/mark/env_ms1/bin/activate” . Comment: to activate the virtual environment. You need to activate it every time when you are going to work with ms1searchpy.
 4. “pip3 install ms1searchpy” . Comment: to install the latest ms1searchpy from PyPi.
 5. “pip3 install deeplc” . Comment: to install the latest ms1searchpy from PyPi.
