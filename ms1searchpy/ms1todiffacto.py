@@ -1,6 +1,5 @@
 from __future__ import division
 import argparse
-# from . import main, utils
 import pkg_resources
 import pandas as pd
 import ast
@@ -41,33 +40,28 @@ def run():
     parser.add_argument('-min_samples', help='minimum number of samples for peptide usage', default='3')
     args = vars(parser.parse_args())
 
-    # replace_label = '_proteins_full.tsv'
     replace_label = '_proteins.tsv'
 
     df_final = False
 
     allowed_prots = set()
-    allowed_prots_top10 = set()
     allowed_peptides = set()
 
     if not args['allowed_prots']:
 
         for i in range(1, 13, 1):
-            sample_num = 'S%d' % (i, )#sample_num in ['S1', 'S2', 'S3', 'S4']:
+            sample_num = 'S%d' % (i, )
             if args[sample_num]:
                 for z in args[sample_num]:
                     df0 = pd.read_table(z)
                     allowed_prots.update(df0['dbname'])
-                    # allowed_prots.update(df0['dbname'][:2000].values)
-                    allowed_prots_top10.update(df0['dbname'][:10].values)
     else:
         for prot in open(args['allowed_prots'], 'r'):
             allowed_prots.add(prot.strip())
 
 
     for i in range(1, 13, 1):
-        sample_num = 'S%d' % (i, )#sample_num in ['S1', 'S2', 'S3', 'S4']:
-    # for sample_num in ['S1', 'S2', 'S3', 'S4']:
+        sample_num = 'S%d' % (i, )
         if args[sample_num]:
             for z in args[sample_num]:
                 label = z.replace(replace_label, '')
@@ -77,48 +71,28 @@ def run():
                 print(z.replace(replace_label, '_PFMs.tsv'))
                 print(df3.shape)
                 print(df3.columns)
-                # df1 = pd.read_table(z.replace('_proteins.tsv', '_PSMs.tsv'))
-                # df1 = df1[df1['peptide'].apply(lambda z: z in allowed_peptides)]
-                # print(df1.shape)
-                # print(z.replace('_proteins.tsv', '_PSMs_full.tsv'))
-                # print(df1.columns)
-
 
                 df3 = df3[df3['proteins'].apply(lambda x: any(z in allowed_prots for z in x.split(';')))]
-                df3['sequence'] = df3['sequence'] + df3['charge'].astype(str)
-                df3 = df3.groupby('sequence').agg({'Intensity': np.max, 'proteins': lambda x: x.values[0]})
+                df3['proteins'] = df3['proteins'].apply(lambda x: ';'.join([z for z in x.split(';') if z in allowed_prots]))
+
+                df3 = df3.sort_values(by='Intensity', ascending=False)
+                df3 = df3.drop_duplicates(subset='sequence')
+                df3 = df3.explode('proteins')
+
                 df3[label] = df3['Intensity']
-                df3['sequence'] = df3.index
                 df3['protein'] = df3['proteins']
                 df3['peptide'] = df3['sequence']
                 df3 = df3[['peptide', 'protein', label]]
 
 
 
-                # df1['peptide'] = df1.apply(lambda z: z['peptide'] + str(z['assumed_charge']), axis=1)
-                # df1 = df1.sort_values('MS1Intensity', ascending=False).drop_duplicates(['peptide'])
-                # df1['peptide'] = df1['peptide'].apply(lambda z: z[:-1])
-                # df1['MS1Intensity'] = df1.groupby('peptide')['MS1Intensity'].transform(sum)
-                # df1 = df1.sort_values('q', ascending=True).drop_duplicates(['peptide'])
-                # df1[label] = df1['MS1Intensity']
-                # df1[label] = df1[label].replace([0, 0.0], np.nan)
-                # df1['protein'] = df1['protein'].apply(lambda z: ';'.join([u for u in ast.literal_eval(z) if u in allowed_prots]))
-                # df1 = df1[df1['protein'].apply(lambda z: z != '')]
-                # df1 = df1[['peptide', 'protein', label]]
                 if df_final is False:
                     label_basic = label
                     df_final = df3.reset_index(drop=True)
                 else:
-                    df_final = df_final.reset_index(drop=True).merge(df3.reset_index(drop=True), on='peptide', how='outer')#.set_index('peptide')
-                    # df_final = df_final.merge(df1, on='peptide', how='outer')
+                    df_final = df_final.reset_index(drop=True).merge(df3.reset_index(drop=True), on='peptide', how='outer')
                     df_final.protein_x.fillna(value=df_final.protein_y, inplace=True)
                     df_final['protein'] = df_final['protein_x']
-
-                    # df_final_top100 = df_final[df_final['protein'].apply(lambda x: x in allowed_prots_top10)]
-                    # df_final_top100 = df_final_top100[~df_final_top100[label].isnull() & ~df_final_top100[label_basic].isnull()]
-                    # norm_k = np.median(df_final_top100[label]/df_final_top100[label_basic])
-                    # print(len(df_final_top100))
-                    # print(norm_k)
 
                     df_final = df_final.drop(columns=['protein_x', 'protein_y'])
 
@@ -131,7 +105,6 @@ def run():
     cols.remove('proteins')
     cols.insert(0, 'proteins')
     df_final = df_final[cols]
-    # df_final = df_final[(~df_final.isnull()).sum(axis=1) >= 4]
     df_final.fillna(value='')
     df_final.to_csv(args['peptides'], sep=',')
 
