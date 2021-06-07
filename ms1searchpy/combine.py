@@ -11,14 +11,14 @@ def run():
 
     Example usage
     -------------
-    $ search.py file1_PFMs_ML.csv ... filen_PFMs_ML.csv
+    $ ms1combine.py file1_PFMs_ML.tsv ... filen_PFMs_ML.tsv
     -------------
     ''',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    parser.add_argument('file', nargs='+', help='input csv PFMs_ML files')
+    parser.add_argument('file', nargs='+', help='input tsv PFMs_ML files')
     parser.add_argument('-out', help='prefix output file names', default='combined')
-    parser.add_argument('-prots_full', help='path to any of *_proteins_full.csv file. By default this file will be searched in the folder with PFMs_ML files', default='')
+    parser.add_argument('-prots_full', help='path to any of *_proteins_full.tsv file. By default this file will be searched in the folder with PFMs_ML files', default='')
     parser.add_argument('-fdr', help='protein fdr filter in %%', default=1.0, type=float)
     parser.add_argument('-prefix', help='decoy prefix', default='DECOY_')
     parser.add_argument('-nproc',   help='number of processes', default=1, type=int)
@@ -34,7 +34,7 @@ def run():
                 df2 = pd.read_csv(args['prots_full'], sep='\t')
             else:
                 try:
-                    df2 = pd.read_csv(filen.replace('_PFMs_ML.csv', '_proteins_full.csv'), sep='\t')
+                    df2 = pd.read_csv(filen.replace('_PFMs_ML.tsv', '_proteins_full.tsv'), sep='\t')
                 except:
                     print('Proteins_full file is missing!')
                     break
