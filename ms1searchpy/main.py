@@ -85,36 +85,6 @@ from sklearn import metrics
 
 SEED = 50
 
-def get_cat_model(df, hyperparameters, feature_columns, train, test):
-    feature_columns = list(feature_columns)
-    dtrain = lgb.Dataset(get_X_array(train, feature_columns), get_Y_array(train), feature_name=feature_columns, free_raw_data=False)
-    dvalid = lgb.Dataset(get_X_array(test, feature_columns), get_Y_array(test), feature_name=feature_columns, free_raw_data=False)
-    np.random.seed(SEED)
-    evals_result = {}
-    model = lgb.train(hyperparameters, dtrain, num_boost_round=20000, valid_sets=(dvalid,), valid_names=('valid',), verbose_eval=False,
-                early_stopping_rounds=100, evals_result=evals_result)
-    return model
-
-def get_X_array(df, feature_columns):
-    return df.loc[:, feature_columns].values
-
-def get_Y_array(df):
-    return df.loc[:, 'mass diff'].values
-
-def get_features(dataframe):
-    feature_columns = dataframe.columns
-    columns_to_remove = []
-    allowed_features = {
-        'mz',
-        'RT',
-        'Intensity',
-    }
-    for feature in feature_columns:
-        if feature not in allowed_features:
-            columns_to_remove.append(feature)
-    feature_columns = feature_columns.drop(columns_to_remove)
-    return feature_columns
-
 def worker_RT(qin, qout, shift, step, RC=False, elude_path=False, ns=False, nr=False, win_sys=False):
     pepdict = dict()    
     if elude_path:
@@ -248,7 +218,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
                 v_arr_small.append(prots_spc[v])
 
             prots_spc_basic = dict()
-            all_pvals = calc_sf_all(v_arr_small, n_arr_small, p)
+            all_pvals = calc_sf_all(np.array(v_arr_small), n_arr_small, p)
             for idx, k in enumerate(names_arr_small):
                 prots_spc_basic[k] = all_pvals[idx]
 
@@ -370,7 +340,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
     for k in prots_spc_final.keys():
         prots_spc_final[k] = np.mean(prots_spc_final[k])
 
-    prots_spc = prots_spc_final
+    prots_spc = deepcopy(prots_spc_final)
     sortedlist_spc = sorted(prots_spc.items(), key=operator.itemgetter(1))[::-1]
     with open(base_out_name + '_proteins_full.tsv', 'w') as output:
         output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
@@ -495,9 +465,8 @@ def peptide_processor(peptide, **kwargs):
         peak_id = ids[i]
         I = Is[i]
         massdiff = (m - nmasses[i]) / m * 1e6
-        # massdiff3 = (m - imraw[i]) / m * 1e6
-        # results.append((seqm, massdiff, rts[i], peak_id, I, Scans[i], Isotopes[i], mzraw[i], avraw[i], charges[i], imraw[i], massdiff3))
-        results.append((seqm, massdiff, i))#rts[i], peak_id, I, Scans[i], Isotopes[i], mzraw[i], avraw[i], charges[i], imraw[i], massdiff3))
+        mods = 0
+        results.append((seqm, massdiff, mods, i))
     return results
 
 
@@ -512,16 +481,6 @@ def prepare_peptide_processor(fname, args):
     global mzraw
     global avraw
     global imraw
-    nmasses = []
-    rts = []
-    charges = []
-    ids = []
-    Is = []
-    Scans = []
-    Isotopes = []
-    mzraw = []
-    avraw = []
-    imraw = []
 
     min_ch = args['cmin']
     max_ch = args['cmax']
@@ -530,31 +489,27 @@ def prepare_peptide_processor(fname, args):
     min_scans = args['sc']
 
     print('Reading spectra ...')
-    for m, RT, c, peak_id, I, nScans, nIsotopes, mzr, avr, im in utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
-        nmasses.append(m)
-        rts.append(RT)
-        charges.append(c)
-        ids.append(peak_id)
-        Is.append(I)
-        Scans.append(nScans)
-        Isotopes.append(nIsotopes)
-        mzraw.append(mzr)
-        avraw.append(avr)
-        imraw.append(im)
+
+    df_features = utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans)
+    
+    # Sort by neutral mass
+    df_features = df_features.sort_values(by='massCalib')
+
+    nmasses = df_features['massCalib'].values
+    rts = df_features['rtApex'].values
+    charges = df_features['charge'].values
+    ids = df_features['id'].values
+    Is = df_features['intensityApex'].values
+    Scans = df_features['nScans'].values
+    Isotopes = df_features['nIsotopes'].values
+    mzraw = df_features['mz'].values
+    avraw = np.zeros(len(df_features))
+    if len(set(df_features['FAIMS'])) > 1:
+        imraw = df_features['FAIMS'].values
+    else:
+        imraw = df_features['ion_mobility'].values
 
     print('Number of peptide isotopic clusters: %d' % (len(nmasses), ))
-
-    i = np.argsort(nmasses)
-    nmasses = np.array(nmasses)[i]
-    rts = np.array(rts)[i]
-    charges = np.array(charges)[i]
-    ids = np.array(ids)[i]
-    Is = np.array(Is)[i]
-    Scans = np.array(Scans)[i]
-    Isotopes = np.array(Isotopes)[i]
-    mzraw = np.array(mzraw)[i]
-    avraw = np.array(avraw)[i]
-    imraw = np.array(imraw)[i]
 
     fmods = args['fmods']
     aa_mass = mass.std_aa_mass
@@ -571,7 +526,7 @@ def prepare_peptide_processor(fname, args):
     acc_l = args['ptol']
     acc_r = args['ptol']
 
-    return {'aa_mass': aa_mass, 'acc_l': acc_l, 'acc_r': acc_r, 'args': args}
+    return {'aa_mass': aa_mass, 'acc_l': acc_l, 'acc_r': acc_r, 'args': args}, df_features
 
 
 def peptide_processor_iter_isoforms(peptide, **kwargs):
@@ -584,6 +539,7 @@ def get_results(ms1results):
     labels = [
         'seqs',
         'md',
+        'mods',
         'iorig',
         # 'rt',
         # 'ids',
@@ -641,7 +597,7 @@ def process_peptides(args):
 
     ms1results = []
     peps = utils.peptide_gen(args)
-    kwargs = prepare_peptide_processor(fname, args)
+    kwargs, df_features = prepare_peptide_processor(fname, args)
     func = peptide_processor_iter_isoforms
     print('Running the search ...')
     for y in utils.multimap(1, func, peps, **kwargs):
@@ -655,23 +611,20 @@ def process_peptides(args):
     resdict = get_results(ms1results)
     del ms1results
 
-    # resdict['mc'] = np.array([parser.num_sites(z, args['enzyme']) for z in resdict['seqs']])
-    # resdict['mc'] = resdict['im']
+    resdict['mc'] = np.array([parser.num_sites(z, args['enzyme']) for z in resdict['seqs']])
 
     isdecoy = lambda x: x[0].startswith(prefix)
     isdecoy_key = lambda x: x.startswith(prefix)
     escore = lambda x: -x[1]
 
-    # e_ind = resdict['mc'] == 0
-    # resdict2 = filter_results(resdict, e_ind)
 
     e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
     # e_ind = resdict['Isotopes'] >= min_isotopes_calibration
     # e_ind = resdict['Isotopes'] >= 1
     resdict2 = filter_results(resdict, e_ind)
 
-    # e_ind = resdict2['mc'] == 0
-    # resdict2 = filter_results(resdict2, e_ind)
+    e_ind = resdict2['mc'] == 0
+    resdict2 = filter_results(resdict2, e_ind)
 
     p1 = set(resdict2['seqs'])
 
@@ -713,7 +666,7 @@ def process_peptides(args):
                         del prots_spc[k]
                         checked.add(prefix + k)
 
-        filtered_prots = aux.filter(prots_spc.items(), fdr=fdr, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
+        filtered_prots = aux.filter(prots_spc.items(), fdr=0.05, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
                                     full_output=True)
 
         identified_proteins = 0
@@ -724,10 +677,8 @@ def process_peptides(args):
 
         print('Running mass recalibration...')
 
-
-        # e_ind = resdict['mc'] == 0
-        # resdict2 = filter_results(resdict, e_ind)
-        resdict2 = resdict
+        e_ind = resdict['mc'] == 0
+        resdict2 = filter_results(resdict, e_ind)
 
         true_md = []
         true_isotopes = []
@@ -781,12 +732,12 @@ def process_peptides(args):
 
         zs_all = e_all[e_ind] ** 2
 
-        # e_ind = resdict['mc'] == 0
-        # resdict2 = filter_results(resdict, e_ind)
 
-        # e_ind = resdict2['Isotopes'] >= min_isotopes_calibration
         e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
         resdict2 = filter_results(resdict, e_ind)
+
+        e_ind = resdict2['mc'] == 0
+        resdict2 = filter_results(resdict2, e_ind)
 
         p1 = set(resdict2['seqs'])
 
@@ -827,7 +778,7 @@ def process_peptides(args):
                         del prots_spc[k]
                         checked.add(prefix + k)
 
-        filtered_prots = aux.filter(prots_spc.items(), fdr=fdr, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
+        filtered_prots = aux.filter(prots_spc.items(), fdr=0.05, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
                                     full_output=True)
 
         identified_proteins = 0
@@ -846,8 +797,8 @@ def process_peptides(args):
         # e_ind = resdict['Isotopes'] >= 1
         resdict2 = filter_results(resdict, e_ind)
 
-        # e_ind = resdict2['mc'] == 0
-        # resdict2 = filter_results(resdict2, e_ind)
+        e_ind = resdict2['mc'] == 0
+        resdict2 = filter_results(resdict2, e_ind)
 
 
         true_seqs = []
@@ -945,7 +896,7 @@ def process_peptides(args):
                 train_RT.append(float(RTexp))
 
 
-            train_RT = np.array(train_RT)
+            train_RT = np.array(train_RT)        
             RT_pred = np.array([pepdict[s] for s in train_seq])
 
             rt_diff_tmp = RT_pred - train_RT
@@ -1000,7 +951,6 @@ def process_peptides(args):
                     train_seq.append(seq)
                     train_RT.append(float(RTexp))
                 train_RT = np.array(train_RT)
-                RT_pred = np.array([pepdict[s] for s in train_seq])
 
                 rt_diff_tmp = RT_pred - train_RT
                 RT_left = -min(rt_diff_tmp)
@@ -1215,7 +1165,11 @@ def process_peptides(args):
             outtest.write(seq + ',' + str(mods_tmp) + '\n')
         outtest.close()
 
-        subprocess.call([deeplc_path, '--file_pred', outtest_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name])
+        if args['deeplc_library']:
+            print('Using deeplc library...')
+            subprocess.call([deeplc_path, '--file_pred', outtest_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name, '--use_library', args['deeplc_library'], '--write_library'])
+        else:
+            subprocess.call([deeplc_path, '--file_pred', outtest_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name])
         for x in open(outres_name).readlines()[1:]:
             _, seq, _, RT = x.strip().split(',')
             pepdict[seq] = float(RT)
@@ -1255,12 +1209,10 @@ def process_peptides(args):
     rt_diff = np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred
     # rt_diff = resdict['rt'] - rt_pred
     e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
-    zs_all = zs_all + e_all
     r = 9.0
     e_ind = e_all <= r
     resdict = filter_results(resdict, e_ind)
     rt_diff = rt_diff[e_ind]
-    zs_all = zs_all[e_ind]
     rt_pred = rt_pred[e_ind]
 
 
@@ -1284,6 +1236,11 @@ def process_peptides(args):
             im = imraw[iorig]
             output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), str(nScans), str(nIsotopes), ';'.join(pept_prot[seq]), str(mzr), str(rtr), str(av), str(ch), str(im))) + '\n')
             
+    e_ind = resdict['mc'] == 0
+    resdict = filter_results(resdict, e_ind)
+    rt_diff = rt_diff[e_ind]
+    rt_pred = rt_pred[e_ind]
+
     mass_diff = (resdict['md'] - mass_shift) / (mass_sigma)
 
     rt_diff = (np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred) / RT_sigma
@@ -1303,8 +1260,7 @@ def process_peptides(args):
         'learning_rate': list(np.logspace(np.log10(0.001), np.log10(0.05), base = 10, num = 1000)),
         'metric': ['rmse', ],
         'verbose': [-1, ],
-        'num_threads': [5, ],
-        'n_estimators': [100, ],
+        'num_threads': [args['nproc'], ],
     }
 
     def get_X_array(df, feature_columns):
@@ -1329,12 +1285,12 @@ def process_peptides(args):
             'md',
         }
         for feature in feature_columns:
-            if feature in banned_features or feature.startswith('c_'):
+            if feature in banned_features:
                 columns_to_remove.append(feature)
         feature_columns = feature_columns.drop(columns_to_remove)
         return feature_columns
 
-    def objective_pfms(df, hyperparameters, iteration):
+    def objective_pfms(df, hyperparameters, iteration, threshold=0):
         """Objective function for grid and random search. Returns
         the cross validation score from a set of hyperparameters."""
         
@@ -1353,20 +1309,37 @@ def process_peptides(args):
 
             feature_columns = get_features_pfms(df)
             model = get_cat_model_final_pfms(train_df, hyperparameters, feature_columns)
-            test_df['preds'] = model.predict(get_X_array(test_df, feature_columns))
-            all_res.append(test_df)
-        test_df6 = pd.concat(all_res)
-        shr_v = len(aux.filter(test_df6, fdr=0.25, key='preds', is_decoy='decoy'))
-        
-        return [shr_v, hyperparameters, iteration]
+
+            df.loc[mask, 'preds'] = model.predict(get_X_array(df.loc[mask, :], feature_columns))
+
+            train_df = df.iloc[train]
+            test_df = df.iloc[test]
+
+            fpr, tpr, thresholds = metrics.roc_curve(get_Y_array_pfms(test_df), test_df['preds'])
+            shr_v = metrics.auc(fpr, tpr)
+            # shr_v = len(aux.filter(test_df, fdr=0.25, key='preds', is_decoy='decoy'))
+
+            all_res.append(shr_v)
+            # print(shr_v)
+
+            if shr_v < threshold:
+                all_res = [0, ]
+                break
+
+        shr_v = np.mean(all_res)
+        # print(shr_v)
+        # print('\n')
+
+        return [shr_v, hyperparameters, iteration, all_res]
 
     def random_search_pfms(df, param_grid, out_file, max_evals):
         """Random search for hyperparameter optimization. 
         Writes result of search to csv file every search iteration."""
         
+        threshold = 0
         
         # Dataframe for results
-        results = pd.DataFrame(columns = ['sharpe', 'params', 'iteration'],
+        results = pd.DataFrame(columns = ['sharpe', 'params', 'iteration', 'all_res'],
                                     index = list(range(max_evals)))
         for i in range(max_evals):
 
@@ -1376,8 +1349,10 @@ def process_peptides(args):
             random_params = {k: random.sample(v, 1)[0] for k, v in param_grid.items()}
 
             # Evaluate randomly selected hyperparameters
-            eval_results = objective_pfms(df, random_params, i)
+            eval_results = objective_pfms(df, random_params, i, threshold)
             results.loc[i, :] = eval_results
+
+            threshold = max(threshold, np.mean(eval_results[3]) - 3 * np.std(eval_results[3]))
 
             # open connection (append option) and write results
             of_connection = open(out_file, 'a')
@@ -1399,8 +1374,8 @@ def process_peptides(args):
         dvalid = lgb.Dataset(get_X_array(test, feature_columns), get_Y_array_pfms(test), feature_name=feature_columns, free_raw_data=False)
         np.random.seed(SEED)
         evals_result = {}
-        model = lgb.train(hyperparameters, dtrain, num_boost_round=20000, valid_sets=(dvalid,), valid_names=('valid',), verbose_eval=False,
-                    early_stopping_rounds=100, evals_result=evals_result)
+        model = lgb.train(hyperparameters, dtrain, num_boost_round=5000, valid_sets=(dvalid,), valid_names=('valid',), verbose_eval=False,
+                    early_stopping_rounds=20, evals_result=evals_result)
         return model
 
     def get_cat_model_final_pfms(df, hyperparameters, feature_columns):
@@ -1408,7 +1383,7 @@ def process_peptides(args):
         train = df
         dtrain = lgb.Dataset(get_X_array(train, feature_columns), get_Y_array_pfms(train), feature_name=feature_columns, free_raw_data=False)
         np.random.seed(SEED)
-        model = lgb.train(hyperparameters, dtrain)
+        model = lgb.train(hyperparameters, dtrain, num_boost_round=100)
         return model
 
     df1 = pd.DataFrame()
@@ -1417,17 +1392,17 @@ def process_peptides(args):
 
     df1['ids'] = df1['iorig'].apply(lambda x: ids[x])
     df1['Is'] = df1['iorig'].apply(lambda x: Is[x])
-    # df1['Scans'] = df1['iorig'].apply(lambda x: Scans[x])
+    df1['Scans'] = df1['iorig'].apply(lambda x: Scans[x])
     df1['Isotopes'] = df1['iorig'].apply(lambda x: Isotopes[x])
     df1['mzraw'] = df1['iorig'].apply(lambda x: mzraw[x])
     df1['rt'] = df1['iorig'].apply(lambda x: rts[x])
-    # df1['av'] = df1['iorig'].apply(lambda x: avraw[x])
+    df1['av'] = df1['iorig'].apply(lambda x: avraw[x])
     df1['ch'] = df1['iorig'].apply(lambda x: charges[x])
     df1['im'] = df1['iorig'].apply(lambda x: imraw[x])
 
     df1['mass_diff'] = mass_diff
     df1['rt_diff'] = rt_diff
-    df1['decoy'] = df1['seqs'].apply(lambda x: all(z.startswith(prefix) for z in pept_prot[x]))
+    df1['decoy'] = df1['seqs'].apply(lambda x: all(z.startswith(prefix) for z in pept_prot[x]))    
 
     df1['peptide'] = df1['seqs']
     mass_dict = {}
@@ -1469,26 +1444,21 @@ def process_peptides(args):
         writer = csv.writer(of_connection)
 
         # Write column names
-        headers = ['auc', 'params', 'iteration']
+        headers = ['auc', 'params', 'iteration', 'all_res']
         writer.writerow(headers)
         of_connection.close()
-
-        # df = df.reset_index(drop=True)
 
         random_results = random_search_pfms(df1, param_grid, out_file, MAX_EVALS)
 
         random_results = pd.read_csv(out_file)
         random_results = random_results[random_results['auc'] != 'auc']
         random_results['params'] = random_results['params'].apply(lambda x: ast.literal_eval(x))
-        random_results['boosts'] = random_results['params'].apply(lambda x: int(x['n_estimators']))
         convert_dict = {'auc': float, 
                     } 
         random_results = random_results.astype(convert_dict) 
 
-        random_results['auc_per_boost'] = random_results['auc'].values / random_results['boosts'].values
-
         bestparams = random_results.sort_values(by='auc',ascending=False)['params'].values[0]
-        bestparams['num_threads'] = 5
+        bestparams['num_threads'] = args['nproc']
         print(random_results.sort_values(by='auc',ascending=False)['auc'].values[0])
 
         groups = df1['peptide']
@@ -1504,7 +1474,7 @@ def process_peptides(args):
 
             feature_columns = list(get_features_pfms(train_df))
             model = get_cat_model_final_pfms(train_df, bestparams, feature_columns)
-            
+
             df1.loc[test, 'preds'] = model.predict(get_X_array(test_df, feature_columns))
 
     else:
@@ -1660,7 +1630,7 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                     v_arr_small.append(prots_spc[v])
 
                 prots_spc_basic = dict()
-                all_pvals = calc_sf_all(v_arr_small, n_arr_small, p)
+                all_pvals = calc_sf_all(np.array(v_arr_small), n_arr_small, p)
                 for idx, k in enumerate(names_arr_small):
                     prots_spc_basic[k] = all_pvals[idx]
 

@@ -5,6 +5,7 @@ import csv
 import subprocess
 from scipy.stats import binom
 import numpy as np
+import pandas as pd
 
 def recalc_spc(banned_dict, unstable_prots, prots_spc2):
     tmp = dict()
@@ -15,84 +16,30 @@ def recalc_spc(banned_dict, unstable_prots, prots_spc2):
 def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
     if os.path.splitext(fname)[-1].lower() == '.mzml':
         subprocess.call(['biosaur', fname])
-        # advpath = '--advParams=' + os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Dinosaur/adv.txt')
-        # subprocess.call(['java', '-Djava.awt.headless=true', '-jar', os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Dinosaur/Dinosaur-1.1.3.free.jar'), advpath, '--concurrency=12', fname])
         fname = os.path.splitext(fname)[0] + '.features.tsv'
-    with open(fname, 'r') as infile:
-        csvreader = csv.reader(infile, delimiter='\t')
-        header = next(csvreader)#.next()
 
-        mass_ind = header.index('massCalib')
-        # mass_ind = header.index('mass')
-        # mass_ind = header.index('mostAbundantMz')
-        RT_ind = header.index('rtApex')
-        ch_ind = header.index('charge')
-        nIsotopes_ind = header.index('nIsotopes')
-        Int_ind = header.index('intensityApex')
-        nScans_ind = header.index('nScans')
+    df_features = pd.read_csv(fname, sep='\t')
 
-        # mass_ind = header.index('apex_mz')
-        # RT_ind = header.index('rt')
-        # ch_ind = header.index('charge')
-        # nIsotopes_ind = header.index('isotopes_count')
-        # Int_ind = header.index('intensity')
-        # nScans_ind = header.index('centroid_mz')
+    if 'id' not in df_features.columns:
+        df_features['id'] = df_features.index
+    if 'FAIMS' not in df_features.columns:
+        df_features['FAIMS'] = 0
+    if 'ion_mobility' not in df_features.columns:
+        df_features['ion_mobility'] = 0
+    # Check unique ids
+    if len(df_features['id']) != len(set(df_features['id'])):
+        df_features['id'] = df_features.index + 1
 
-        try:
-            mz_ind = header.index('mz')
-        except:
-            mz_ind = -1
+    # Remove features with low number of isotopes
+    df_features = df_features[df_features['nIsotopes'] >= min_isotopes]
 
+    # Remove features with low number of Scans
+    df_features = df_features[df_features['nScans'] >= min_scans]
 
-        # try:
-        #     FAIMS_ind = header.index('FAIMS')
-        # except:
-        #     FAIMS_ind = -1
+    # Remove features using min and max charges
+    df_features = df_features[df_features['charge'].apply(lambda x: min_ch <= x <= max_ch)]
 
-
-        try:
-            FAIMS_ind = header.index('FAIMS')
-        except:
-            FAIMS_ind = -1
-
-        try:
-            av_ind = header.index('averagineCorr')
-            # av_ind = header.index('intensity_experimental')
-        except:
-            av_ind = -1
-
-
-        try:
-            mz3_ind = header.index('mz3')
-        except:
-            mz3_ind = -1
-
-        idx = 0
-        for z in csvreader:
-            nm = float(z[mass_ind])
-            RT = float(z[RT_ind])
-            ch = float(z[ch_ind])
-            # if ch != 0:
-            #     nm = (nm + 1.0073 * ch) / ch
-            # else:
-            # nm = (nm + 1.0073 * ch) / ch
-            # for ch in [1,2,3]:
-            # nm = nm * ch - 1.0073 * ch
-            nIsotopes = float(z[nIsotopes_ind])# + 1
-            nScans = int(z[nScans_ind])
-            # nIsotopes = 4
-            # nScans = 4
-            I = float(z[Int_ind])
-            mz = float(z[mz_ind]) if mz_ind >= 0 else 0
-            mz3 = float(z[mz3_ind]) if mz3_ind >= 0 else 0
-            im = float(z[FAIMS_ind]) if FAIMS_ind >= 0 else 0
-            # av = float(z[av_ind]) if av_ind >= 0 else 0
-            av = str(z[av_ind])
-            idx += 1
-            if nIsotopes >= min_isotopes and min_ch <= ch <= max_ch and min_scans <= nScans:
-                yield nm, RT, ch, idx, I, nScans, nIsotopes, mz, av, im
-                # yield nm, RT, ch, idx, I, nScans, nIsotopes, mz, av, mz3
-
+    return df_features
 
 def peptide_gen(args):
     prefix = args['prefix']
@@ -119,8 +66,9 @@ def prot_gen(args):
     add_decoy = args['ad']
     prefix = args['prefix']
 
-    read = [fasta.read, lambda f: fasta.decoy_db(f, mode='shuffle', prefix=prefix)][add_decoy]
-    with read(db) as f:
+    # read = [fasta.read, lambda f: fasta.decoy_db(f, mode='shuffle', prefix=prefix)][add_decoy]
+    # with read(db) as f:
+    with fasta.read(db) as f:
         for p in f:
             yield p
 
@@ -132,7 +80,7 @@ def prepare_decoy_db(args):
         out1, out2 = os.path.splitext(db)
         out_db = out1 + '_shuffled' + out2
         print(out_db)
-        fasta.write_decoy_db(db, open(out_db, 'w'), mode='shuffle', prefix=prefix).close()
+        fasta.write_decoy_db(db, open(out_db, 'w'), mode='shuffle', prefix=prefix, keep_nterm=True).close()
         args['d'] = out_db
         args['ad'] = 0
     return args
@@ -241,8 +189,8 @@ def keywithmaxval(d):
      return k[v.index(max(v))]
 
 def calc_sf_all(v, n, p):
-    sf_values = -np.log10(binom.sf(v, n, p))
-    sf_values[np.isinf(sf_values)] = 0
+    sf_values = -np.log10(binom.sf(v-1, n, p))
+    sf_values[np.isinf(sf_values)] = max(sf_values[~np.isinf(sf_values)]) * 2
     return sf_values
 
 

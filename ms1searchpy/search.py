@@ -36,6 +36,7 @@ def run():
     parser.add_argument('-nproc',   help='number of processes', default=1, type=int)
     parser.add_argument('-elude', help='path to elude binary file. If empty, the built-in additive model will be used for RT prediction', default='')
     parser.add_argument('-deeplc', help='path to deeplc', default='')
+    parser.add_argument('-deeplc_library', help='path to deeplc library', default='')
     parser.add_argument('-pl', help='path to list of peptides for RT calibration', default='')
     args = vars(parser.parse_args())
 
