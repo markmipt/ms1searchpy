@@ -15,7 +15,7 @@ def recalc_spc(banned_dict, unstable_prots, prots_spc2):
 
 def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
     if os.path.splitext(fname)[-1].lower() == '.mzml':
-        subprocess.call(['biosaur', fname])
+        subprocess.call(['biosaur', fname, '-minlh', '1', '-minl', '1'])
         fname = os.path.splitext(fname)[0] + '.features.tsv'
 
     df_features = pd.read_csv(fname, sep='\t')
