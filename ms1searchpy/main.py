@@ -384,7 +384,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
         DPI = fig.get_dpi()
         fig.set_size_inches(2000.0/float(DPI), 2000.0/float(DPI))
 
-        df0 = pd.read_table(os.path.splitext(fname)[0].replace('.features', '') + '.features' + '.tsv')
+        df0 = pd.read_table(os.path.splitext(fname)[0] + '.tsv')
 
         # Features RT distribution
         # TODO add matched features and matched to 1% FDR proteins features
