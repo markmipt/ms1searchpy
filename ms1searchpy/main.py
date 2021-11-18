@@ -1603,7 +1603,8 @@ def process_peptides(args):
         print('Features used for MachineLearning: ', get_features_pfms(df1))
 
         MAX_EVALS = 25
-        out_file = 'test_randomCV_PFMs_2.tsv'
+
+        out_file = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
         of_connection = open(out_file, 'w')
         writer = csv.writer(of_connection)
 
