@@ -1,7 +1,8 @@
 pyteomics
+lxml
 scipy
 numpy
 sklearn
 lightgbm
 pandas
-biosaur
+biosaur2
