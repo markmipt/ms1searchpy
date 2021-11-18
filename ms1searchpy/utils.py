@@ -6,6 +6,7 @@ import subprocess
 from scipy.stats import binom
 import numpy as np
 import pandas as pd
+from collections import Counter
 
 def recalc_spc(banned_dict, unstable_prots, prots_spc2):
     tmp = dict()
@@ -26,6 +27,16 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
         df_features['FAIMS'] = 0
     if 'ion_mobility' not in df_features.columns:
         df_features['ion_mobility'] = 0
+
+    # if 'mz_std_1' in df_features.columns:
+    #     df_features['mz_diff_ppm_1'] = df_features.apply(lambda x: 1e6 * (x['mz'] - (x['mz_std_1'] - 1.00335 / x['charge'])) / x['mz'], axis=1)
+    #     df_features['mz_diff_ppm_2'] = -100
+    #     df_features.loc[df_features['intensity_2'] > 0, 'mz_diff_ppm_2'] = df_features.loc[df_features['intensity_2'] > 0, :].apply(lambda x: 1e6 * (x['mz'] - (x['mz_std_2'] - 2 * 1.00335 / x['charge'])) / x['mz'], axis=1)
+
+    #     df_features['I-0-1'] = df_features.apply(lambda x: x['intensityApex'] / x['intensity_1'], axis=1)
+    #     df_features['I-0-2'] = -1
+    #     df_features.loc[df_features['intensity_2'] > 0, 'I-0-2'] = df_features.loc[df_features['intensity_2'] > 0, :].apply(lambda x: x['intensityApex'] / x['intensity_2'], axis=1)
+
     # Check unique ids
     if len(df_features['id']) != len(set(df_features['id'])):
         df_features['id'] = df_features.index + 1
@@ -122,6 +133,7 @@ def get_prot_pept_map(args):
 
     pept_prot = dict()
     protsN = dict()
+    # protsNc = dict()
 
     for desc, prot in prot_gen(args):
         dbinfo = desc.split(' ')[0]
@@ -129,8 +141,12 @@ def get_prot_pept_map(args):
             pept_prot.setdefault(pep, []).append(dbinfo)
             protsN.setdefault(dbinfo, set()).add(pep)
     for k, v in protsN.items():
+        # protsNc[k] = Counter()
+        # for vv in v:
+        #     pl = len(vv)
+        #     protsNc[k][pl] += 1
         protsN[k] = len(v)
-    return protsN, pept_prot
+    return protsN, pept_prot#, protsNc
 
 def convert_tandem_cleave_rule_to_regexp(cleavage_rule):
 
@@ -188,9 +204,10 @@ def keywithmaxval(d):
      k=list(d.keys())
      return k[v.index(max(v))]
 
-def calc_sf_all(v, n, p):
+def calc_sf_all(v, n, p, prev_best_score=False):
     sf_values = -np.log10(binom.sf(v-1, n, p))
-    sf_values[np.isinf(sf_values)] = max(sf_values[~np.isinf(sf_values)]) * 2
+    sf_values[np.isnan(sf_values)] = 0
+    sf_values[np.isinf(sf_values)] = (prev_best_score if prev_best_score is not False else max(sf_values[~np.isinf(sf_values)]) * 2)
     return sf_values
 
 
