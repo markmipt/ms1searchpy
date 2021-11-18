@@ -15,7 +15,7 @@ Algorithm can be run with following command:
 
     ms1searchpy path_to_peptideFeatures -d path_to_fasta
 
-The script output contains files: all identified proteins (filename_proteins_full.tsv), filtered proteins (filename_proteins.tsv), all matched peptide match fingerprints (filename_PFMs.tsv), all matched peptide match fingerprints with features prepared for Machnine Learning (filename_PFMs_ML.tsv) and log file with estimated mass and RT accuracies (filename_log.txt).
+The script output contains files: all identified proteins with no rule "one peptide - one protein" (filename_proteins_full_noexclusion.tsv), all identified proteins (filename_proteins_full.tsv), filtered proteins (filename_proteins.tsv), all matched peptide match fingerprints (filename_PFMs.tsv), all matched peptide match fingerprints with features prepared for Machnine Learning (filename_PFMs_ML.tsv) and log file with estimated mass and RT accuracies (filename_log.txt).
 
 Citing ms1searchpy
 -------------------
