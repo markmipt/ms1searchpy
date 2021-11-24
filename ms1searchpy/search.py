@@ -40,7 +40,6 @@ def run():
     args = vars(parser.parse_args())
 
     main.process_file(args)
-    print('The search is finished.')
 
 if __name__ == '__main__':
     run()

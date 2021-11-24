@@ -20,6 +20,7 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
         fname = os.path.splitext(fname)[0] + '.features.tsv'
 
     df_features = pd.read_csv(fname, sep='\t')
+    print('Total number of peptide isotopic clusters: %d' % (len(df_features), ))
 
     if 'id' not in df_features.columns:
         df_features['id'] = df_features.index
