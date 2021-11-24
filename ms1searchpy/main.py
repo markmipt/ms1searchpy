@@ -350,9 +350,9 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
     prots_spc = deepcopy(prots_spc_final)
     sortedlist_spc = sorted(prots_spc.items(), key=operator.itemgetter(1))[::-1]
     with open(base_out_name + '_proteins_full.tsv', 'w') as output:
-        output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
+        output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\tdecoy\n')
         for x in sortedlist_spc:
-            output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
+            output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]), str(isdecoy(x)))) + '\n')
 
     checked = set()
     for k, v in list(prots_spc.items()):
@@ -381,15 +381,17 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
     print('results:%s;number of identified proteins = %d' % (base_out_name, identified_proteins, ))
     # print('R=', r)
     with open(base_out_name + '_proteins.tsv', 'w') as output:
-        output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
+        output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\tdecoy\n')
         for x in filtered_prots:
-            output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
+            output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]), str(isdecoy(x)))) + '\n')
 
 
     if fname and identified_proteins > 10:
 
         df0 = pd.read_table(os.path.splitext(fname)[0] + '.tsv')
         df1_peptides = pd.read_table(os.path.splitext(fname)[0] + '_PFMs.tsv')
+        df1_peptides['decoy'] = df1_peptides['proteins'].apply(lambda x: any(isdecoy_key(z) for z in x.split(';')))
+        
         df1_proteins = pd.read_table(os.path.splitext(fname)[0] + '_proteins_full.tsv')
         df1_proteins_f = pd.read_table(os.path.splitext(fname)[0] + '_proteins.tsv')
         top_proteins = set(df1_proteins_f['dbname'])
@@ -1588,13 +1590,10 @@ def process_peptides(args):
 
     sortedlist_spc = sorted(prots_spc.items(), key=operator.itemgetter(1))[::-1]
     target_prots = [x[0] for x in sortedlist_spc if not x[0].startswith('DECOY_')]
-    # top_6000_target_prots = set(target_prots[:int(len(target_prots)/3)])
-    top_6000_target_prots = set([x[0] for x in aux.filter(prots_spc.items(), fdr=0.25, key=escore, is_decoy=isdecoy, remove_decoy=False, formula=1, full_output=True, correction=0)])
-    # print(len(top_6000_target_prots))
+    target_prots_25_fdr = set([x[0] for x in aux.filter(prots_spc.items(), fdr=0.25, key=escore, is_decoy=isdecoy, remove_decoy=False, formula=1, full_output=True, correction=0)])
     df1['proteins'] = df1['seqs'].apply(lambda x: ';'.join(pept_prot[x]))
-    ### 1
     df1['decoy2'] = df1['decoy'] 
-    df1['decoy'] = df1['proteins'].apply(lambda x: all(z not in top_6000_target_prots for z in x.split(';')))
+    df1['decoy'] = df1['proteins'].apply(lambda x: all(z not in target_prots_25_fdr for z in x.split(';')))
 
     if args['ml']:
 
@@ -1640,16 +1639,14 @@ def process_peptides(args):
             feature_columns = list(get_features_pfms(train_df))
             ### 1
             model = get_cat_model_final_pfms(train_df[~train_df['decoy2']], bestparams, feature_columns)
-            # model = get_cat_model_final_pfms(train_df, bestparams, feature_columns)
 
             df1.loc[test, 'preds'] = model.predict(get_X_array(test_df, feature_columns))
 
     else:
         df1['preds'] = np.power(df1['mass_diff'], 2) + np.power(df1['rt_diff'], 2)
 
-    df1['qpreds'] = pd.qcut(df1['preds'], 20, labels=range(20))
+    df1['qpreds'] = pd.qcut(df1['preds'], 50, labels=range(50))
 
-    ### 1
     df1['decoy'] = df1['decoy2']
 
 
@@ -1657,7 +1654,7 @@ def process_peptides(args):
     df1u = df1u.drop_duplicates(subset='seqs')
 
     qval_ok = 0
-    for qval_cur in range(20):
+    for qval_cur in range(50):
         df1ut = df1u[df1u['qpreds'] == qval_cur]
         decoy_ratio = df1ut['decoy'].sum() / len(df1ut)
         print(qval_cur, decoy_ratio)
@@ -1677,9 +1674,9 @@ def process_peptides(args):
     #     print('!@#', qval_cur, decoy_ratio)
     #     qval_dict[qval_cur] = decoy_ratio
 
-    # qdict = df1un.set_index('seqs').to_dict()['qpreds']
+    qdict = df1un.set_index('seqs').to_dict()['qpreds']
 
-    # df1['qpreds'] = df1['seqs'].apply(lambda x: qdict.get(x, 11))
+    df1['qpreds'] = df1['seqs'].apply(lambda x: qdict.get(x, 11))
     # df1['qz'] = df1['seqs'].apply(lambda x: qval_dict.get(qdict.get(x, 11), 1.0))
 
     df1.to_csv(base_out_name + '_PFMs_ML.tsv', sep='\t', index=False)
