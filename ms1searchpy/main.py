@@ -375,7 +375,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
         identified_proteins += 1
 
     print('TOP 5 identified proteins:')
-    print('dbname\tscore\tnum matched peptides\tnum theoretical peptides')
+    print('dbname\tscore\tmatched peptides\ttheoretical peptides')
     for x in filtered_prots[:5]:
         print('\t'.join((str(x[0]), str(x[1]), str(int(prots_spc_copy[x[0]])), str(protsN[x[0]]))))
     print('\nFinal stage search: identified proteins = %d' % (identified_proteins, ))
