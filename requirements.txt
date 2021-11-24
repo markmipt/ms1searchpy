@@ -6,3 +6,4 @@ sklearn
 lightgbm
 pandas
 biosaur2
+matplotplib
