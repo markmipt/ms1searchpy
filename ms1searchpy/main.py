@@ -107,7 +107,7 @@ def worker_RT(qin, qout, shift, step, RC=False, elude_path=False, ns=False, nr=F
             start += step
         outtest.close()
 
-        subprocess.call([elude_path, '-t', outtrain_name, '-e', outtest_name, '-o', outres_name])
+        subprocess.call([elude_path, '-t', outtrain_name, '-e', outtest_name, '-o', outres_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for x in open(outres_name).readlines()[3:]:
             seq, RT = x.strip().split('\t')
             pepdict[seq] = float(RT)
@@ -967,7 +967,7 @@ def process_peptides(args):
             outcalib.close()
 
 
-            subprocess.call([deeplc_path, '--file_pred', outcalib_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name])
+            subprocess.call([deeplc_path, '--file_pred', outcalib_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             pepdict = dict()
             train_RT = []
             train_seq = []
@@ -1022,7 +1022,7 @@ def process_peptides(args):
                     outcalib.write(seq + '\t' + str(RT) + '\n')
                 outcalib.close()
 
-                subprocess.call([elude_path, '-t', outtrain_name, '-e', outcalib_name, '-g', '-o', outres_name])
+                subprocess.call([elude_path, '-t', outtrain_name, '-e', outcalib_name, '-g', '-o', outres_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 pepdict = dict()
                 train_RT = []
                 train_seq = []
@@ -1112,7 +1112,7 @@ def process_peptides(args):
 
             # [:int(len(ns)/2)] 
 
-            subprocess.call([deeplc_path, '--file_pred', outtrain_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name])
+            subprocess.call([deeplc_path, '--file_pred', outtrain_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             pepdict = dict()
             train_RT = []
             train_seq = []
@@ -1162,7 +1162,7 @@ def process_peptides(args):
                     outtrain.write(seq + '\t' + str(RT) + '\n')
                 outtrain.close()
 
-                subprocess.call([elude_path, '-t', outtrain_name, '-e', outtrain_name, '-g', '-o', outres_name])
+                subprocess.call([elude_path, '-t', outtrain_name, '-e', outtrain_name, '-g', '-o', outres_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 pepdict = dict()
                 train_RT = []
                 train_seq = []
@@ -1250,9 +1250,9 @@ def process_peptides(args):
 
         if args['deeplc_library']:
             print('Using deeplc library...')
-            subprocess.call([deeplc_path, '--file_pred', outtest_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name, '--use_library', args['deeplc_library'], '--write_library'])
+            subprocess.call([deeplc_path, '--file_pred', outtest_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name, '--use_library', args['deeplc_library'], '--write_library'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
-            subprocess.call([deeplc_path, '--file_pred', outtest_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name])
+            subprocess.call([deeplc_path, '--file_pred', outtest_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for x in open(outres_name).readlines()[1:]:
             _, seq, _, RT = x.strip().split(',')
             pepdict[seq] = float(RT)
