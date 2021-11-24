@@ -914,7 +914,7 @@ def process_peptides(args):
             # print('Calibrated RT shift: ', XRT_shift)
             # print('Calibrated RT sigma: ', XRT_sigma)
 
-            aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
+            # aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
 
         else:
             if args['ts'] != 2 and elude_path:
@@ -962,7 +962,7 @@ def process_peptides(args):
                 # print('Calibrated RT shift: ', XRT_shift)
                 # print('Calibrated RT sigma: ', XRT_sigma)
 
-                aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
+                # aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
             else:
                 ns = true_seqs
                 nr = true_rt
@@ -971,7 +971,7 @@ def process_peptides(args):
                 RC = achrom.get_RCs_vary_lcp(ns2, nr2)
                 RT_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
                 train_RT = nr
-                aa, bb, RR, ss = aux.linear_regression(RT_pred, nr)
+                # aa, bb, RR, ss = aux.linear_regression(RT_pred, nr)
 
                 rt_diff_tmp = RT_pred - nr
                 RT_left = -min(rt_diff_tmp)
@@ -1067,7 +1067,7 @@ def process_peptides(args):
             # print('Calibrated RT shift: ', XRT_shift)
             # print('Calibrated RT sigma: ', XRT_sigma)
 
-            aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
+            # aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
 
         else:
 
@@ -1111,11 +1111,11 @@ def process_peptides(args):
                 # print('Calibrated RT shift: ', XRT_shift)
                 # print('Calibrated RT sigma: ', XRT_sigma)
 
-                aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
+                # aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
             else:
                 RC = achrom.get_RCs_vary_lcp(ns, nr)
                 RT_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
-                aa, bb, RR, ss = aux.linear_regression(RT_pred, nr)
+                # aa, bb, RR, ss = aux.linear_regression(RT_pred, nr)
 
                 rt_diff_tmp = RT_pred - nr
                 RT_left = -min(rt_diff_tmp)
@@ -1366,7 +1366,7 @@ def process_peptides(args):
         # print(shr_v)
         # print('\n')
 
-        return [shr_v, hyperparameters, iteration, all_res]
+        return np.array([shr_v, hyperparameters, iteration, all_res], dtype=object)
 
     def random_search_pfms(df, param_grid, out_file, max_evals):
         """Random search for hyperparameter optimization. 
@@ -1587,7 +1587,8 @@ def process_peptides(args):
             qval_ok = qval_cur
         else:
             break
-    print('qval_ok', qval_ok)
+    print('%d %% of PFMs were removed from protein scoring after Machine Learning' % (100 - (qval_ok+1)*2))
+    # print('qval_ok', qval_ok)
 
     df1un = df1u[df1u['qpreds'] <= qval_ok].copy()
     df1un['qpreds'] = pd.qcut(df1un['preds'], 10, labels=range(10))
