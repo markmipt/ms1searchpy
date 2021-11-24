@@ -553,7 +553,12 @@ def filter_results(resultdict, idx):
     return tmp
 
 def process_peptides(args):
-    fname = args['file']
+    fname_orig = args['file']
+    if fname_orig.lower().endswith('mzml'):
+        fname = os.path.splitext(fname_orig)[0] + '.features.tsv'
+    else:
+        fname = fname_orig
+
     fdr = args['fdr'] / 100
     min_isotopes_calibration = args['ci']
     try:
@@ -588,7 +593,7 @@ def process_peptides(args):
 
     ms1results = []
     peps = utils.peptide_gen(args)
-    kwargs, df_features = prepare_peptide_processor(fname, args)
+    kwargs, df_features = prepare_peptide_processor(fname_orig, args)
     func = peptide_processor_iter_isoforms
     print('Running the search ...')
     for y in utils.multimap(1, func, peps, **kwargs):
