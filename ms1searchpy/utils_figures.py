@@ -298,4 +298,3 @@ def plot_outfigures(df, df_peptides, df_peptides_f, base_out_name, df_proteins, 
     plt.tight_layout()
     plt.savefig(base_out_name + '.png')
     plt.close()
-    print('Figures saved.')
