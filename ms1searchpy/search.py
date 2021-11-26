@@ -24,7 +24,8 @@ def run():
     parser.add_argument('-sc', help='minimum number of scans for peptide feature', default=2, type=int)
     parser.add_argument('-lmin', help='min length of peptides', default=7, type=int)
     parser.add_argument('-lmax', help='max length of peptides', default=30, type=int)
-    parser.add_argument('-e', help='cleavage rule in quotes!. X!Tandem style for cleavage rules', default='[RK]|{P}')
+    parser.add_argument('-e', help='cleavage rule in quotes!. X!Tandem style for cleavage rules: "[RK]|{P}" for trypsin,\
+     "[X]|[D]" for asp-n or "[RK]|{P},[K]|[X]" for mix of trypsin and lys-c', default='[RK]|{P}')
     parser.add_argument('-mc', help='number of missed cleavages', default=0, type=int)
     parser.add_argument('-cmin', help='min precursor charge', default=1, type=int)
     parser.add_argument('-cmax', help='max precursor charge', default=4, type=int)

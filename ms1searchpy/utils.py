@@ -6,6 +6,8 @@ import subprocess
 from scipy.stats import binom
 import numpy as np
 import pandas as pd
+import random
+import itertools
 from collections import Counter
 
 def recalc_spc(banned_dict, unstable_prots, prots_spc2):
@@ -64,22 +66,21 @@ def peptide_gen(args):
             yield pep
 
 def get_enzyme(enzyme):
-    if enzyme in parser.expasy_rules:
-        return parser.expasy_rules.get(enzyme)
-    else:
-        try:
-            enzyme = convert_tandem_cleave_rule_to_regexp(enzyme)
-            return enzyme
-        except:
-            return enzyme
+    return convert_tandem_cleave_rule_to_regexp(enzyme)
+    # if enzyme in parser.expasy_rules:
+    #     return parser.expasy_rules.get(enzyme)
+    # else:
+    #     try:
+    #         enzyme = convert_tandem_cleave_rule_to_regexp(enzyme)
+    #         return enzyme
+    #     except:
+    #         return enzyme
 
 def prot_gen(args):
     db = args['d']
     add_decoy = args['ad']
     prefix = args['prefix']
 
-    # read = [fasta.read, lambda f: fasta.decoy_db(f, mode='shuffle', prefix=prefix)][add_decoy]
-    # with read(db) as f:
     with fasta.read(db) as f:
         for p in f:
             yield p
@@ -87,12 +88,107 @@ def prot_gen(args):
 def prepare_decoy_db(args):
     add_decoy = args['ad']
     if add_decoy:
+
         prefix = args['prefix']
         db = args['d']
         out1, out2 = os.path.splitext(db)
         out_db = out1 + '_shuffled' + out2
-        print(out_db)
-        fasta.write_decoy_db(db, open(out_db, 'w'), mode='shuffle', prefix=prefix, keep_nterm=True).close()
+        print('Creating decoy database: %s' % (out_db, ))
+
+
+        extra_check = False
+        if '{' in args['e']:
+            extra_check = True
+        if extra_check:
+            banned_pairs = set()
+            banned_aa = set()
+            for enzyme_local in args['e'].split(','):
+                if '{' in enzyme_local:
+                    lpart, rpart = enzyme_local.split('|')
+                    for aa_left, aa_right in itertools.product(lpart[1:-1], rpart[1:-1]):
+                        banned_aa.add(aa_left)
+                        banned_aa.add(aa_right)
+                        banned_pairs.add(aa_left+aa_right)
+
+            print(banned_aa)
+            print(banned_pairs)
+
+        enzyme = get_enzyme(args['e'])
+        cleave_rule_custom = enzyme + '|' + '([BXZUO])'
+        # cleave_rule_custom = '([RKBXZUO])'
+        print(cleave_rule_custom)
+
+        shuf_map = dict()
+
+        prots = []
+
+        for p in fasta.read(db):
+            if not p[0].startswith(prefix):
+                target_peptides = parser._cleave(p[1], cleave_rule_custom, 0)
+                
+                checked_peptides = set()
+                sample_list = []
+                for idx, pep in enumerate(target_peptides):
+
+                    if len(pep) > 2:
+                        pep_tmp = pep[1:-1]
+                        if extra_check:
+                            for bp in banned_pairs:
+                                if bp in pep_tmp:
+                                    pep_tmp = pep_tmp.replace(bp, '')
+                                    checked_peptides.add(idx)
+
+
+                        sample_list.extend(pep_tmp)
+                random.shuffle(sample_list)
+                idx_for_shuffle = 0
+                
+                decoy_peptides = []
+                len_target_peptides = len(target_peptides)
+                for idx, pep in enumerate(target_peptides):
+                    
+                    if len(pep) > 2:
+                    
+                        if pep in shuf_map:
+                            tmp_seq = shuf_map[pep]
+                        else:
+                            if not extra_check or idx not in checked_peptides:
+                                tmp_seq = pep[0]
+                                for pep_aa in pep[1:-1]:
+                                    tmp_seq += sample_list[idx_for_shuffle]
+                                    idx_for_shuffle += 1
+                                tmp_seq += pep[-1]
+                            else:
+                                max_l = len(pep)
+                                tmp_seq = ''
+                                ii = 0
+                                while ii < max_l - 1:
+                                # for ii in range(max_l-1):
+                                    if pep[ii] in banned_aa and pep[ii+1] in banned_aa and pep[ii] + pep[ii+1] in banned_pairs:
+                                        tmp_seq += pep[ii] + pep[ii+1]
+                                        ii += 1
+                                    else:
+                                        if ii == 0:
+                                            tmp_seq += pep[ii]
+                                        else:
+                                            tmp_seq += sample_list[idx_for_shuffle]
+                                            idx_for_shuffle += 1
+                                    
+                                    ii += 1
+                                tmp_seq += pep[max_l-1]
+
+                            shuf_map[pep] = tmp_seq
+                    else:
+                        tmp_seq = pep
+                    
+                    decoy_peptides.append(tmp_seq)
+
+                assert len(target_peptides) == len(decoy_peptides)
+                        
+                prots.append((p[0], ''.join(target_peptides)))
+                prots.append(('DECOY_' + p[0], ''.join(decoy_peptides)))
+
+        fasta.write(prots, open(out_db, 'w')).close()
         args['d'] = out_db
         args['ad'] = 0
     return args
@@ -134,20 +230,37 @@ def get_prot_pept_map(args):
 
     pept_prot = dict()
     protsN = dict()
-    # protsNc = dict()
+
+    target_prot_count = 0
+    decoy_prot_count = 0
+    target_peps = set()
+    decoy_peps = set()
 
     for desc, prot in prot_gen(args):
         dbinfo = desc.split(' ')[0]
+        if dbinfo.startswith(prefix):
+            decoy_prot_count += 1
+        else:
+            target_prot_count += 1
         for pep in prot_peptides(prot, enzyme, mc, minlen, maxlen, desc.startswith(prefix), dont_use_seen_peptides=True):
             pept_prot.setdefault(pep, []).append(dbinfo)
             protsN.setdefault(dbinfo, set()).add(pep)
     for k, v in protsN.items():
-        # protsNc[k] = Counter()
-        # for vv in v:
-        #     pl = len(vv)
-        #     protsNc[k][pl] += 1
+        if k.startswith(prefix):
+            decoy_peps.update(v)
+        else:
+            target_peps.update(v)
+
         protsN[k] = len(v)
-    return protsN, pept_prot#, protsNc
+
+    print('\nDatabase information:')
+    print('Target/Decoy proteins: %d/%d' % (target_prot_count, decoy_prot_count, ))
+    print('Target/Decoy peptides: %d/%d' % (len(target_peps), len(decoy_peps), ))
+    print('Target-Decoy peptide intersection: %.1f %%\n' % (100*len(target_peps.intersection(decoy_peps))/(len(target_peps)+len(decoy_peps)) ))
+    del decoy_peps
+    del target_peps
+
+    return protsN, pept_prot
 
 def convert_tandem_cleave_rule_to_regexp(cleavage_rule):
 
