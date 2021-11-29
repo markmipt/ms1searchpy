@@ -38,6 +38,7 @@ def run():
     parser.add_argument('-deeplc', help='path to deeplc', default='')
     parser.add_argument('-deeplc_library', help='path to deeplc library', default='')
     parser.add_argument('-pl', help='path to list of peptides for RT calibration', default='')
+    parser.add_argument('-mcalib',   help='mass calibration: 2 - group by ion mobility and RT, 1 - by RT, 0 - no calibration', default=2, type=int)
     args = vars(parser.parse_args())
 
     main.process_file(args)
