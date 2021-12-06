@@ -308,7 +308,7 @@ def run():
 
     df_out.to_csv(path_or_buf=args['out']+'_proteins_full.tsv', sep='\t', index=False)
 
-    df_out_f = df_out[df_out['score'] >= score_threshold]
+    df_out_f = df_out[df_out['score'] > score_threshold]
 
     df_out_f.to_csv(path_or_buf=args['out']+'.tsv', sep='\t', index=False)
 
