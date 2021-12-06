@@ -207,7 +207,7 @@ def run():
     FC_l = -fold_change
     FC_r = fold_change
 
-    df_final.to_csv(path_or_buf=args['out']+'_final_unfilt.tsv', sep='\t', index=False)
+    # df_final.to_csv(path_or_buf=args['out']+'_final_unfilt.tsv', sep='\t', index=False)
 
     total_up = defaultdict(float)
     total_down = defaultdict(float)
@@ -303,9 +303,10 @@ def run():
     df_out = df_out.sort_values(by='score', ascending=False)
     df_out['BH_threshold'] = -np.log10(df_out['score'].rank(ascending=False, method='max') * qval_threshold / len(df_out))
     df_out['pass'] = df_out['score'] > df_out['BH_threshold']
+    df_out['p-value'] = 10**(-df_out['score'])
     score_threshold = df_out[~df_out['pass']]['score'].max()
 
-    # df_out.to_csv(path_or_buf=args['out']+'_testunf.tsv', sep='\t', index=False)
+    df_out.to_csv(path_or_buf=args['out']+'_proteins_full.tsv', sep='\t', index=False)
 
     df_out_f = df_out[df_out['score'] >= score_threshold]
 
