@@ -124,7 +124,7 @@ def prepare_decoy_db(args):
 
         for p in fasta.read(db):
             if not p[0].startswith(prefix):
-                target_peptides = parser._cleave(p[1], cleave_rule_custom, 0)
+                target_peptides = [x[1] for x in parser.icleave(p[1], cleave_rule_custom, 0)]
                 
                 checked_peptides = set()
                 sample_list = []
