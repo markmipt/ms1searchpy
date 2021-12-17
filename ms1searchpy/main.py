@@ -434,7 +434,13 @@ def process_file(args):
     utils.seen_target.clear()
     utils.seen_decoy.clear()
     args = utils.prepare_decoy_db(args)
-    return process_peptides(args)
+    for filename in args['files']:
+        try:
+            args['file'] = filename
+            process_peptides(deepcopy(args))
+        except:
+            print('Search is failed for file:' % (filename, ))
+    return 1
 
 
 def peptide_processor(peptide, **kwargs):

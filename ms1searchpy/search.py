@@ -9,12 +9,12 @@ def run():
 
     Example usage
     -------------
-    $ search.py input.mzML -d human.fasta
+    $ search.py input.mzML input2.mzML -d human.fasta -ad 1 -fdr 5.0
     -------------
     ''',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    parser.add_argument('file', help='input mzML or .tsv file with peptide features')
+    parser.add_argument('files', help='input mzML or .tsv files with peptide features', nargs='+')
     parser.add_argument('-d', help='path to protein fasta file', required=True)
     parser.add_argument('-ptol', help='precursor mass tolerance in ppm', default=10.0, type=float)
     parser.add_argument('-fdr', help='protein fdr filter in %%', default=1.0, type=float)
