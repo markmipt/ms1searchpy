@@ -1670,36 +1670,6 @@ def process_peptides(args):
     p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
     print('Final stage search: probability of random match for theoretical peptide = %.3f\n' % (p, ))
 
-    # all_p_lens = set(df1['plen'])
-
-    # p_ar_plen = {}
-    # for plen in all_p_lens:
-    #     dec_counts = 0
-    #     dec_N = 0
-    #     for k, v in prots_spc2.items():
-    #         if isdecoy_key(k):
-    #             for pep in v:
-    #                 if len(pep) == plen:
-    #                     dec_counts += 1
-    #             dec_N += protsNc[k][plen]
-    #     p_ar_plen[plen] = dec_counts / dec_N
-    # print(p_ar_plen)
-
-    # p_val_average = np.mean(list(p_ar_plen.values()))
-    # print('p_val_average', p_val_average)
-
-    # protsN2 = dict()
-    # for k, v in protsN.items():
-
-    #     new_val = 0
-    #     for plen in all_p_lens:
-    #         new_val += protsNc[k][plen] * p_ar_plen[plen]
-    #     new_val /= v
-
-    #     protsN2[k] = int(new_val / p_val_average * v)
-
-    # protsN = protsN2
-
 
     prots_spc = dict()
     all_pvals = calc_sf_all(v_arr, n_arr, p)
