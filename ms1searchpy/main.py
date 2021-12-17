@@ -438,8 +438,9 @@ def process_file(args):
         try:
             args['file'] = filename
             process_peptides(deepcopy(args))
-        except:
-            print('Search is failed for file:' % (filename, ))
+        except Exception as e:
+            print(e)
+            print('Search is failed for file: %s' % (filename, ))
     return 1
 
 

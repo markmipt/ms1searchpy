@@ -22,6 +22,19 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
         fname = os.path.splitext(fname)[0] + '.features.tsv'
 
     df_features = pd.read_csv(fname, sep='\t')
+
+    required_columns = [
+        'nIsotopes',
+        'nScans',
+        'charge',
+        'massCalib',
+        'rtApex',
+        'mz', 
+        ]
+
+    if not all(req_col in df_features.columns for req_col in required_columns):
+        print('input feature file have missing columns: %s' % (';'.join([req_col for req_col in required_columns if req_col not in df_features.columns])))
+        raise Exception('Exception: wrong columns in feature file')
     print('Total number of peptide isotopic clusters: %d' % (len(df_features), ))
 
     if 'id' not in df_features.columns:
