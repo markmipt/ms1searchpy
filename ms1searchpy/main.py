@@ -715,6 +715,7 @@ def process_peptides(args):
 
             im_set = set(df1['im'])
             if len(im_set) <= 10:
+                df1['im_qcut'] = df1['im']
                 for im_value in im_set:
                     idx1 = df1['im'] == im_value
                     df1.loc[idx1, 'qpreds'] = str(im_value) + pd.qcut(df1.loc[idx1, 'RT'], 10, labels=range(10)).astype(str)
@@ -724,10 +725,29 @@ def process_peptides(args):
                     idx1 = df1['im_qcut'] == im_value
                     df1.loc[idx1, 'qpreds'] = str(im_value) + pd.qcut(df1.loc[idx1, 'RT'], 10, labels=range(10)).astype(str)
 
-
             # df1['qpreds'] = pd.qcut(df1['RT'], 10, labels=range(10))#.astype(int)
                 
             cor_dict = df1[df1['top_peps']].groupby('qpreds')['mass diff'].median().to_dict()
+
+            rt_q_list = list(range(10))
+            for im_value in set(df1['im_qcut']):
+                for rt_q in rt_q_list:
+                    lbl_cur = str(im_value) + str(rt_q)
+                    if lbl_cur not in cor_dict:
+
+                        best_diff = 1e6
+                        best_val = 0
+                        for rt_q2 in rt_q_list:
+                            cur_diff = abs(rt_q - rt_q2)
+                            if cur_diff != 0:
+                                lbl_cur2 = str(im_value) + str(rt_q2)
+                                if lbl_cur2 in cor_dict:
+                                    if cur_diff < best_diff:
+                                        best_diff = cur_diff
+                                        best_val = cor_dict[lbl_cur2]
+
+                        cor_dict[lbl_cur] = best_val
+
             df1['mass diff q median'] = df1['qpreds'].apply(lambda x: cor_dict[x])
             df1['mass diff corrected'] = df1['mass diff'] - df1['mass diff q median']
 
