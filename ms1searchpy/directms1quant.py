@@ -159,8 +159,8 @@ def run():
     FC_max = df_final['FC_raw'].max()
     FC_min = df_final['FC_raw'].min()
 
-    df_final.loc[(pd.isna(df_final['S2_mean'])) & (~pd.isna(df_final['S1_mean'])), 'FC_raw'] = FC_min * 2
-    df_final.loc[(~pd.isna(df_final['S2_mean'])) & (pd.isna(df_final['S1_mean'])), 'FC_raw'] = FC_max * 2
+    df_final.loc[(pd.isna(df_final['S2_mean'])) & (~pd.isna(df_final['S1_mean'])), 'FC_raw'] = FC_min
+    df_final.loc[(~pd.isna(df_final['S2_mean'])) & (pd.isna(df_final['S1_mean'])), 'FC_raw'] = FC_max
 
 
     if args['intensity_norm'] == 1:
@@ -195,8 +195,8 @@ def run():
     FC_max = df_final['FC'].max()
     FC_min = df_final['FC'].min()
 
-    df_final.loc[(pd.isna(df_final['S2_mean'])) & (~pd.isna(df_final['S1_mean'])), 'FC'] = FC_min * 2
-    df_final.loc[(~pd.isna(df_final['S2_mean'])) & (pd.isna(df_final['S1_mean'])), 'FC'] = FC_max * 2
+    df_final.loc[(pd.isna(df_final['S2_mean'])) & (~pd.isna(df_final['S1_mean'])), 'FC'] = FC_min
+    df_final.loc[(~pd.isna(df_final['S2_mean'])) & (pd.isna(df_final['S1_mean'])), 'FC'] = FC_max
 
     df_final['decoy'] = df_final['proteins'].apply(lambda x: all(z.startswith('DECOY_') for z in x.split(';')))
 
@@ -274,6 +274,9 @@ def run():
     
     total_set = set()
 
+    FC_up_dict_basic = df_final.groupby('proteins')['FC'].median().to_dict()
+    FC_up_dict_raw_basic = df_final.groupby('proteins')['FC_raw'].median().to_dict()
+
     df_final = df_final[df_final['up']>0]
     df_final['bestmissing'] = df_final.groupby('proteins')['nummissing'].transform('min')
 
@@ -289,6 +292,9 @@ def run():
 
     df_out['FC'] = df_out['dbname'].apply(lambda x: FC_up_dict.get(x))
     df_out['FC_raw'] = df_out['dbname'].apply(lambda x: FC_up_dict_raw.get(x))
+
+    df_out.loc[pd.isna(df_out['FC']), 'FC'] = df_out.loc[pd.isna(df_out['FC']), 'dbname'].apply(lambda x: FC_up_dict_basic.get(x))
+    df_out.loc[pd.isna(df_out['FC_raw']), 'FC_raw'] = df_out.loc[pd.isna(df_out['FC_raw']), 'dbname'].apply(lambda x: FC_up_dict_raw_basic.get(x))
 
     df_out['v_arr'] = v_arr
     df_out['n_arr'] = n_arr
