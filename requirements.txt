@@ -1,7 +1,9 @@
-pyteomics
+pyteomics>=4.5.1
+lxml
 scipy
 numpy
 sklearn
 lightgbm
 pandas
-biosaur
+biosaur2
+matplotlib

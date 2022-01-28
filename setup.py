@@ -16,7 +16,7 @@ setup(
     long_description_content_type = 'text/markdown',
     author               = 'Mark Ivanov',
     author_email         = 'pyteomics@googlegroups.com',
-    install_requires     = ['pyteomics[XML]', 'scipy', 'numpy', 'sklearn', 'matplotlib', 'pandas', 'seaborn', 'lightgbm', 'biosaur'],
+    install_requires     = [line.strip() for line in open('requirements.txt')],
     classifiers          = ['Intended Audience :: Science/Research',
                             'Programming Language :: Python :: 3.9',
                             'Topic :: Education',
@@ -29,5 +29,6 @@ setup(
     entry_points         = {'console_scripts': ['ms1searchpy = ms1searchpy.search:run',
                                                 'ms1combine = ms1searchpy.combine:run',
                                                 'ms1tonsaf = ms1searchpy.ms1tonsaf:run',
+                                                'directms1quant = ms1searchpy.directms1quant:run',
                                                 'ms1todiffacto = ms1searchpy.ms1todiffacto:run',]}
     )
