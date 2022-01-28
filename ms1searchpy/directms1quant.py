@@ -52,6 +52,7 @@ def run():
 
 
     allowed_prots = set()
+    allowed_prots_all = set()
     allowed_peptides = set()
 
     for i in range(1, 3, 1):
@@ -73,8 +74,19 @@ def run():
                     df0 = df0[df0['qpreds'] <= 10]
                 allowed_peptides.update(df0['seqs'])
 
-    print('Total number of target protein groups %d' % (len(allowed_prots)/2, ))
-    print('Total number of peptide sequences used in quantitation %d' % (len(allowed_peptides), ))
+    print('Total number of TARGET protein GROUPS %d' % (len(allowed_prots)/2, ))
+
+    for i in range(1, 3, 1):
+        sample_num = 'S%d' % (i, )
+        if args.get(sample_num, 0):
+            for z in args[sample_num]:
+                df3 = pd.read_table(z.replace(replace_label, '_PFMs.tsv'))
+                df3 = df3[df3['sequence'].apply(lambda x: x in allowed_peptides)]
+
+                df3_tmp = df3[df3['proteins'].apply(lambda x: any(z in allowed_prots for z in x.split(';')))]
+                for dbnames in set(df3_tmp['proteins'].values):
+                    for dbname in dbnames.split(';'):
+                        allowed_prots_all.add(dbname)
 
 
     for i in range(1, 3, 1):
@@ -89,8 +101,18 @@ def run():
 
                 df3 = df3[df3['sequence'].apply(lambda x: x in allowed_peptides)]
 
-                df3 = df3[df3['proteins'].apply(lambda x: any(z in allowed_prots for z in x.split(';')))]
-                # df3['proteins'] = df3['proteins'].apply(lambda x: ';'.join([z for z in x.split(';') if z in allowed_prots]))
+                # allowed_prots2 = set()
+                # df3_tmp = df3[df3['proteins'].apply(lambda x: any(z in allowed_prots for z in x.split(';')))]
+                # for dbnames in set(df3_tmp['proteins'].values):
+                #     for dbname in dbnames.split(';'):
+                #         allowed_prots2.add(dbname)
+                # print('!', len(allowed_prots), len(allowed_prots2))
+
+                # df3 = df3[df3['proteins'].apply(lambda x: any(z in allowed_prots for z in x.split(';')))]
+
+                df3 = df3[df3['proteins'].apply(lambda x: any(z in allowed_prots_all for z in x.split(';')))]
+                df3['proteins'] = df3['proteins'].apply(lambda x: ';'.join([z for z in x.split(';') if z in allowed_prots_all]))
+                ### df3['proteins'] = df3['proteins'].apply(lambda x: ';'.join([z for z in x.split(';') if z in allowed_prots]))
 
                 df3['origseq'] = df3['sequence']
                 df3['sequence'] = df3['sequence'] + df3['charge'].astype(int).astype(str) + df3['ion_mobility'].astype(str)
@@ -116,6 +138,10 @@ def run():
 
                     df_final = df_final.drop(columns=['protein_x', 'protein_y'])
                     df_final = df_final.drop(columns=['origseq_x', 'origseq_y'])
+
+
+    print('Total number of peptide sequences used in quantitation %d' % (len(set(df_final['origseq'])), ))
+    # print('Total number of proteins used in quantitation %d' % (len(allowed_prots_all), ))
 
             
     df_final = df_final.assign(protein=df_final['protein'].str.split(';')).explode('protein').reset_index(drop=True)
@@ -226,6 +252,7 @@ def run():
 
     # FC_l = FC_mean-fold_change
     # FC_r = FC_mean+fold_change
+    
     if not args['fold_change_abs']:
         fold_change = FC_std * fold_change
     print('absolute FC threshold = %.2f' % (fold_change, ))
@@ -278,6 +305,7 @@ def run():
     FC_up_dict_raw_basic = df_final.groupby('proteins')['FC_raw'].median().to_dict()
 
     df_final = df_final[df_final['up']>0]
+
     df_final['bestmissing'] = df_final.groupby('proteins')['nummissing'].transform('min')
 
     FC_up_dict = df_final[df_final['bestmissing']==df_final['nummissing']].groupby('proteins')['FC'].median().to_dict()
@@ -303,7 +331,7 @@ def run():
 
     df_out = df_out[~df_out['decoy']]
 
-    df_out['FC_pass'] = df_out['FC'].abs() >= fold_change
+    df_out['FC_pass'] = (df_out['FC'].abs() >= fold_change) & (df_out['v_arr'] > 0)
 
     df_out_BH_multiplier = df_out['FC_pass'].sum()
 
