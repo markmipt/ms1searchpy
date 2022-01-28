@@ -508,7 +508,7 @@ def prepare_peptide_processor(fname, args):
     print('Number of peptide isotopic clusters passed filters: %d\n' % (len(nmasses), ))
 
     fmods = args['fmods']
-    aa_mass = mass.std_aa_mass
+    aa_mass = deepcopy(mass.std_aa_mass)
     if fmods:
         for mod in fmods.split(','):
             m, aa = mod.split('@')
