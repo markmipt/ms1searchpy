@@ -35,7 +35,7 @@ def run():
     parser.add_argument('-min_samples', help='minimum number of samples for peptide usage. 0 means 50%% of input files', default=0)
     parser.add_argument('-fold_change', help='FC threshold standard deviations', default=3.0, type=float)
     parser.add_argument('-fold_change_abs', help='Use absolute log2 scale FC threshold instead of standard deviations', action='store_true')
-    parser.add_argument('-qval', help='qvalue threshold', default=0.05)
+    parser.add_argument('-qval', help='qvalue threshold', default=0.05, type=float)
     parser.add_argument('-intensity_norm', help='Intensity normalization: 0-none, 1-median', default=1, type=int)
     parser.add_argument('-all_proteins', help='use all proteins instead of FDR controlled', action='store_true')
     parser.add_argument('-all_pfms', help='use all PFMs instead of ML controlled', action='store_true')
