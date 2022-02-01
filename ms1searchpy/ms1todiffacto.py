@@ -46,6 +46,9 @@ def run():
 
     allowed_prots = set()
     allowed_peptides = set()
+    allowed_prots_all = set()
+
+    all_labels = []
 
     if not args['allowed_prots']:
 
@@ -64,7 +67,33 @@ def run():
         sample_num = 'S%d' % (i, )
         if args[sample_num]:
             for z in args[sample_num]:
+                df0 = pd.read_table(z.replace('_proteins.tsv', '_PFMs_ML.tsv'))
+                df0 = df0[df0['qpreds'] <= 10]
+                allowed_peptides.update(df0['seqs'])
+
+
+    if not args['allowed_prots']:
+        for i in range(1, 13, 1):
+            sample_num = 'S%d' % (i, )
+            if args[sample_num]:
+                for z in args[sample_num]:
+                    df3 = pd.read_table(z.replace('_proteins.tsv', '_PFMs.tsv'))
+                    df3 = df3[df3['sequence'].apply(lambda x: x in allowed_peptides)]
+
+                    df3_tmp = df3[df3['proteins'].apply(lambda x: any(z in allowed_prots for z in x.split(';')))]
+                    for dbnames in set(df3_tmp['proteins'].values):
+                        for dbname in dbnames.split(';'):
+                            allowed_prots_all.add(dbname)
+    else:
+        allowed_prots_all = allowed_prots
+
+
+    for i in range(1, 13, 1):
+        sample_num = 'S%d' % (i, )
+        if args[sample_num]:
+            for z in args[sample_num]:
                 label = z.replace(replace_label, '')
+                all_labels.append(label)
                 df1 = pd.read_table(z)
                 df3 = pd.read_table(z.replace(replace_label, '_PFMs.tsv'))
                 print(z)
@@ -72,17 +101,20 @@ def run():
                 print(df3.shape)
                 print(df3.columns)
 
-                df3 = df3[df3['proteins'].apply(lambda x: any(z in allowed_prots for z in x.split(';')))]
-                df3['proteins'] = df3['proteins'].apply(lambda x: ';'.join([z for z in x.split(';') if z in allowed_prots]))
+                df3 = df3[df3['proteins'].apply(lambda x: any(z in allowed_prots_all for z in x.split(';')))]
+                df3['proteins'] = df3['proteins'].apply(lambda x: ';'.join([z for z in x.split(';') if z in allowed_prots_all]))
+
+                df3['origseq'] = df3['sequence']
+                df3['sequence'] = df3['sequence'] + df3['charge'].astype(int).astype(str) + df3['ion_mobility'].astype(str)
 
                 df3 = df3.sort_values(by='Intensity', ascending=False)
                 df3 = df3.drop_duplicates(subset='sequence')
-                df3 = df3.explode('proteins')
+                # df3 = df3.explode('proteins')
 
                 df3[label] = df3['Intensity']
                 df3['protein'] = df3['proteins']
                 df3['peptide'] = df3['sequence']
-                df3 = df3[['peptide', 'protein', label]]
+                df3 = df3[['origseq', 'peptide', 'protein', label]]
 
 
 
@@ -92,10 +124,19 @@ def run():
                 else:
                     df_final = df_final.reset_index(drop=True).merge(df3.reset_index(drop=True), on='peptide', how='outer')
                     df_final.protein_x.fillna(value=df_final.protein_y, inplace=True)
+                    df_final.origseq_x.fillna(value=df_final.origseq_y, inplace=True)
                     df_final['protein'] = df_final['protein_x']
+                    df_final['origseq'] = df_final['origseq_x']
 
                     df_final = df_final.drop(columns=['protein_x', 'protein_y'])
+                    df_final = df_final.drop(columns=['origseq_x', 'origseq_y'])
 
+
+    df_final['intensity_median'] = df_final[all_labels].median(axis=1)
+    df_final['nummissing'] = df_final[all_labels].isna().sum(axis=1)
+    print(df_final['nummissing'])
+    df_final = df_final.sort_values(by=['nummissing', 'intensity_median'], ascending=(True, False))
+    df_final = df_final.drop_duplicates(subset=('origseq', 'protein'))
 
     print(df_final.columns)
     df_final = df_final.set_index('peptide')
