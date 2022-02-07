@@ -100,7 +100,7 @@ Here's an example where we use Bourne Shell syntax for brevity. Each sample cont
 `ms1todiffacto` prepares input file for [diffacto](https://github.com/statisticalbiotechnology/diffacto) from ms1searchpy output and to automatically runs diffacto.
 
 
-#Links
+## Links
 
 - GitHub repo & issue tracker: https://github.com/markmipt/ms1searchpy
 - Mailing list: markmipt@gmail.com
