@@ -18,17 +18,17 @@ setup(
     author_email         = 'pyteomics@googlegroups.com',
     install_requires     = [line.strip() for line in open('requirements.txt')],
     classifiers          = ['Intended Audience :: Science/Research',
-                            'Programming Language :: Python :: 3.9',
+                            'Programming Language :: Python :: 3',
                             'Topic :: Education',
                             'Topic :: Scientific/Engineering :: Bio-Informatics',
                             'Topic :: Scientific/Engineering :: Chemistry',
                             'Topic :: Scientific/Engineering :: Physics'],
     license              = 'License :: OSI Approved :: Apache Software License',
     packages             = find_packages(),
-    package_data         = {'ms1searchpy': ['Dinosaur/*']},
     entry_points         = {'console_scripts': ['ms1searchpy = ms1searchpy.search:run',
                                                 'ms1combine = ms1searchpy.combine:run',
-                                                'ms1tonsaf = ms1searchpy.ms1tonsaf:run',
                                                 'directms1quant = ms1searchpy.directms1quant:run',
-                                                'ms1todiffacto = ms1searchpy.ms1todiffacto:run',]}
+                                                'ms1quant = ms1searchpy.directms1quant:run',
+                                                'ms1todiffacto = ms1searchpy.ms1todiffacto:run',
+                                                ]}
     )
