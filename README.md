@@ -8,7 +8,7 @@ Basic command for protein identification:
 
     ms1searchpy *.mzML -d path_to.FASTA
 
-OR
+or
 
     ms1searchpy *_peptideFeatures.tsv -d path_to.FASTA
 
@@ -74,18 +74,19 @@ a path is specified.
 ### Output files
 
 `ms1searchpy` produces several tables:
- - findetified proteins, FDR-filtered (`sample_proteins.tsv`);
- - all identified proteins (`sample_proteins_full.tsv`) - this is the main result;
- - all identified proteins based on all PFMs (`sample_proteins_full_noexclusion.tsv`);
- - all matched peptide match fingerprints, or peptide-feature matches (`sample_PFMs.tsv`);
- - all PFMs with features prepared for Machnine Learning (`sample_PFMs_ML.tsv`);
- - log file with estimated mass and RT accuracies (`sample_log.txt`).
+ - findetified proteins, FDR-filtered (`sample.features_proteins.tsv`);
+ - all identified proteins (`sample.features_proteins_full.tsv`) - this is the main result;
+ - all identified proteins based on all PFMs (`sample.features_proteins_full_noexclusion.tsv`);
+ - all matched peptide match fingerprints, or peptide-feature matches (`sample.features_PFMs.tsv`);
+ - all PFMs with features prepared for Machnine Learning (`sample.features_PFMs_ML.tsv`);
+ - number of theoretical peptides per protein (`sample.features_protsN.tsv`);
+ - log file with estimated mass and RT accuracies (`sample.features_log.txt`).
 
 ### Combine results from replicates
 
 You can combine the results from several replicate runs with `ms1combine` by feeding it `_PFMs_ML.tsv` tables:
 
-    ms1combine sample_rep_*_PFMs_ML.tsv
+    ms1combine sample_rep_*.features_PFMs_ML.tsv
 
 ## Usage tutorial: Quantitation
 
@@ -95,10 +96,19 @@ After obtaining the protein identification results, you can proceed to compare y
 
 Here's an example where we use Bourne Shell syntax for brevity. Each sample contains three replicates:
 
-    ms1todiffacto -dif diffacto -S1 sample1_r{1,2,3}.proteins.tsv -S2 sample2_r{1,2,3}.proteins.tsv -norm median -out diffacto_output.tsv -min_samples 3
+    ms1todiffacto -dif diffacto -S1 sample1_r{1,2,3}.features_proteins.tsv -S2 sample2_r{1,2,3}.features_proteins.tsv -norm median -out diffacto_output.tsv -min_samples 3
 
 `ms1todiffacto` prepares input file for [diffacto](https://github.com/statisticalbiotechnology/diffacto) from ms1searchpy output and to automatically runs diffacto.
 
+### Using directms1quant
+
+New LFQ method designed specifically for DirectMS1 is invoked like this:
+
+    directms1quant -S1 sample1_r{1,2,3}.features_proteins_full.tsv -S2 sample2_r{1,2,3}.features_proteins_full.tsv -min_samples 3
+
+It produces a filtered table of significantly changed proteins with p-values and fold changes,
+as well as the full protein table and a separate file simply listing all
+IDs of significantly modified proteins (e.g. for easy copy-paste into a StringDB search window).
 
 ## Links
 
