@@ -21,7 +21,7 @@ def run():
     parser.add_argument('-prots_full', help='path to any of *_proteins_full.tsv file. By default this file will be searched in the folder with PFMs_ML files', default='')
     parser.add_argument('-fdr', help='protein fdr filter in %%', default=1.0, type=float)
     parser.add_argument('-prefix', help='decoy prefix', default='DECOY_')
-    parser.add_argument('-nproc',   help='number of processes', default=1, type=int)
+    parser.add_argument('-nproc', help='number of processes', default=1, type=int)
     args = vars(parser.parse_args())
 
     df1 = False

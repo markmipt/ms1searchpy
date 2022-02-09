@@ -1,27 +1,22 @@
 import os
-from . import utils
 import numpy as np
 from scipy.stats import scoreatpercentile
 from scipy.optimize import curve_fit
 from scipy import exp
 import operator
 from copy import copy, deepcopy
-from collections import defaultdict, Counter
-import re
-from pyteomics import parser, mass, fasta, auxiliary as aux, achrom
+from collections import defaultdict
+from pyteomics import parser, mass, auxiliary as aux, achrom
 try:
     from pyteomics import cmass
 except ImportError:
     cmass = mass
 import subprocess
-from sklearn import linear_model
 import tempfile
 import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 from multiprocessing import Queue, Process, cpu_count
-from itertools import chain
 try:
     import seaborn
     seaborn.set(rc={'axes.facecolor':'#ffffff'})
@@ -29,65 +24,26 @@ try:
 except:
     pass
 
-from .utils import calc_sf_all, recalc_spc
+from . import utils
 from .utils_figures import plot_outfigures
 import lightgbm as lgb
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from scipy.stats import zscore, spearmanr
-import pandas as pd
-from pyteomics import pepxml, achrom, auxiliary as aux, mass, fasta, mzid, parser
 from pyteomics import electrochem
-import numpy as np
 import random
 SEED = 42
-from sklearn.model_selection import train_test_split
-from os import path, mkdir
-from collections import Counter, defaultdict
 import warnings
-import pylab as plt
 warnings.formatwarning = lambda msg, *args, **kw: str(msg) + '\n'
 
-import pandas as pd
-from sklearn.model_selection import train_test_split, KFold
-import os
-from collections import Counter, defaultdict
-from scipy.stats import scoreatpercentile
-from sklearn.isotonic import IsotonicRegression
 import warnings
-import numpy as np
-
-import matplotlib
 import numpy
 import pandas
-import random
-import sklearn
-import matplotlib.pyplot as plt
-
-from sklearn import (
-    feature_extraction, feature_selection, decomposition, linear_model,
-    model_selection, metrics, svm
-)
-
-import scipy
-from scipy.stats import rankdata
-from copy import deepcopy
-import csv
-
-from scipy.stats import rankdata
-import lightgbm as lgb
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from itertools import chain
-import time as timemodule
-import ast
 from sklearn import metrics
+import csv
+import ast
 
 SEED = 50
 
 def worker_RT(qin, qout, shift, step, RC=False, elude_path=False, ns=False, nr=False, win_sys=False):
-    pepdict = dict()    
+    pepdict = dict()
     if elude_path:
         outtrain_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
         outtrain = open(outtrain_name, 'w')
@@ -134,7 +90,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
     pid_pep = defaultdict(set)
     banned_dict = dict()
     for pep, pid in zip(resdict['seqs'], resdict['ids']):
-        
+
         pep_pid[pep].add(pid)
         pid_pep[pid].add(pep)
         if pep in banned_dict:
@@ -166,7 +122,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
                     if isdecoy_key(k):
                         decoy_set.add(k)
                 decoy_set = list(decoy_set)
-                
+
 
                 prots_spc2 = defaultdict(set)
                 for pep, proteins in pept_prot.items():
@@ -219,7 +175,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
                 v_arr_small.append(prots_spc[v])
 
             prots_spc_basic = dict()
-            all_pvals = calc_sf_all(np.array(v_arr_small), n_arr_small, p)
+            all_pvals = utils.calc_sf_all(np.array(v_arr_small), n_arr_small, p)
             for idx, k in enumerate(names_arr_small):
                 prots_spc_basic[k] = all_pvals[idx]
 
@@ -228,7 +184,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
 
                 prots_spc_tmp = dict()
                 v_arr = np.array([prots_spc[k] for k in names_arr])
-                all_pvals = calc_sf_all(v_arr, n_arr, p)
+                all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
                 for idx, k in enumerate(names_arr):
                     prots_spc_tmp[k] = all_pvals[idx]
 
@@ -258,7 +214,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
             else:
 
                 v_arr = np.array([prots_spc[k] for k in names_arr])
-                all_pvals = calc_sf_all(v_arr, n_arr, p)
+                all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
                 for idx, k in enumerate(names_arr):
                     prots_spc_basic[k] = all_pvals[idx]
 
@@ -272,7 +228,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
             if prot_fdr >= 12.5 * fdr:
 
                 v_arr = np.array([prots_spc[k] for k in names_arr])
-                all_pvals = calc_sf_all(v_arr, n_arr, p)
+                all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
                 for idx, k in enumerate(names_arr):
                     prots_spc_basic[k] = all_pvals[idx]
 
@@ -304,7 +260,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
             rtt_koef = mass_koef
             qin.append((mass_koef, rtt_koef))
         qout = worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2, True)
-        
+
         for item, item2 in qout:
             if item2:
                 prots_spc_copy = item2
@@ -391,7 +347,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
         df0 = pd.read_table(os.path.splitext(fname)[0] + '.tsv')
         df1_peptides = pd.read_table(os.path.splitext(fname)[0] + '_PFMs.tsv')
         df1_peptides['decoy'] = df1_peptides['proteins'].apply(lambda x: any(isdecoy_key(z) for z in x.split(';')))
-        
+
         df1_proteins = pd.read_table(os.path.splitext(fname)[0] + '_proteins_full.tsv')
         df1_proteins_f = pd.read_table(os.path.splitext(fname)[0] + '_proteins.tsv')
         top_proteins = set(df1_proteins_f['dbname'])
@@ -487,7 +443,7 @@ def prepare_peptide_processor(fname, args):
     print('\nReading file %s' % (fname, ))
 
     df_features = utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans)
-    
+
     # Sort by neutral mass
     df_features = df_features.sort_values(by='massCalib')
 
@@ -654,7 +610,7 @@ def process_peptides(args):
         print('Stage 0 search: probability of random match for theoretical peptide = %.3f' % (np.mean(top100decoy_score) / np.mean(top100decoy_N)))
 
         prots_spc = dict()
-        all_pvals = calc_sf_all(v_arr, n_arr, p)
+        all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
         for idx, k in enumerate(names_arr):
             prots_spc[k] = all_pvals[idx]
 
@@ -697,7 +653,7 @@ def process_peptides(args):
 
 
         df1['top_peps'] = (df1['mc'] == 0) & (df1['seqs'].apply(lambda x: x in true_seqs))
-        
+
         df1['mz'] = df1['iorig'].apply(lambda x: mzraw[x])
         df1['nIsotopes'] = df1['iorig'].apply(lambda x: Isotopes[x])
         df1['RT'] = df1['iorig'].apply(lambda x: rts[x])
@@ -726,7 +682,7 @@ def process_peptides(args):
                     df1.loc[idx1, 'qpreds'] = str(im_value) + pd.qcut(df1.loc[idx1, 'RT'], 10, labels=range(10)).astype(str)
 
             # df1['qpreds'] = pd.qcut(df1['RT'], 10, labels=range(10))#.astype(int)
-                
+
             cor_dict = df1[df1['top_peps']].groupby('qpreds')['mass diff'].median().to_dict()
 
             rt_q_list = list(range(10))
@@ -762,7 +718,7 @@ def process_peptides(args):
         mass_left = args['ptol']
         mass_right = args['ptol']
 
-        
+
 
         try:
             mass_shift_cor, mass_sigma_cor, covvalue_cor = calibrate_mass(0.001, mass_left, mass_right, df1[df1['top_peps']]['mass diff corrected'])
@@ -826,7 +782,7 @@ def process_peptides(args):
         print('Stage 1 search: probability of random match for theoretical peptide = %.3f' % (np.mean(top100decoy_score) / np.mean(top100decoy_N)))
 
         prots_spc = dict()
-        all_pvals = calc_sf_all(v_arr, n_arr, p)
+        all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
         for idx, k in enumerate(names_arr):
             prots_spc[k] = all_pvals[idx]
 
@@ -919,7 +875,7 @@ def process_peptides(args):
 
         if args['ts'] != 2 and deeplc_path:
 
-            
+
             outtrain_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
             outtrain = open(outtrain_name, 'w')
             outcalib_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
@@ -955,7 +911,7 @@ def process_peptides(args):
                 train_RT.append(float(RTexp))
 
 
-            train_RT = np.array(train_RT)        
+            train_RT = np.array(train_RT)
             RT_pred = np.array([pepdict[s] for s in train_seq])
 
             rt_diff_tmp = RT_pred - train_RT
@@ -1095,7 +1051,7 @@ def process_peptides(args):
                 outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
             outtrain.close()
 
-            # [:int(len(ns)/2)] 
+            # [:int(len(ns)/2)]
 
             subprocess.call([deeplc_path, '--file_pred', outtrain_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             pepdict = dict()
@@ -1289,7 +1245,7 @@ def process_peptides(args):
         output.write('dbname\ttheor peptides\n')
         for k, v in protsN.items():
             output.write('\t'.join((k, str(v))) + '\n')
-   
+
     with open(base_out_name + '_PFMs.tsv', 'w') as output:
         output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tnScans\tnIsotopes\tproteins\tm/z\tRT\taveragineCorr\tcharge\tion_mobility\n')
         # for seq, md, rtd, peak_id, I, nScans, nIsotopes, mzr, rtr, av, ch, im in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['ids'], resdict['Is'], resdict['Scans'], resdict['Isotopes'], resdict['mzraw'], resdict['rt'], resdict['av'], resdict['ch'], resdict['im']):
@@ -1304,7 +1260,7 @@ def process_peptides(args):
             ch = charges[iorig]
             im = imraw[iorig]
             output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), str(nScans), str(nIsotopes), ';'.join(pept_prot[seq]), str(mzr), str(rtr), str(av), str(ch), str(im))) + '\n')
-            
+
     # e_ind = resdict['mc'] == 0
     # resdict = filter_results(resdict, e_ind)
     # rt_diff = rt_diff[e_ind]
@@ -1382,7 +1338,7 @@ def process_peptides(args):
     def objective_pfms(df, hyperparameters, iteration, threshold=0):
         """Objective function for grid and random search. Returns
         the cross validation score from a set of hyperparameters."""
-        
+
         all_res = []
         all_iters = []
 
@@ -1430,18 +1386,18 @@ def process_peptides(args):
         return np.array([shr_v, hyperparameters, iteration, all_res], dtype=object)
 
     def random_search_pfms(df, param_grid, out_file, max_evals):
-        """Random search for hyperparameter optimization. 
+        """Random search for hyperparameter optimization.
         Writes result of search to csv file every search iteration."""
-        
+
         threshold = 0
-        
+
         # Dataframe for results
         results = pd.DataFrame(columns = ['sharpe', 'params', 'iteration', 'all_res'],
                                     index = list(range(max_evals)))
         for i in range(max_evals):
 
             # print('%d/%d' % (i+1, max_evals))
-            
+
             # Choose random hyperparameters
             random_params = {k: random.sample(v, 1)[0] for k, v in param_grid.items()}
 
@@ -1455,15 +1411,15 @@ def process_peptides(args):
             of_connection = open(out_file, 'a')
             writer = csv.writer(of_connection)
             writer.writerow(eval_results)
-            
+
             # make sure to close connection
             of_connection.close()
-            
+
         # Sort with best score on top
         results.sort_values('sharpe', ascending = False, inplace = True)
         results.reset_index(inplace = True)
 
-        return results 
+        return results
 
     def get_cat_model_pfms(df, hyperparameters, feature_columns, train, test):
         feature_columns = list(feature_columns)
@@ -1499,7 +1455,7 @@ def process_peptides(args):
 
     df1['mass_diff'] = mass_diff
     df1['rt_diff'] = rt_diff
-    df1['decoy'] = df1['seqs'].apply(lambda x: all(z.startswith(prefix) for z in pept_prot[x]))    
+    df1['decoy'] = df1['seqs'].apply(lambda x: all(z.startswith(prefix) for z in pept_prot[x]))
 
     df1['peptide'] = df1['seqs']
     mass_dict = {}
@@ -1570,7 +1526,7 @@ def process_peptides(args):
     print('Stage 2 search: probability of random match for theoretical peptide = %.3f\n' % (p, ))
 
     prots_spc = dict()
-    all_pvals = calc_sf_all(v_arr, n_arr, p)
+    all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
     for idx, k in enumerate(names_arr):
         prots_spc[k] = all_pvals[idx]
 
@@ -1578,7 +1534,7 @@ def process_peptides(args):
     target_prots = [x[0] for x in sortedlist_spc if not x[0].startswith('DECOY_')]
     target_prots_25_fdr = set([x[0] for x in aux.filter(prots_spc.items(), fdr=0.25, key=escore, is_decoy=isdecoy, remove_decoy=False, formula=1, full_output=True, correction=0)])
     df1['proteins'] = df1['seqs'].apply(lambda x: ';'.join(pept_prot[x]))
-    df1['decoy2'] = df1['decoy'] 
+    df1['decoy2'] = df1['decoy']
     df1['decoy'] = df1['proteins'].apply(lambda x: all(z not in target_prots_25_fdr for z in x.split(';')))
 
     if args['ml']:
@@ -1603,9 +1559,9 @@ def process_peptides(args):
         random_results = pd.read_csv(out_file)
         random_results = random_results[random_results['auc'] != 'auc']
         random_results['params'] = random_results['params'].apply(lambda x: ast.literal_eval(x))
-        convert_dict = {'auc': float, 
-                    } 
-        random_results = random_results.astype(convert_dict) 
+        convert_dict = {'auc': float,
+                    }
+        random_results = random_results.astype(convert_dict)
 
         bestparams = random_results.sort_values(by='auc',ascending=False)['params'].values[0]
         bestparams['num_threads'] = args['nproc']
@@ -1699,7 +1655,7 @@ def process_peptides(args):
 
 
     prots_spc = dict()
-    all_pvals = calc_sf_all(v_arr, n_arr, p)
+    all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
     for idx, k in enumerate(names_arr):
         prots_spc[k] = all_pvals[idx]
 
@@ -1764,7 +1720,7 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                         if isdecoy_key(k):
                             decoy_set.add(k)
                     decoy_set = list(decoy_set)
-                    
+
 
                     prots_spc2 = defaultdict(set)
                     for pep, proteins in pept_prot.items():
@@ -1820,7 +1776,7 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                     v_arr_small.append(prots_spc[v])
 
                 prots_spc_basic = dict()
-                all_pvals = calc_sf_all(np.array(v_arr_small), n_arr_small, p)
+                all_pvals = utils.calc_sf_all(np.array(v_arr_small), n_arr_small, p)
                 for idx, k in enumerate(names_arr_small):
                     prots_spc_basic[k] = all_pvals[idx]
 
@@ -1848,12 +1804,12 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                                     if bprot == best_prot_val:
                                         tmp_spc_new[bprot] -= 1
                                         unstable_prots.add(bprot)
-                        
+
                         banned_pids_total.add(pid)
                 else:
 
                     v_arr = np.array([prots_spc[k] for k in names_arr])
-                    all_pvals = calc_sf_all(v_arr, n_arr, p)
+                    all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
                     for idx, k in enumerate(names_arr):
                         prots_spc_basic[k] = all_pvals[idx]
 
@@ -1870,7 +1826,7 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                 if prot_fdr >= 12.5 * fdr:
 
                     v_arr = np.array([prots_spc[k] for k in names_arr])
-                    all_pvals = calc_sf_all(v_arr, n_arr, p)
+                    all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
                     for idx, k in enumerate(names_arr):
                         prots_spc_basic[k] = all_pvals[idx]
 
