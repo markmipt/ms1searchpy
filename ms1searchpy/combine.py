@@ -24,11 +24,11 @@ def run():
     parser.add_argument('-nproc', help='number of processes', default=1, type=int)
     args = vars(parser.parse_args())
 
-    df1 = False
+    df1 = None
     for idx, filen in enumerate(args['file']):
         df3 = pd.read_csv(filen, sep='\t')
         df3['ids'] = df3['ids'].apply(lambda x: '%d:%s' % (idx, str(x)))
-        if df1 is False:
+        if df1 is None:
             df1 = df3
             if args['prots_full']:
                 df2 = pd.read_csv(args['prots_full'], sep='\t')
@@ -40,7 +40,7 @@ def run():
                     break
 
         else:
-            df1 = df1.append(df3, ignore_index=True)
+            df1 = pd.concat([df1, df3], ignore_index=True)
 
     pept_prot = defaultdict(set)
     for seq, prots in df1[['seqs', 'proteins']].values:
