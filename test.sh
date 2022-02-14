@@ -1,6 +1,11 @@
 #!/bin/sh
 
 TESTDIR="test_data"
+if [ "$1" = "--no-deeplc" ]; then
+    NODEEPLC=true
+else
+    NODEEPLC=false
+fi
 
 if [ ! -d "$TESTDIR" ]; then
     echo "You must have the test dataset to run this test."
@@ -13,8 +18,11 @@ rm -vf *.features* *.tsv *.txt
 echo ""
 echo "Starting ms1searchpy ..."
 echo "------------------------"
-time ms1searchpy -d sprot_ecoli_ups.fasta -ad 1 -nproc 6 -deeplc deeplc -deeplc_library deeplc.lib *.mzML \
-    && echo "DirectMS1 run successful."
+ms1command="time ms1searchpy -d sprot_ecoli_ups.fasta -ad 1 -nproc 6 -debug "
+if ! $NODEEPLC; then ms1command+="-deeplc deeplc -deeplc_library deeplc.lib "; fi
+ms1command+="*.mzML"
+echo "$ms1command"
+eval "$ms1command" && echo "DirectMS1 run successful."
 
 echo ""
 echo "Starting ms1combine ..."
