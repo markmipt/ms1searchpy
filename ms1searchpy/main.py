@@ -147,7 +147,6 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
                 top100decoy_score_tmp = [tmp_spc_new.get(dprot, 0) for dprot in decoy_set]
                 top100decoy_score_tmp_sum = float(sum(top100decoy_score_tmp))
 
-            tmp_spc = tmp_spc_new
             prots_spc = tmp_spc_new
             if not prots_spc_copy:
                 prots_spc_copy = deepcopy(prots_spc)
@@ -245,7 +244,6 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
             if k not in prots_spc_basic2:
                 prots_spc_basic2[k] = 0
     prots_spc_final = dict()
-    prots_spc_final2 = dict()
 
     if n == 0:
         try:
@@ -414,8 +412,6 @@ def peptide_processor(peptide, **kwargs):
     start = nmasses.searchsorted(m - dm_l)
     end = nmasses.searchsorted(m + dm_r)
     for i in range(start, end):
-        peak_id = ids[i]
-        I = Is[i]
         massdiff = (m - nmasses[i]) / m * 1e6
         mods = 0
         results.append((seqm, massdiff, mods, i))
@@ -750,9 +746,6 @@ def process_peptides(args):
         e_ind = e_all <= r
         resdict = filter_results(resdict, e_ind)
 
-        zs_all = e_all[e_ind] ** 2
-
-
         e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
         resdict2 = filter_results(resdict, e_ind)
 
@@ -1004,17 +997,9 @@ def process_peptides(args):
                 # print('Calibrated RT sigma: ', XRT_sigma)
 
 
-
-
         print('First-stage calibrated RT shift: %.3f min' % (XRT_shift, ))
         print('First-stage calibrated RT sigma: %.3f min' % (XRT_sigma, ))
 
-
-        # print(aa, bb, RR, ss)
-
-
-
-        best_sigma = XRT_sigma
         RT_sigma = XRT_sigma
 
     else:
@@ -1149,9 +1134,6 @@ def process_peptides(args):
 
         # print(aa, bb, RR, ss)
 
-
-
-        best_sigma = XRT_sigma
         RT_sigma = XRT_sigma
 
     print('Second-stage calibrated RT shift: %.3f min' % (XRT_shift, ))
@@ -1340,13 +1322,11 @@ def process_peptides(args):
         the cross validation score from a set of hyperparameters."""
 
         all_res = []
-        all_iters = []
 
         groups = df['peptide']
         ix = df.index.values
         unique = np.unique(groups)
         np.random.RandomState(SEED).shuffle(unique)
-        result = []
         for split in np.array_split(unique, 3):
             mask = groups.isin(split)
             train, test = ix[~mask], ix[mask]
@@ -1530,8 +1510,6 @@ def process_peptides(args):
     for idx, k in enumerate(names_arr):
         prots_spc[k] = all_pvals[idx]
 
-    sortedlist_spc = sorted(prots_spc.items(), key=operator.itemgetter(1))[::-1]
-    target_prots = [x[0] for x in sortedlist_spc if not x[0].startswith('DECOY_')]
     target_prots_25_fdr = set([x[0] for x in aux.filter(prots_spc.items(), fdr=0.25, key=escore, is_decoy=isdecoy, remove_decoy=False, formula=1, full_output=True, correction=0)])
     df1['proteins'] = df1['seqs'].apply(lambda x: ';'.join(pept_prot[x]))
     df1['decoy2'] = df1['decoy']
@@ -1746,7 +1724,6 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                     top100decoy_score_tmp = [tmp_spc_new.get(dprot, 0) for dprot in decoy_set]
                     top100decoy_score_tmp_sum = float(sum(top100decoy_score_tmp))
 
-                tmp_spc = tmp_spc_new
                 prots_spc = tmp_spc_new
                 if not prots_spc_copy:
                     prots_spc_copy = deepcopy(prots_spc)
