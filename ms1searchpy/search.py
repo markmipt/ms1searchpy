@@ -1,6 +1,6 @@
-from sys import argv
-from . import main, utils
+from . import main
 import argparse
+import logging
 
 def run():
     parser = argparse.ArgumentParser(
@@ -15,7 +15,7 @@ def run():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument('files', help='input mzML or .tsv files with peptide features', nargs='+')
-    parser.add_argument('-d', help='path to protein fasta file', required=True)
+    parser.add_argument('-d', '-db', help='path to protein fasta file', required=True)
     parser.add_argument('-ptol', help='precursor mass tolerance in ppm', default=10.0, type=float)
     parser.add_argument('-fdr', help='protein fdr filter in %%', default=1.0, type=float)
     parser.add_argument('-i', help='minimum number of isotopes', default=2, type=int)
@@ -38,9 +38,13 @@ def run():
     parser.add_argument('-deeplc', help='path to deeplc', default='')
     parser.add_argument('-deeplc_library', help='path to deeplc library', default='')
     parser.add_argument('-pl', help='path to list of peptides for RT calibration', default='')
-    parser.add_argument('-mcalib',   help='mass calibration: 2 - group by ion mobility and RT, 1 - by RT, 0 - no calibration', default=2, type=int)
+    parser.add_argument('-mcalib', help='mass calibration: 2 - group by ion mobility and RT, 1 - by RT, 0 - no calibration', default=2, type=int)
+    parser.add_argument('-debug', help='Produce debugging output', action='store_true')
     args = vars(parser.parse_args())
-
+    logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
+            datefmt='[%H:%M:%S]', level=[logging.INFO, logging.DEBUG][args['debug']])
+    logger = logging.getLogger(__name__)
+    logger.debug('Starting with args: %s', args)
     main.process_file(args)
 
 if __name__ == '__main__':
