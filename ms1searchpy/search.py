@@ -43,6 +43,9 @@ def run():
     args = vars(parser.parse_args())
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
             datefmt='[%H:%M:%S]', level=[logging.INFO, logging.DEBUG][args['debug']])
+    logging.getLogger('matplotlib.font_manager').disabled = True
+    logging.getLogger('matplotlib.category').disabled = True
+    logging.getLogger('matplotlib').setLevel(logging.WARNING)
     logger = logging.getLogger(__name__)
     logger.debug('Starting with args: %s', args)
     main.process_file(args)
