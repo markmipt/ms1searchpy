@@ -2,7 +2,9 @@ from .main import final_iteration
 import pandas as pd
 from collections import defaultdict
 import argparse
+import logging
 
+logger = logging.getLogger(__name__)
 
 def run():
     parser = argparse.ArgumentParser(
@@ -23,6 +25,8 @@ def run():
     parser.add_argument('-prefix', help='decoy prefix', default='DECOY_')
     parser.add_argument('-nproc', help='number of processes', default=1, type=int)
     args = vars(parser.parse_args())
+    logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
+            datefmt='[%H:%M:%S]', level=logging.INFO)
 
     df1 = None
     for idx, filen in enumerate(args['file']):
@@ -36,7 +40,7 @@ def run():
                 try:
                     df2 = pd.read_csv(filen.replace('_PFMs_ML.tsv', '_proteins_full.tsv'), sep='\t')
                 except:
-                    print('Proteins_full file is missing!')
+                    logging.critical('Proteins_full file is missing!')
                     break
 
         else:

@@ -712,8 +712,6 @@ def process_peptides(args):
         mass_left = args['ptol']
         mass_right = args['ptol']
 
-
-
         try:
             mass_shift_cor, mass_sigma_cor, covvalue_cor = calibrate_mass(0.001, mass_left, mass_right, df1[df1['top_peps']]['mass diff corrected'])
         except:
