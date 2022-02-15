@@ -332,7 +332,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
     logger.info('dbname\tscore\tmatched peptides\ttheoretical peptides')
     for x in filtered_prots[:5]:
         logger.info('\t'.join((str(x[0]), str(x[1]), str(int(prots_spc_copy[x[0]])), str(protsN[x[0]]))))
-    logger.info('\nFinal stage search: identified proteins = %d' % (identified_proteins, ))
+    logger.info('Final stage search: identified proteins = %d', identified_proteins)
 
     with open(base_out_name + '_proteins.tsv', 'w') as output:
         output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\tdecoy\n')
@@ -355,7 +355,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
             base_out_name, df_proteins=df1_proteins,
             df_proteins_f=df1_proteins_f)
 
-    logger.info('The search for file %s is finished.' % (base_out_name, ))
+    logger.info('The search for file %s is finished.', base_out_name)
 
 def noisygaus(x, a, x0, sigma, b):
     return a * exp(-(x - x0) ** 2 / (2 * sigma ** 2)) + b
@@ -394,7 +394,7 @@ def process_file(args):
             process_peptides(deepcopy(args))
         except Exception as e:
             logger.error(e)
-            logger.error('Search is failed for file: %s' % (filename, ))
+            logger.error('Search is failed for file: %s', filename)
     return 1
 
 
@@ -436,7 +436,7 @@ def prepare_peptide_processor(fname, args):
     min_isotopes = args['i']
     min_scans = args['sc']
 
-    logger.info('Reading file %s' % (fname, ))
+    logger.info('Reading file %s', fname)
 
     df_features = utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans)
 
@@ -457,7 +457,7 @@ def prepare_peptide_processor(fname, args):
     else:
         imraw = df_features['ion_mobility'].values
 
-    logger.info('Number of peptide isotopic clusters passed filters: %d\n' % (len(nmasses), ))
+    logger.info('Number of peptide isotopic clusters passed filters: %d', len(nmasses))
 
     fmods = args['fmods']
     aa_mass = deepcopy(mass.std_aa_mass)
