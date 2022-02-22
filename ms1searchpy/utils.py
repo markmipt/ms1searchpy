@@ -1,14 +1,15 @@
 from pyteomics import fasta, parser
-from multiprocessing import Queue, Process, cpu_count
 import os
-import csv
-import subprocess
 from scipy.stats import binom
 import numpy as np
 import pandas as pd
 import random
 import itertools
-from collections import Counter
+from biosaur2 import main as bio_main
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def recalc_spc(banned_dict, unstable_prots, prots_spc2):
     tmp = dict()
@@ -18,7 +19,28 @@ def recalc_spc(banned_dict, unstable_prots, prots_spc2):
 
 def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
     if os.path.splitext(fname)[-1].lower() == '.mzml':
-        subprocess.call(['biosaur2', fname])
+        args = {
+            'file': fname,
+            'mini': 1,
+            'minmz': 350,
+            'maxmz': 1500,
+            'pasefmini': 100,
+            'htol': 8,
+            'itol': 8,
+            'paseftol': 0.05,
+            'nm': 0,
+            'o': '',
+            'hvf': 1.3,
+            'minlh': 2,
+            'cmin': 1,
+            'cmax': 6,
+            'dia': False,
+            'diahtol': 25,
+            'diaminlh': 1,
+            'mgf': '',
+            'debug': False  # actual debug value is set through logging, not here
+        }
+        bio_main.process_file(args)
         fname = os.path.splitext(fname)[0] + '.features.tsv'
 
     df_features = pd.read_csv(fname, sep='\t')
@@ -29,13 +51,13 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
         'charge',
         'massCalib',
         'rtApex',
-        'mz', 
+        'mz',
         ]
 
     if not all(req_col in df_features.columns for req_col in required_columns):
-        print('input feature file have missing columns: %s' % (';'.join([req_col for req_col in required_columns if req_col not in df_features.columns])))
+        logger.error('input feature file have missing columns: %s', ';'.join([req_col for req_col in required_columns if req_col not in df_features.columns]))
         raise Exception('Exception: wrong columns in feature file')
-    print('Total number of peptide isotopic clusters: %d' % (len(df_features), ))
+    logger.info('Total number of peptide isotopic clusters: %d', len(df_features))
 
     if 'id' not in df_features.columns:
         df_features['id'] = df_features.index
@@ -91,8 +113,6 @@ def get_enzyme(enzyme):
 
 def prot_gen(args):
     db = args['d']
-    add_decoy = args['ad']
-    prefix = args['prefix']
 
     with fasta.read(db) as f:
         for p in f:
@@ -106,8 +126,7 @@ def prepare_decoy_db(args):
         db = args['d']
         out1, out2 = os.path.splitext(db)
         out_db = out1 + '_shuffled' + out2
-        print('Creating decoy database: %s' % (out_db, ))
-
+        logger.info('Creating decoy database: %s', out_db)
 
         extra_check = False
         if '{' in args['e']:
@@ -123,13 +142,13 @@ def prepare_decoy_db(args):
                         banned_aa.add(aa_right)
                         banned_pairs.add(aa_left+aa_right)
 
-            print(banned_aa)
-            print(banned_pairs)
+            logger.debug(banned_aa)
+            logger.debug(banned_pairs)
 
         enzyme = get_enzyme(args['e'])
         cleave_rule_custom = enzyme + '|' + '([BXZUO])'
         # cleave_rule_custom = '([RKBXZUO])'
-        print(cleave_rule_custom)
+        logger.debug(cleave_rule_custom)
 
         shuf_map = dict()
 
@@ -138,7 +157,7 @@ def prepare_decoy_db(args):
         for p in fasta.read(db):
             if not p[0].startswith(prefix):
                 target_peptides = [x[1] for x in parser.icleave(p[1], cleave_rule_custom, 0)]
-                
+
                 checked_peptides = set()
                 sample_list = []
                 for idx, pep in enumerate(target_peptides):
@@ -155,13 +174,12 @@ def prepare_decoy_db(args):
                         sample_list.extend(pep_tmp)
                 random.shuffle(sample_list)
                 idx_for_shuffle = 0
-                
+
                 decoy_peptides = []
-                len_target_peptides = len(target_peptides)
                 for idx, pep in enumerate(target_peptides):
-                    
+
                     if len(pep) > 2:
-                    
+
                         if pep in shuf_map:
                             tmp_seq = shuf_map[pep]
                         else:
@@ -186,18 +204,18 @@ def prepare_decoy_db(args):
                                         else:
                                             tmp_seq += sample_list[idx_for_shuffle]
                                             idx_for_shuffle += 1
-                                    
+
                                     ii += 1
                                 tmp_seq += pep[max_l-1]
 
                             shuf_map[pep] = tmp_seq
                     else:
                         tmp_seq = pep
-                    
+
                     decoy_peptides.append(tmp_seq)
 
                 assert len(target_peptides) == len(decoy_peptides)
-                        
+
                 prots.append((p[0], ''.join(target_peptides)))
                 prots.append(('DECOY_' + p[0], ''.join(decoy_peptides)))
 
@@ -266,14 +284,15 @@ def get_prot_pept_map(args):
 
         protsN[k] = len(v)
 
-    print('\nDatabase information:')
-    print('Target/Decoy proteins: %d/%d' % (target_prot_count, decoy_prot_count, ))
-    print('Target/Decoy peptides: %d/%d' % (len(target_peps), len(decoy_peps), ))
-    print('Target-Decoy peptide intersection: %.1f %%\n' % (100*len(target_peps.intersection(decoy_peps))/(len(target_peps)+len(decoy_peps)) ))
+    logger.info('Database information:')
+    logger.info('Target/Decoy proteins: %d/%d', target_prot_count, decoy_prot_count)
+    logger.info('Target/Decoy peptides: %d/%d', len(target_peps), len(decoy_peps))
+    logger.info('Target-Decoy peptide intersection: %.1f %%',
+        100 * len(target_peps.intersection(decoy_peps)) / (len(target_peps) + len(decoy_peps)))
     del decoy_peps
     del target_peps
-
     return protsN, pept_prot
+
 
 def convert_tandem_cleave_rule_to_regexp(cleavage_rule):
 
@@ -325,8 +344,8 @@ def multimap(n, func, it, **kw):
         yield func(s, **kw)
 
 def keywithmaxval(d):
-     """ a) create a list of the dict's keys and values; 
-         b) return the key with the max value"""  
+     """ a) create a list of the dict's keys and values;
+         b) return the key with the max value"""
      v=list(d.values())
      k=list(d.keys())
      return k[v.index(max(v))]
@@ -354,9 +373,9 @@ def calc_sf_all(v, n, p, prev_best_score=False):
 #     #                 for score, spec_t, c, info in res:
 #     #                     if -score <= best_res.get(spec_t, 0):
 #     #                         best_res_raw[spec_t] = [peptide, m, snp_label, score, spec_t, c, info]
-#     #                         best_res[spec_t] = -score   
+#     #                         best_res[spec_t] = -score
 #     #     return best_res_raw, best_res
-      
+
 #     else:
 
 #         qout = Queue()

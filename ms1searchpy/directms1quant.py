@@ -1,14 +1,9 @@
 from __future__ import division
 import argparse
-import pkg_resources
 import pandas as pd
-import ast
-import subprocess
 import numpy as np
 from scipy.stats import binom, ttest_ind
-from collections import defaultdict
-import itertools
-from pyteomics import auxiliary as aux
+import logging
 
 def calc_sf_all(v, n, p):
     sf_values = -np.log10(binom.sf(v-1, n, p))
@@ -41,6 +36,10 @@ def run():
     parser.add_argument('-all_pfms', help='use all PFMs instead of ML controlled', action='store_true')
     parser.add_argument('-output_peptides', help='Add output table with peptides', action='store_true')
     args = vars(parser.parse_args())
+    logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
+            datefmt='[%H:%M:%S]', level=logging.INFO)
+    logger = logging.getLogger(__name__)
+
 
     replace_label = '_proteins_full.tsv'
 
@@ -74,7 +73,7 @@ def run():
                     df0 = df0[df0['qpreds'] <= 10]
                 allowed_peptides.update(df0['seqs'])
 
-    print('Total number of TARGET protein GROUPS %d' % (len(allowed_prots)/2, ))
+    logger.info('Total number of TARGET protein GROUPS: %d', len(allowed_prots) / 2)
 
     for i in range(1, 3, 1):
         sample_num = 'S%d' % (i, )
@@ -96,7 +95,6 @@ def run():
             for z in args[sample_num]:
                 label = z.replace(replace_label, '')
                 all_s_lbls[sample_num].append(label)
-                df1 = pd.read_table(z)
                 df3 = pd.read_table(z.replace(replace_label, '_PFMs.tsv'))
 
                 df3 = df3[df3['sequence'].apply(lambda x: x in allowed_peptides)]
@@ -125,9 +123,8 @@ def run():
                 df3['protein'] = df3['proteins']
                 df3['peptide'] = df3['sequence']
                 df3 = df3[['origseq', 'peptide', 'protein', label]]
-                    
+
                 if df_final is False:
-                    label_basic = label
                     df_final = df3.reset_index(drop=True)
                 else:
                     df_final = df_final.reset_index(drop=True).merge(df3.reset_index(drop=True), on='peptide', how='outer')
@@ -140,10 +137,10 @@ def run():
                     df_final = df_final.drop(columns=['origseq_x', 'origseq_y'])
 
 
-    print('Total number of peptide sequences used in quantitation %d' % (len(set(df_final['origseq'])), ))
+    logger.info('Total number of peptide sequences used in quantitation: %d', len(set(df_final['origseq'])))
     # print('Total number of proteins used in quantitation %d' % (len(allowed_prots_all), ))
 
-            
+
     df_final = df_final.assign(protein=df_final['protein'].str.split(';')).explode('protein').reset_index(drop=True)
 
     df_final = df_final.set_index('peptide')
@@ -159,8 +156,6 @@ def run():
 
     df_final_copy = df_final.copy()
 
-    df_res_list = []
-
     custom_min_samples = int(args['min_samples'])
     if custom_min_samples == 0:
         custom_min_samples = int(len(all_lbls)/2)
@@ -169,13 +164,13 @@ def run():
 
     max_missing = len(all_lbls) - custom_min_samples
 
-    print('Allowed max number of missing values: %d' % (max_missing, ))
+    logger.info('Allowed max number of missing values: %d', max_missing)
 
     df_final['nummissing'] = df_final.isna().sum(axis=1)
     df_final['nonmissing'] = df_final['nummissing'] <= max_missing
 
     df_final = df_final[df_final['nonmissing']]
-    print('Total number of PFMs passed missing values threshold %d' % (len(df_final), ))
+    logger.info('Total number of PFMs passed missing values threshold: %d', len(df_final))
 
 
     df_final['S2_mean'] = df_final[all_s_lbls['S2']].mean(axis=1)
@@ -252,14 +247,14 @@ def run():
 
     # FC_l = FC_mean-fold_change
     # FC_r = FC_mean+fold_change
-    
+
     if not args['fold_change_abs']:
         fold_change = FC_std * fold_change
-    print('absolute FC threshold = %.2f' % (fold_change, ))
+    logger.info('Absolute FC threshold = %.2f', fold_change)
     FC_l = -fold_change
     FC_r = fold_change
 
-    
+
     df_final['up'] = df_final['sign'] * (df_final['FC'] >= FC_r)
     df_final['down'] = df_final['sign'] * (df_final['FC'] <= FC_l)
 
@@ -276,7 +271,6 @@ def run():
     prots_up = df_final.groupby('proteins')['up'].sum()
 
     N_decoy_total = df_final['decoy'].sum()
-    changed_decoy_total = df_final[(df_final['p-value'] <= p_val_threshold) & (df_final['decoy'])].shape[0]
 
     upreg_decoy_total = df_final[df_final['decoy']]['up'].sum()
 
@@ -284,21 +278,21 @@ def run():
 
     names_arr = np.array(list(protsN.keys()))
 
-    print('Total number of proteins used in quantitation: %d' % (sum(not z.startswith('DECOY_') for z in names_arr), ))
-    print('Total number of peptides: %d' % (len(df_final), ))
-    print('Total number of decoy peptides: %d' % (N_decoy_total, ))
-    print('Total number of significantly changed decoy peptides: %d' % (upreg_decoy_total, ))
-    print('Probability of random peptide to be significantly changed: %.3f' % (p_up, ))
+    logger.info('Total number of proteins used in quantitation: %d', sum(not z.startswith('DECOY_') for z in names_arr))
+    logger.info('Total number of peptides: %d', len(df_final))
+    logger.info('Total number of decoy peptides: %d', N_decoy_total)
+    logger.info('Total number of significantly changed decoy peptides: %d', upreg_decoy_total)
+    logger.info('Probability of random peptide to be significantly changed: %.3f', p_up)
     # print(N_decoy_total, upreg_decoy_total, p_up)
-    
+
     if args['output_peptides']:
         df_final.to_csv(path_or_buf=args['out']+'_quant_peptides.tsv', sep='\t', index=False)
-    
+
     v_arr = np.array(list(prots_up.get(k, 0) for k in names_arr))
     n_arr = np.array(list(protsN.get(k, 0) for k in names_arr))
 
     all_pvals = calc_sf_all(v_arr, n_arr, p_up)
-    
+
     total_set = set()
 
     FC_up_dict_basic = df_final.groupby('proteins')['FC'].median().to_dict()
@@ -355,7 +349,7 @@ def run():
 
     total_set.update([z.split('|')[1] for z in set(df_out_f['dbname'])])
 
-    print('Total number of significantly changed proteins: %d' % (len(total_set), ))
+    logger.info('Total number of significantly changed proteins: %d', len(total_set))
 
     f1 = open(args['out'] + '_proteins_for_stringdb.txt', 'w')
     for z in total_set:

@@ -34,7 +34,7 @@ echo ""
 echo "Starting ms1todiffacto ..."
 echo "--------------------------"
 time ms1todiffacto -dif diffacto -S1 *_UPS_4_0?.features_proteins.tsv -S2 *_UPS_2_0?.features_proteins.tsv \
-    -norm median -out diffacto_output.tsv -min_samples 3 && echo "ms1todiffacto run successful."
+    -norm median -out diffacto_output.tsv -min_samples 3 -debug && echo "ms1todiffacto run successful."
 
 echo ""
 echo "Starting directms1quant ..."

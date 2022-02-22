@@ -29,18 +29,18 @@ from .utils_figures import plot_outfigures
 import lightgbm as lgb
 from pyteomics import electrochem
 import random
-SEED = 42
+SEED = 50
 import warnings
 warnings.formatwarning = lambda msg, *args, **kw: str(msg) + '\n'
 
-import warnings
+import logging
 import numpy
 import pandas
 from sklearn import metrics
 import csv
 import ast
 
-SEED = 50
+logger = logging.getLogger(__name__)
 
 def worker_RT(qin, qout, shift, step, RC=False, elude_path=False, ns=False, nr=False, win_sys=False):
     pepdict = dict()
@@ -328,12 +328,12 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
     for x in filtered_prots:
         identified_proteins += 1
 
-    print('TOP 5 identified proteins:')
-    print('dbname\tscore\tmatched peptides\ttheoretical peptides')
+    logger.info('TOP 5 identified proteins:')
+    logger.info('dbname\tscore\tmatched peptides\ttheoretical peptides')
     for x in filtered_prots[:5]:
-        print('\t'.join((str(x[0]), str(x[1]), str(int(prots_spc_copy[x[0]])), str(protsN[x[0]]))))
-    print('\nFinal stage search: identified proteins = %d' % (identified_proteins, ))
-    # print('R=', r)
+        logger.info('\t'.join((str(x[0]), str(x[1]), str(int(prots_spc_copy[x[0]])), str(protsN[x[0]]))))
+    logger.info('Final stage search: identified proteins = %d', identified_proteins)
+
     with open(base_out_name + '_proteins.tsv', 'w') as output:
         output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\tdecoy\n')
         for x in filtered_prots:
@@ -355,7 +355,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
             base_out_name, df_proteins=df1_proteins,
             df_proteins_f=df1_proteins_f)
 
-    print('The search for file %s is finished.' % (base_out_name, ))
+    logger.info('The search for file %s is finished.', base_out_name)
 
 def noisygaus(x, a, x0, sigma, b):
     return a * exp(-(x - x0) ** 2 / (2 * sigma ** 2)) + b
@@ -393,8 +393,8 @@ def process_file(args):
             args['file'] = filename
             process_peptides(deepcopy(args))
         except Exception as e:
-            print(e)
-            print('Search is failed for file: %s' % (filename, ))
+            logger.error(e)
+            logger.error('Search is failed for file: %s', filename)
     return 1
 
 
@@ -436,7 +436,7 @@ def prepare_peptide_processor(fname, args):
     min_isotopes = args['i']
     min_scans = args['sc']
 
-    print('\nReading file %s' % (fname, ))
+    logger.info('Reading file %s', fname)
 
     df_features = utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans)
 
@@ -457,7 +457,7 @@ def prepare_peptide_processor(fname, args):
     else:
         imraw = df_features['ion_mobility'].values
 
-    print('Number of peptide isotopic clusters passed filters: %d\n' % (len(nmasses), ))
+    logger.info('Number of peptide isotopic clusters passed filters: %d', len(nmasses))
 
     fmods = args['fmods']
     aa_mass = deepcopy(mass.std_aa_mass)
@@ -473,8 +473,6 @@ def prepare_peptide_processor(fname, args):
 
     acc_l = args['ptol']
     acc_r = args['ptol']
-
-    # print(df_features.columns)
 
     return {'aa_mass': aa_mass, 'acc_l': acc_l, 'acc_r': acc_r, 'args': args}, df_features
 
@@ -546,7 +544,7 @@ def process_peptides(args):
 
     if calib_path and args['ts']:
         args['ts'] = 0
-        print('Two-stage RT prediction does not work with list of MS/MS identified peptides...')
+        logger.info('Two-stage RT prediction does not work with list of MS/MS identified peptides...')
 
     args['enzyme'] = utils.get_enzyme(args['e'])
 
@@ -554,7 +552,7 @@ def process_peptides(args):
     peps = utils.peptide_gen(args)
     kwargs, df_features = prepare_peptide_processor(fname_orig, args)
     func = peptide_processor_iter_isoforms
-    print('Running the search ...')
+    logger.info('Running the search ...')
     for y in utils.multimap(1, func, peps, **kwargs):
         for result in y:
             if len(result):
@@ -603,7 +601,7 @@ def process_peptides(args):
         top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
         top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
         p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
-        print('Stage 0 search: probability of random match for theoretical peptide = %.3f' % (np.mean(top100decoy_score) / np.mean(top100decoy_N)))
+        logger.info('Stage 0 search: probability of random match for theoretical peptide = %.3f', (np.mean(top100decoy_score) / np.mean(top100decoy_N)))
 
         prots_spc = dict()
         all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
@@ -629,9 +627,9 @@ def process_peptides(args):
 
         for x in filtered_prots:
             identified_proteins += 1
-        print('Stage 0 search: identified proteins = %d\n' % (identified_proteins, ))
+        logger.info('Stage 0 search: identified proteins = %d', identified_proteins)
 
-        print('Running mass recalibration...')
+        logger.info('Running mass recalibration...')
 
         df1 = pd.DataFrame()
         df1['mass diff'] = resdict['md']
@@ -714,8 +712,6 @@ def process_peptides(args):
         mass_left = args['ptol']
         mass_right = args['ptol']
 
-
-
         try:
             mass_shift_cor, mass_sigma_cor, covvalue_cor = calibrate_mass(0.001, mass_left, mass_right, df1[df1['top_peps']]['mass diff corrected'])
         except:
@@ -727,11 +723,11 @@ def process_peptides(args):
             mass_shift, mass_sigma, covvalue = calibrate_mass(0.01, mass_left, mass_right, df1[df1['top_peps']]['mass diff'])
 
         if mass_calib_arg:
-            print('Uncalibrated mass shift: %.3f ppm' % (mass_shift, ))
-            print('Uncalibrated mass sigma: %.3f ppm' % (mass_sigma, ))
+            logger.info('Uncalibrated mass shift: %.3f ppm', mass_shift)
+            logger.info('Uncalibrated mass sigma: %.3f ppm', mass_sigma)
 
-        print('Estimated mass shift: %.3f ppm' % (mass_shift_cor, ))
-        print('Estimated mass sigma: %.3f ppm' % (mass_sigma_cor, ))
+        logger.info('Estimated mass shift: %.3f ppm', mass_shift_cor)
+        logger.info('Estimated mass sigma: %.3f ppm', mass_sigma_cor)
 
         out_log.write('Estimated mass shift: %s ppm\n' % (mass_shift_cor, ))
         out_log.write('Estimated mass sigma: %s ppm\n' % (mass_sigma_cor, ))
@@ -772,7 +768,7 @@ def process_peptides(args):
         top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
         top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
         p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
-        print('Stage 1 search: probability of random match for theoretical peptide = %.3f' % (np.mean(top100decoy_score) / np.mean(top100decoy_N)))
+        logger.info('Stage 1 search: probability of random match for theoretical peptide = %.3f', (np.mean(top100decoy_score) / np.mean(top100decoy_N)))
 
         prots_spc = dict()
         all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
@@ -798,11 +794,11 @@ def process_peptides(args):
 
         for x in filtered_prots:
             identified_proteins += 1
-        print('Stage 1 search: identified proteins = %d\n' % (identified_proteins, ))
+        logger.info('Stage 1 search: identified proteins = %d', identified_proteins)
 
 
 
-        print('Running RT prediction...')
+        logger.info('Running RT prediction...')
 
 
         e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= 1
@@ -864,7 +860,7 @@ def process_peptides(args):
             true_rt2 = true_rt
 
 
-        print('First-stage peptides used for RT prediction: %d' % (len(true_seqs), ))
+        logger.info('First-stage peptides used for RT prediction: %d', len(true_seqs))
 
         if args['ts'] != 2 and deeplc_path:
 
@@ -876,7 +872,7 @@ def process_peptides(args):
             outres_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
             ns = true_seqs
             nr = true_rt
-            # print('Peptides used for RT prediction: %d' % (len(ns), ))
+
             ns2 = true_seqs2
             nr2 = true_rt2
 
@@ -921,10 +917,6 @@ def process_peptides(args):
                 XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
             if np.isinf(covvalue):
                 XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
-            # print('Calibrated RT shift: ', XRT_shift)
-            # print('Calibrated RT sigma: ', XRT_sigma)
-
-            # aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
 
         else:
             if args['ts'] != 2 and elude_path:
@@ -938,7 +930,6 @@ def process_peptides(args):
 
                 ns = true_seqs
                 nr = true_rt
-                # print('Peptides used for RT prediction: %d' % (len(ns), ))
                 ns2 = true_seqs2
                 nr2 = true_rt2
                 for seq, RT in zip(ns, nr):
@@ -969,10 +960,6 @@ def process_peptides(args):
                     XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
                 if np.isinf(covvalue):
                     XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
-                # print('Calibrated RT shift: ', XRT_shift)
-                # print('Calibrated RT sigma: ', XRT_sigma)
-
-                # aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
             else:
                 ns = true_seqs
                 nr = true_rt
@@ -993,29 +980,23 @@ def process_peptides(args):
                     XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
                 if np.isinf(covvalue):
                     XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
-                # print('Calibrated RT shift: ', XRT_shift)
-                # print('Calibrated RT sigma: ', XRT_sigma)
 
 
-        print('First-stage calibrated RT shift: %.3f min' % (XRT_shift, ))
-        print('First-stage calibrated RT sigma: %.3f min' % (XRT_sigma, ))
+        logger.info('First-stage calibrated RT shift: %.3f min', XRT_shift)
+        logger.info('First-stage calibrated RT sigma: %.3f min', XRT_sigma)
 
         RT_sigma = XRT_sigma
 
     else:
-        print('No matches found')
+        logger.info('No matches found')
 
     if args['ts']:
-
-        # print('Running second stage RT prediction...')
-
-
         ns = np.array(ns)
         nr = np.array(nr)
         idx = np.abs((rt_diff_tmp) - XRT_shift) <= 3 * XRT_sigma
         ns = ns[idx]
         nr = nr[idx]
-        print('Second-stage peptides used for RT prediction: %d' % (len(ns), ))
+        logger.info('Second-stage peptides used for RT prediction: %d', len(ns))
 
         if deeplc_path:
 
@@ -1025,7 +1006,6 @@ def process_peptides(args):
             outtrain = open(outtrain_name, 'w')
             outres_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
 
-            # print('Peptides used for RT prediction: %d' % (len(ns), ))
             ll = len(ns)
             ns = ns[:ll]
             nr = nr[:ll]
@@ -1066,21 +1046,16 @@ def process_peptides(args):
                 XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
             if np.isinf(covvalue):
                 XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
-            # print('Calibrated RT shift: ', XRT_shift)
-            # print('Calibrated RT sigma: ', XRT_sigma)
-
-            # aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
 
         else:
 
             if elude_path:
 
-
                 outtrain_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
                 outtrain = open(outtrain_name, 'w')
                 outres_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
 
-                print(len(ns))
+                logger.debug(len(ns))
                 ll = len(ns)
                 ns = ns[:ll]
                 nr = nr[:ll]
@@ -1110,10 +1085,6 @@ def process_peptides(args):
                     XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
                 if np.isinf(covvalue):
                     XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
-                # print('Calibrated RT shift: ', XRT_shift)
-                # print('Calibrated RT sigma: ', XRT_sigma)
-
-                # aa, bb, RR, ss = aux.linear_regression(RT_pred, train_RT)
             else:
                 RC = achrom.get_RCs_vary_lcp(ns, nr)
                 RT_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
@@ -1129,15 +1100,11 @@ def process_peptides(args):
                     XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
                 if np.isinf(covvalue):
                     XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
-                # print('Calibrated RT shift: ', XRT_shift)
-                # print('Calibrated RT sigma: ', XRT_sigma)
-
-        # print(aa, bb, RR, ss)
 
         RT_sigma = XRT_sigma
 
-    print('Second-stage calibrated RT shift: %.3f min' % (XRT_shift, ))
-    print('Second-stage calibrated RT sigma: %.3f min' % (XRT_sigma, ))
+    logger.info('Second-stage calibrated RT shift: %.3f min', XRT_shift)
+    logger.info('Second-stage calibrated RT sigma: %.3f min', XRT_sigma)
 
     out_log.write('Calibrated RT shift: %s min\n' % (XRT_shift, ))
     out_log.write('Calibrated RT sigma: %s min\n' % (XRT_sigma, ))
@@ -1352,7 +1319,6 @@ def process_peptides(args):
             # shr_v = len(aux.filter(test_df, fdr=0.25, key='preds', is_decoy='decoy'))
 
             all_res.append(shr_v)
-            # print(shr_v)
 
             if shr_v < threshold:
                 all_res = [0, ]
@@ -1360,8 +1326,6 @@ def process_peptides(args):
 
         shr_v = np.mean(all_res)
         # hyperparameters['n_estimators'] = int(np.max(all_iters))# * 1.5)
-        # print(shr_v)
-        # print('\n')
 
         return np.array([shr_v, hyperparameters, iteration, all_res], dtype=object)
 
@@ -1375,8 +1339,6 @@ def process_peptides(args):
         results = pd.DataFrame(columns = ['sharpe', 'params', 'iteration', 'all_res'],
                                     index = list(range(max_evals)))
         for i in range(max_evals):
-
-            # print('%d/%d' % (i+1, max_evals))
 
             # Choose random hyperparameters
             random_params = {k: random.sample(v, 1)[0] for k, v in param_grid.items()}
@@ -1503,7 +1465,7 @@ def process_peptides(args):
     top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
     top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
     p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
-    print('Stage 2 search: probability of random match for theoretical peptide = %.3f\n' % (p, ))
+    logger.info('Stage 2 search: probability of random match for theoretical peptide = %.3f', p)
 
     prots_spc = dict()
     all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
@@ -1517,9 +1479,7 @@ def process_peptides(args):
 
     if args['ml']:
 
-        print('Start Machine Learning on PFMs...')
-
-        # print('Features used for MachineLearning: ', get_features_pfms(df1))
+        logger.info('Start Machine Learning on PFMs...')
 
         MAX_EVALS = 25
 
@@ -1543,7 +1503,6 @@ def process_peptides(args):
 
         bestparams = random_results.sort_values(by='auc',ascending=False)['params'].values[0]
         bestparams['num_threads'] = args['nproc']
-        # print(random_results.sort_values(by='auc',ascending=False)['auc'].values[0])
 
         groups = df1['peptide']
         ix = df1.index.values
@@ -1577,13 +1536,11 @@ def process_peptides(args):
     for qval_cur in range(50):
         df1ut = df1u[df1u['qpreds'] == qval_cur]
         decoy_ratio = df1ut['decoy'].sum() / len(df1ut)
-        # print(qval_cur, decoy_ratio)
         if decoy_ratio < 0.5:
             qval_ok = qval_cur
         else:
             break
-    print('%d %% of PFMs were removed from protein scoring after Machine Learning' % (100 - (qval_ok+1)*2))
-    # print('qval_ok', qval_ok)
+    logger.info('%d %% of PFMs were removed from protein scoring after Machine Learning', (100 - (qval_ok+1)*2))
 
     df1un = df1u[df1u['qpreds'] <= qval_ok].copy()
     df1un['qpreds'] = pd.qcut(df1un['preds'], 10, labels=range(10))
@@ -1629,7 +1586,7 @@ def process_peptides(args):
     top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
     top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
     p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
-    print('Final stage search: probability of random match for theoretical peptide = %.3f\n' % (p, ))
+    logger.info('Final stage search: probability of random match for theoretical peptide = %.3f', p)
 
 
     prots_spc = dict()
@@ -1761,9 +1718,6 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
 
                 best_score = min(prots_spc_basic[best_prot], prev_best_score)
                 prev_best_score = best_score
-
-                # if mass_koef == 0:
-                #     print('best_score', best_score)
 
                 unstable_prots = set()
                 if best_prot not in prots_spc_final:

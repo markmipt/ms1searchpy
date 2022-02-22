@@ -1,10 +1,8 @@
 from __future__ import division
 import argparse
-import pkg_resources
 import pandas as pd
-import ast
 import subprocess
-import numpy as np
+import logging
 
 def run():
     parser = argparse.ArgumentParser(
@@ -38,7 +36,11 @@ def run():
     parser.add_argument('-norm', help='normalization method. Can be average, median, GMM or None', default='None')
     parser.add_argument('-impute_threshold', help='impute_threshold for missing values fraction', default='0.75')
     parser.add_argument('-min_samples', help='minimum number of samples for peptide usage', default='3')
+    parser.add_argument('-debug', help='Produce debugging output', action='store_true')
     args = vars(parser.parse_args())
+    logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
+            datefmt='[%H:%M:%S]', level=[logging.INFO, logging.DEBUG][args['debug']])
+    logger = logging.getLogger(__name__)
 
     replace_label = '_proteins.tsv'
 
@@ -94,12 +96,11 @@ def run():
             for z in args[sample_num]:
                 label = z.replace(replace_label, '')
                 all_labels.append(label)
-                df1 = pd.read_table(z)
                 df3 = pd.read_table(z.replace(replace_label, '_PFMs.tsv'))
-                print(z)
-                print(z.replace(replace_label, '_PFMs.tsv'))
-                print(df3.shape)
-                print(df3.columns)
+                logger.debug(z)
+                logger.debug(z.replace(replace_label, '_PFMs.tsv'))
+                logger.debug(df3.shape)
+                logger.debug(df3.columns)
 
                 df3 = df3[df3['proteins'].apply(lambda x: any(z in allowed_prots_all for z in x.split(';')))]
                 df3['proteins'] = df3['proteins'].apply(lambda x: ';'.join([z for z in x.split(';') if z in allowed_prots_all]))
@@ -119,7 +120,6 @@ def run():
 
 
                 if df_final is False:
-                    label_basic = label
                     df_final = df3.reset_index(drop=True)
                 else:
                     df_final = df_final.reset_index(drop=True).merge(df3.reset_index(drop=True), on='peptide', how='outer')
@@ -134,11 +134,11 @@ def run():
 
     df_final['intensity_median'] = df_final[all_labels].median(axis=1)
     df_final['nummissing'] = df_final[all_labels].isna().sum(axis=1)
-    print(df_final['nummissing'])
+    logger.debug(df_final['nummissing'])
     df_final = df_final.sort_values(by=['nummissing', 'intensity_median'], ascending=(True, False))
     df_final = df_final.drop_duplicates(subset=('origseq', 'protein'))
 
-    print(df_final.columns)
+    logger.debug(df_final.columns)
     df_final = df_final.set_index('peptide')
     df_final['proteins'] = df_final['protein']
     df_final = df_final.drop(columns=['protein'])
