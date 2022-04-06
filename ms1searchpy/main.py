@@ -542,6 +542,19 @@ def process_peptides(args):
     deeplc_model_path = args['deeplc_model_path']
     deeplc_model_path = deeplc_model_path.strip()
 
+    deeplc_extra_args = []
+    if len(deeplc_model_path) > 0:
+        deeplc_extra_args.append("--file_model")
+        if deeplc_model_path.endswith('.hdf5'):
+            deeplc_extra_args.append(deeplc_model_path)
+            # deeplc_models = deeplc_model_path
+        else:
+            deeplc_extra_args.extend([os.path.join(deeplc_model_path,f) for f in os.listdir(deeplc_model_path) if f.endswith(".hdf5")])
+            # deeplc_models = " ".join([os.path.join(deeplc_model_path,f) for f in os.listdir(deeplc_model_path) if f.endswith(".hdf5")])
+        # deeplc_extra_args.extend(["--file_model", deeplc_models, ])
+    if args['deeplc_library']:
+        deeplc_extra_args.extend(['--use_library', args['deeplc_library'], '--write_library'])
+
     calib_path = args['pl']
     calib_path = calib_path.strip()
 
@@ -891,11 +904,7 @@ def process_peptides(args):
                 outcalib.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
             outcalib.close()
 
-            if len(deeplc_model_path) > 0:
-                deeplc_models = " ".join([os.path.join(deeplc_model_path,f) for f in os.listdir(deeplc_model_path) if f.endswith(".hdf5")])
-                subprocess.call([deeplc_path, '--file_pred', outcalib_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name, "--file_model", deeplc_models], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            else:
-                subprocess.call([deeplc_path, '--file_pred', outcalib_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.call([deeplc_path, '--file_pred', outcalib_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name] + deeplc_extra_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
             pepdict = dict()
             train_RT = []
@@ -1025,7 +1034,7 @@ def process_peptides(args):
 
             # [:int(len(ns)/2)]
 
-            subprocess.call([deeplc_path, '--file_pred', outtrain_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.call([deeplc_path, '--file_pred', outtrain_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name] + deeplc_extra_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             pepdict = dict()
             train_RT = []
             train_seq = []
@@ -1147,10 +1156,7 @@ def process_peptides(args):
             outtest.write(seq + ',' + str(mods_tmp) + '\n')
         outtest.close()
 
-        if args['deeplc_library']:
-            subprocess.call([deeplc_path, '--file_pred', outtest_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name, '--use_library', args['deeplc_library'], '--write_library'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        else:
-            subprocess.call([deeplc_path, '--file_pred', outtest_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.call([deeplc_path, '--file_pred', outtest_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name] + deeplc_extra_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for x in open(outres_name).readlines()[1:]:
             _, seq, _, RT = x.strip().split(',')
             pepdict[seq] = float(RT)
