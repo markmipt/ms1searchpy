@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from scipy.stats import binom, ttest_ind
 import logging
+from pyteomics import fasta
 
 def calc_sf_all(v, n, p):
     sf_values = -np.log10(binom.sf(v-1, n, p))
@@ -35,6 +36,7 @@ def run():
     parser.add_argument('-all_proteins', help='use all proteins instead of FDR controlled', action='store_true')
     parser.add_argument('-all_pfms', help='use all PFMs instead of ML controlled', action='store_true')
     parser.add_argument('-output_peptides', help='Add output table with peptides', action='store_true')
+    parser.add_argument('-d', '-db', help='path to uniprot fasta file for gene annotation')
     args = vars(parser.parse_args())
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
             datefmt='[%H:%M:%S]', level=logging.INFO)
@@ -294,6 +296,7 @@ def run():
     all_pvals = calc_sf_all(v_arr, n_arr, p_up)
 
     total_set = set()
+    total_set_genes = set()
 
     FC_up_dict_basic = df_final.groupby('proteins')['FC'].median().to_dict()
     FC_up_dict_raw_basic = df_final.groupby('proteins')['FC_raw'].median().to_dict()
@@ -347,12 +350,41 @@ def run():
 
     df_out_f.to_csv(path_or_buf=args['out']+'.tsv', sep='\t', index=False)
 
-    total_set.update([z.split('|')[1] for z in set(df_out_f['dbname'])])
+    genes_map = {}
+    if args['d']:
+        for prot, protseq in fasta.read(args['d']):
+            try:
+                prot_name = prot.split('|')[1]
+            except:
+                prot_name = prot
+            try:
+                gene_name = prot.split('GN=')[1].split(' ')[0]
+            except:
+                gene_name = prot
+            genes_map[prot_name] = gene_name
+
+
+    for z in set(df_out_f['dbname']):
+        try:
+            prot_name = z.split('|')[1]
+        except:
+            prot_name = z
+
+        gene_name = genes_map.get(prot_name, prot_name)
+
+        total_set.add(prot_name)
+        total_set_genes.add(gene_name)
 
     logger.info('Total number of significantly changed proteins: %d', len(total_set))
+    logger.info('Total number of significantly changed genes: %d', len(total_set_genes))
 
     f1 = open(args['out'] + '_proteins_for_stringdb.txt', 'w')
     for z in total_set:
+        f1.write(z + '\n')
+    f1.close()
+
+    f1 = open(args['out'] + '_genes_for_stringdb.txt', 'w')
+    for z in total_set_genes:
         f1.write(z + '\n')
     f1.close()
 
