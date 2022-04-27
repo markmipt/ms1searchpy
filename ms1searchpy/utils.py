@@ -32,12 +32,16 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
             'o': '',
             'hvf': 1.3,
             'minlh': 2,
+            'pasefminlh': 1,
+            'nprocs': 1,
             'cmin': 1,
             'cmax': 6,
             'dia': False,
             'diahtol': 25,
             'diaminlh': 1,
             'mgf': '',
+            'tof': False,
+            'profile': False,
             'debug': False  # actual debug value is set through logging, not here
         }
         bio_main.process_file(args)
