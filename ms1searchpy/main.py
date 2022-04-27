@@ -1020,21 +1020,31 @@ def process_peptides(args):
 
             outtrain_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
             outtrain = open(outtrain_name, 'w')
+
+            outcal_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
+            outcal = open(outcal_name, 'w')
+
             outres_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
 
             ll = len(ns)
             ns = ns[:ll]
             nr = nr[:ll]
 
+            outcal.write('seq,modifications,tr\n')
+            for seq, RT in zip(ns[:int(ll/2)], nr[:int(ll/2)]):
+                mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
+                outcal.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
+            outcal.close()
+
             outtrain.write('seq,modifications,tr\n')
-            for seq, RT in zip(ns, nr):
+            for seq, RT in zip(ns[int(ll/2):], nr[int(ll/2):]):
                 mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
                 outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
             outtrain.close()
 
             # [:int(len(ns)/2)]
 
-            subprocess.call([deeplc_path, '--file_pred', outtrain_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name] + deeplc_extra_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.call([deeplc_path, '--file_pred', outtrain_name, '--file_cal', outcal_name, '--file_pred_out', outres_name] + deeplc_extra_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             pepdict = dict()
             train_RT = []
             train_seq = []
@@ -1440,6 +1450,11 @@ def process_peptides(args):
     df1['rt_diff_abs'] = df1['rt_diff'].abs()
     df1['rt_diff_abs_pdiff'] = df1['rt_diff_abs'] - df1.groupby('ids')['rt_diff_abs'].transform('median')
     df1['rt_diff_abs_pnorm'] = df1['rt_diff_abs'] / (df1.groupby('ids')['rt_diff_abs'].transform('sum') + 1e-2)
+
+    df1['mass_diff_abs'] = df1['mass_diff'].abs()
+    df1['mass_diff_abs_pdiff'] = df1['mass_diff_abs'] - df1.groupby('ids')['mass_diff_abs'].transform('median')
+    df1['mass_diff_abs_pnorm'] = df1['mass_diff_abs'] / (df1.groupby('ids')['mass_diff_abs'].transform('sum') + 1e-2)
+
     df1['id_count'] = df1.groupby('ids')['mass_diff'].transform('count')
     # df1['seq_count'] = df1.groupby('peptide')['mass_diff'].transform('count')
     # df1['charge_count'] = df1.groupby('peptide')['ch'].transform('nunique')
