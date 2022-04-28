@@ -680,22 +680,22 @@ def process_peptides(args):
                 df1['im'] = 0
 
             im_set = set(df1['im'])
-            if len(im_set) <= 10:
+            if len(im_set) <= 5:
                 df1['im_qcut'] = df1['im']
                 for im_value in im_set:
                     idx1 = df1['im'] == im_value
-                    df1.loc[idx1, 'qpreds'] = str(im_value) + pd.qcut(df1.loc[idx1, 'RT'], 10, labels=range(10)).astype(str)
+                    df1.loc[idx1, 'qpreds'] = str(im_value) + pd.qcut(df1.loc[idx1, 'RT'], 5, labels=range(5)).astype(str)
             else:
-                df1['im_qcut'] = pd.qcut(df1['im'], 10, labels=range(10)).astype(str)
+                df1['im_qcut'] = pd.qcut(df1['im'], 5, labels=range(5)).astype(str)
                 for im_value in set(df1['im_qcut']):
                     idx1 = df1['im_qcut'] == im_value
-                    df1.loc[idx1, 'qpreds'] = str(im_value) + pd.qcut(df1.loc[idx1, 'RT'], 10, labels=range(10)).astype(str)
+                    df1.loc[idx1, 'qpreds'] = str(im_value) + pd.qcut(df1.loc[idx1, 'RT'], 5, labels=range(5)).astype(str)
 
             # df1['qpreds'] = pd.qcut(df1['RT'], 10, labels=range(10))#.astype(int)
 
             cor_dict = df1[df1['top_peps']].groupby('qpreds')['mass diff'].median().to_dict()
 
-            rt_q_list = list(range(10))
+            rt_q_list = list(range(5))
             for im_value in set(df1['im_qcut']):
                 for rt_q in rt_q_list:
                     lbl_cur = str(im_value) + str(rt_q)
