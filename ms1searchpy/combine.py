@@ -1,4 +1,4 @@
-from .main import final_iteration
+from .main import final_iteration, filter_results
 import pandas as pd
 from collections import defaultdict
 import argparse
@@ -28,10 +28,26 @@ def run():
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
             datefmt='[%H:%M:%S]', level=logging.INFO)
 
+
+    d_tmp = dict()
+
     df1 = None
     for idx, filen in enumerate(args['file']):
         df3 = pd.read_csv(filen, sep='\t')
         df3['ids'] = df3['ids'].apply(lambda x: '%d:%s' % (idx, str(x)))
+        df3['fidx'] = idx
+
+        df3 = df3[df3['qpreds'] <= 10]
+
+
+        qval_ok = 0
+        for qval_cur in range(10):
+            if qval_cur != 10:
+                df1ut = df3[df3['qpreds'] == qval_cur]
+                decoy_ratio = df1ut['decoy'].sum() / len(df1ut)
+                d_tmp[(idx, qval_cur)] = decoy_ratio
+                print(filen, qval_cur, decoy_ratio)
+
         if df1 is None:
             df1 = df3
             if args['prots_full']:
@@ -45,6 +61,13 @@ def run():
 
         else:
             df1 = pd.concat([df1, df3], ignore_index=True)
+
+    d_tmp = [z[0] for z in sorted(d_tmp.items(), key=lambda x: x[1])]
+    qdict = {}
+    for idx, val in enumerate(d_tmp):
+        qdict[val] = int(idx / len(args['file']))
+    df1['qpreds'] = df1.apply(lambda x: qdict[(x['fidx'], x['qpreds'])], axis=1)
+
 
     pept_prot = defaultdict(set)
     for seq, prots in df1[['seqs', 'proteins']].values:
@@ -70,10 +93,17 @@ def run():
     resdict['ids'] = df1['ids'].values
     resdict['iorig'] = df1['iorig'].values
 
-    mass_diff = resdict['qpreds']
-    rt_diff = resdict['qpreds']
+    # mass_diff = resdict['qpreds']
+    # rt_diff = resdict['qpreds']
 
     base_out_name = args['out']
+
+    e_ind = resdict['qpreds'] <= 9
+    resdict = filter_results(resdict, e_ind)
+
+    mass_diff = resdict['qpreds']
+    rt_diff = resdict['qpreds']
+    
     final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, args['nproc'])
 
 
