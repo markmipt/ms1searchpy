@@ -17,7 +17,7 @@ def recalc_spc(banned_dict, unstable_prots, prots_spc2):
         tmp[k] = sum(banned_dict.get(l, 1) > 0 for l in prots_spc2[k])
     return tmp
 
-def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
+def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans, nproc):
     if os.path.splitext(fname)[-1].lower() == '.mzml':
         args = {
             'file': fname,
@@ -33,7 +33,7 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
             'hvf': 1.3,
             'minlh': 2,
             'pasefminlh': 1,
-            'nprocs': 1,
+            'nprocs': nproc,
             'cmin': 1,
             'cmax': 6,
             'dia': False,
@@ -42,6 +42,7 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans):
             'mgf': '',
             'tof': False,
             'profile': False,
+            'write_hills': False,
             'debug': False  # actual debug value is set through logging, not here
         }
         bio_main.process_file(args)

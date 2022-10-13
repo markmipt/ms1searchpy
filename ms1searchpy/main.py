@@ -438,7 +438,7 @@ def prepare_peptide_processor(fname, args):
 
     logger.info('Reading file %s', fname)
 
-    df_features = utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans)
+    df_features = utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans, args['nproc'])
 
     # Sort by neutral mass
     df_features = df_features.sort_values(by='massCalib')

@@ -1,6 +1,7 @@
 from . import main
 import argparse
 import logging
+import os
 
 def run():
     parser = argparse.ArgumentParser(
@@ -34,7 +35,8 @@ def run():
     parser.add_argument('-ad', help='add decoy', default=0, type=int)
     parser.add_argument('-ml', help='use machine learning for PFMs', default=1, type=int)
     parser.add_argument('-prefix', help='decoy prefix', default='DECOY_')
-    parser.add_argument('-nproc',   help='number of processes', default=1, type=int)
+    parser.add_argument('-nproc',   help='number of processes', default=4, type=int)
+    parser.add_argument('-force_nproc', help='Force using multiprocessing for Windows', action='store_true')
     parser.add_argument('-elude', help='path to elude binary file. If empty, the built-in additive model will be used for RT prediction', default='')
     parser.add_argument('-deeplc', help='path to deeplc', default='')
     parser.add_argument('-deeplc_model_path', help='path to deeplc model or folder with deeplc models', default='')
@@ -49,6 +51,12 @@ def run():
     logging.getLogger('matplotlib.category').disabled = True
     logging.getLogger('matplotlib').setLevel(logging.WARNING)
     logger = logging.getLogger(__name__)
+
+
+    if os.name == 'nt' and not args['force_nproc']:
+        logger.warning('Turning off multiprocessing for Windows system. Use -force_nproc option to turn it on')
+        args['nproc'] = 1
+
     logger.debug('Starting with args: %s', args)
     main.process_file(args)
 
