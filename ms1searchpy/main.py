@@ -389,6 +389,14 @@ def process_file(args):
     utils.seen_decoy.clear()
     args = utils.prepare_decoy_db(args)
     for filename in args['files']:
+
+        # Temporary for pyteomics <= Version 4.5.5 bug
+        from pyteomics import mass
+        if 'H-' in mass.std_aa_mass:
+            del mass.std_aa_mass['H-']
+        if '-OH' in mass.std_aa_mass:
+            del mass.std_aa_mass['-OH']
+
         try:
             args['file'] = filename
             process_peptides(deepcopy(args))
