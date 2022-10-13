@@ -20,6 +20,7 @@ def run():
     parser.add_argument('-fdr', help='protein fdr filter in %%', default=1.0, type=float)
     parser.add_argument('-i', help='minimum number of isotopes', default=2, type=int)
     parser.add_argument('-ci', help='minimum number of isotopes for mass and RT calibration', default=4, type=int)
+    parser.add_argument('-csc', help='minimum number of scans for mass and RT calibration', default=4, type=int)
     parser.add_argument('-ts', help='Two-stage RT training: 0 - turn off, 1 - turn one, 2 - turn on and use additive model in the first stage (Default)', default=2, type=int)
     parser.add_argument('-sc', help='minimum number of scans for peptide feature', default=2, type=int)
     parser.add_argument('-lmin', help='min length of peptides', default=7, type=int)
@@ -39,7 +40,7 @@ def run():
     parser.add_argument('-deeplc_model_path', help='path to deeplc model or folder with deeplc models', default='')
     parser.add_argument('-deeplc_library', help='path to deeplc library', default='')
     parser.add_argument('-pl', help='path to list of peptides for RT calibration', default='')
-    parser.add_argument('-mcalib', help='mass calibration: 2 - group by ion mobility and RT, 1 - by RT, 0 - no calibration', default=2, type=int)
+    parser.add_argument('-mcalib', help='mass calibration: 2 - group by ion mobility and RT, 1 - by RT, 0 - no calibration', default=0, type=int)
     parser.add_argument('-debug', help='Produce debugging output', action='store_true')
     args = vars(parser.parse_args())
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',

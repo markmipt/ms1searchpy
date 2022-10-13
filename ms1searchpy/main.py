@@ -448,6 +448,7 @@ def prepare_peptide_processor(fname, args):
     charges = df_features['charge'].values
     ids = df_features['id'].values
     Is = df_features['intensityApex'].values
+    # Is = df_features['intensitySum'].values
     Scans = df_features['nScans'].values
     Isotopes = df_features['nIsotopes'].values
     mzraw = df_features['mz'].values
@@ -461,6 +462,12 @@ def prepare_peptide_processor(fname, args):
 
     fmods = args['fmods']
     aa_mass = deepcopy(mass.std_aa_mass)
+
+    mass_h2o = mass.calculate_mass('H2O')
+
+    for k in list(aa_mass.keys()):
+        aa_mass[k] = round(mass.calculate_mass(sequence=k) - mass_h2o, 7)
+
     if fmods:
         for mod in fmods.split(','):
             m, aa = mod.split('@')
@@ -518,6 +525,7 @@ def process_peptides(args):
 
     fdr = args['fdr'] / 100
     min_isotopes_calibration = args['ci']
+    min_scans_calibration = args['csc']
     try:
         outpath = args['outpath']
     except:
@@ -576,7 +584,6 @@ def process_peptides(args):
 
     prefix = args['prefix']
     protsN, pept_prot = utils.get_prot_pept_map(args)
-    # protsN, pept_prot, protsNc = utils.get_prot_pept_map(args)
 
     resdict = get_results(ms1results)
     del ms1results
@@ -592,6 +599,9 @@ def process_peptides(args):
     # e_ind = resdict['Isotopes'] >= min_isotopes_calibration
     # e_ind = resdict['Isotopes'] >= 1
     resdict2 = filter_results(resdict, e_ind)
+
+    e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= min_scans_calibration
+    resdict2 = filter_results(resdict2, e_ind)
 
     e_ind = resdict2['mc'] == 0
     resdict2 = filter_results(resdict2, e_ind)
@@ -760,6 +770,10 @@ def process_peptides(args):
 
         e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
         resdict2 = filter_results(resdict, e_ind)
+        
+
+        e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= min_scans_calibration
+        resdict2 = filter_results(resdict2, e_ind)
 
         e_ind = resdict2['mc'] == 0
         resdict2 = filter_results(resdict2, e_ind)
@@ -1200,7 +1214,6 @@ def process_peptides(args):
 
             for p in procs:
                 p.join()
-
 
     rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
     rt_diff = np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred
