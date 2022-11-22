@@ -685,34 +685,30 @@ def process_peptides(args):
             if any(protein in true_prots for protein in proteins):
                 true_seqs.add(pep)
 
-
         df1['top_peps'] = (df1['mc'] == 0) & (df1['seqs'].apply(lambda x: x in true_seqs))
-
-        df1['mz'] = df1['iorig'].apply(lambda x: mzraw[x])
-        df1['nIsotopes'] = df1['iorig'].apply(lambda x: Isotopes[x])
-        df1['RT'] = df1['iorig'].apply(lambda x: rts[x])
-        df1['Intensity'] = df1['iorig'].apply(lambda x: Is[x])
-        df1['IntensitySum'] = df1['iorig'].apply(lambda x: Isums[x])
 
         mass_calib_arg = args['mcalib']
 
         assert mass_calib_arg in [0, 1, 2]
 
         if mass_calib_arg:
+            df1['RT'] = rts[df1['iorig'].values]#df1['iorig'].apply(lambda x: rts[x])
+
             if mass_calib_arg == 2:
-                df1['im'] = df1['iorig'].apply(lambda x: imraw[x])
+                df1['im'] = imraw[df1['iorig'].values]#df1['iorig'].apply(lambda x: imraw[x])
             elif mass_calib_arg == 1:
                 df1['im'] = 0
 
-            im_set = set(df1['im'])
             if len(im_set) <= 5:
                 df1['im_qcut'] = df1['im']
+                im_set = set(df1['im_qcut'].unique())
                 for im_value in im_set:
                     idx1 = df1['im'] == im_value
                     df1.loc[idx1, 'qpreds'] = str(im_value) + pd.qcut(df1.loc[idx1, 'RT'], 5, labels=range(5)).astype(str)
             else:
                 df1['im_qcut'] = pd.qcut(df1['im'], 5, labels=range(5)).astype(str)
-                for im_value in set(df1['im_qcut']):
+                im_set = set(df1['im_qcut'].unique())
+                for im_value in set(df1['im_qcut'].unique()):
                     idx1 = df1['im_qcut'] == im_value
                     df1.loc[idx1, 'qpreds'] = str(im_value) + pd.qcut(df1.loc[idx1, 'RT'], 5, labels=range(5)).astype(str)
 
@@ -721,7 +717,7 @@ def process_peptides(args):
             cor_dict = df1[df1['top_peps']].groupby('qpreds')['mass diff'].median().to_dict()
 
             rt_q_list = list(range(5))
-            for im_value in set(df1['im_qcut']):
+            for im_value in im_set:
                 for rt_q in rt_q_list:
                     lbl_cur = str(im_value) + str(rt_q)
                     if lbl_cur not in cor_dict:
@@ -745,7 +741,7 @@ def process_peptides(args):
         else:
             df1['qpreds'] = 0
             df1['mass diff q median'] = 0
-            df1['mass diff corrected'] = df1['mass diff'] - df1['mass diff q median']
+            df1['mass diff corrected'] = df1['mass diff']
 
 
 
@@ -758,14 +754,15 @@ def process_peptides(args):
         except:
             mass_shift_cor, mass_sigma_cor, covvalue_cor = calibrate_mass(0.01, mass_left, mass_right, df1[df1['top_peps']]['mass diff corrected'])
 
-        try:
-            mass_shift, mass_sigma, covvalue = calibrate_mass(0.001, mass_left, mass_right, df1[df1['top_peps']]['mass diff'])
-        except:
-            mass_shift, mass_sigma, covvalue = calibrate_mass(0.01, mass_left, mass_right, df1[df1['top_peps']]['mass diff'])
-
         if mass_calib_arg:
-            logger.info('Uncalibrated mass shift: %.3f ppm', mass_shift)
-            logger.info('Uncalibrated mass sigma: %.3f ppm', mass_sigma)
+
+            try:
+                mass_shift, mass_sigma, covvalue = calibrate_mass(0.001, mass_left, mass_right, df1[df1['top_peps']]['mass diff'])
+            except:
+                mass_shift, mass_sigma, covvalue = calibrate_mass(0.01, mass_left, mass_right, df1[df1['top_peps']]['mass diff'])
+
+                logger.info('Uncalibrated mass shift: %.3f ppm', mass_shift)
+                logger.info('Uncalibrated mass sigma: %.3f ppm', mass_sigma)
 
         logger.info('Estimated mass shift: %.3f ppm', mass_shift_cor)
         logger.info('Estimated mass sigma: %.3f ppm', mass_sigma_cor)
@@ -1454,15 +1451,15 @@ def process_peptides(args):
     for k in resdict.keys():
         df1[k] = resdict[k]
 
-    df1['ids'] = df1['iorig'].apply(lambda x: ids[x])
-    df1['Is'] = df1['iorig'].apply(lambda x: Is[x])
-    df1['Scans'] = df1['iorig'].apply(lambda x: Scans[x])
-    df1['Isotopes'] = df1['iorig'].apply(lambda x: Isotopes[x])
-    df1['mzraw'] = df1['iorig'].apply(lambda x: mzraw[x])
-    df1['rt'] = df1['iorig'].apply(lambda x: rts[x])
-    df1['av'] = df1['iorig'].apply(lambda x: avraw[x])
-    df1['ch'] = df1['iorig'].apply(lambda x: charges[x])
-    df1['im'] = df1['iorig'].apply(lambda x: imraw[x])
+    df1['ids'] = ids[df1['iorig'].values]#df1['iorig'].apply(lambda x: ids[x])
+    df1['Is'] = Is[df1['iorig'].values]#df1['iorig'].apply(lambda x: Is[x])
+    df1['Scans'] = Scans[df1['iorig'].values]#df1['iorig'].apply(lambda x: Scans[x])
+    df1['Isotopes'] = Isotopes[df1['iorig'].values]#df1['iorig'].apply(lambda x: Isotopes[x])
+    df1['mzraw'] = mzraw[df1['iorig'].values]#df1['iorig'].apply(lambda x: mzraw[x])
+    df1['rt'] = rts[df1['iorig'].values]#df1['iorig'].apply(lambda x: rts[x])
+    df1['av'] = avraw[df1['iorig'].values]#df1['iorig'].apply(lambda x: avraw[x])
+    df1['ch'] = charges[df1['iorig'].values]#df1['iorig'].apply(lambda x: charges[x])
+    df1['im'] = imraw[df1['iorig'].values]#df1['iorig'].apply(lambda x: imraw[x])
 
     df1['mass_diff'] = mass_diff
     df1['rt_diff'] = rt_diff
