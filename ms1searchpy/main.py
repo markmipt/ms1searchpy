@@ -432,6 +432,7 @@ def prepare_peptide_processor(fname, args):
     global charges
     global ids
     global Is
+    global Isums
     global Scans
     global Isotopes
     global mzraw
@@ -456,7 +457,12 @@ def prepare_peptide_processor(fname, args):
     charges = df_features['charge'].values
     ids = df_features['id'].values
     Is = df_features['intensityApex'].values
-    # Is = df_features['intensitySum'].values
+    if 'intensitySum' in df_features.columns:
+        Isums = df_features['intensitySum'].values
+    else:
+        Isums = df_features['intensityApex'].values
+        logger.info('intensitySum column is missing in peptide features. Using intensityApex instead')
+
     Scans = df_features['nScans'].values
     Isotopes = df_features['nIsotopes'].values
     mzraw = df_features['mz'].values
@@ -686,6 +692,7 @@ def process_peptides(args):
         df1['nIsotopes'] = df1['iorig'].apply(lambda x: Isotopes[x])
         df1['RT'] = df1['iorig'].apply(lambda x: rts[x])
         df1['Intensity'] = df1['iorig'].apply(lambda x: Is[x])
+        df1['IntensitySum'] = df1['iorig'].apply(lambda x: Isums[x])
 
         mass_calib_arg = args['mcalib']
 
@@ -1240,11 +1247,12 @@ def process_peptides(args):
             output.write('\t'.join((k, str(v))) + '\n')
 
     with open(base_out_name + '_PFMs.tsv', 'w') as output:
-        output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tnScans\tnIsotopes\tproteins\tm/z\tRT\taveragineCorr\tcharge\tion_mobility\n')
+        output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tIntensitySum\tnScans\tnIsotopes\tproteins\tm/z\tRT\taveragineCorr\tcharge\tion_mobility\n')
         # for seq, md, rtd, peak_id, I, nScans, nIsotopes, mzr, rtr, av, ch, im in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['ids'], resdict['Is'], resdict['Scans'], resdict['Isotopes'], resdict['mzraw'], resdict['rt'], resdict['av'], resdict['ch'], resdict['im']):
         for seq, md, rtd, iorig in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['iorig']):
             peak_id = ids[iorig]
             I = Is[iorig]
+            Isum = Isums[iorig]
             nScans = Scans[iorig]
             nIsotopes = Isotopes[iorig]
             mzr = mzraw[iorig]
@@ -1252,7 +1260,7 @@ def process_peptides(args):
             av = avraw[iorig]
             ch = charges[iorig]
             im = imraw[iorig]
-            output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), str(nScans), str(nIsotopes), ';'.join(pept_prot[seq]), str(mzr), str(rtr), str(av), str(ch), str(im))) + '\n')
+            output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), str(Isum), str(nScans), str(nIsotopes), ';'.join(pept_prot[seq]), str(mzr), str(rtr), str(av), str(ch), str(im))) + '\n')
 
     # e_ind = resdict['mc'] == 0
     # resdict = filter_results(resdict, e_ind)
@@ -1314,12 +1322,14 @@ def process_peptides(args):
             'decoy',
             'preds',
             'av',
+            'Is',
             # 'Scans',
             'proteins',
             'peptide',
             'md',
             'qpreds',
             'decoy2',
+            'G',
         }
 
         for feature in feature_columns:
@@ -1334,15 +1344,27 @@ def process_peptides(args):
 
         all_res = []
 
-        groups = df['peptide']
-        ix = df.index.values
-        unique = np.unique(groups)
-        np.random.RandomState(SEED).shuffle(unique)
-        for split in np.array_split(unique, 3):
-            mask = groups.isin(split)
-            train, test = ix[~mask], ix[mask]
-            train_df = df.iloc[train]
-            test_df = df.iloc[test]
+
+        # groups = df['peptide']
+        # ix = df.index.values
+        # unique = np.unique(groups)
+        # np.random.RandomState(SEED).shuffle(unique)
+        # for split in np.array_split(unique, 3):
+        #     mask = groups.isin(split)
+        #     train, test = ix[~mask], ix[mask]
+        #     train_df = df.iloc[train]
+        #     test_df = df.iloc[test]
+
+        for group_val in range(3):
+            
+            mask = df['G'] == group_val
+            test_df = df[mask]
+            test_ids = set(test_df['ids'])
+    #         train_df = df[~mask]
+    #         train_df = train_df[train_df['ids'].apply(lambda x: x not in test_ids)]
+            train_df = df[(~mask) & (df['ids'].apply(lambda x: x not in test_ids))]
+
+
 
             feature_columns = get_features_pfms(df)
             ### 1
@@ -1353,8 +1375,9 @@ def process_peptides(args):
 
             df.loc[mask, 'preds'] = model.predict(get_X_array(df.loc[mask, :], feature_columns))
 
-            train_df = df.iloc[train]
-            test_df = df.iloc[test]
+            # train_df = df.iloc[train]
+            # test_df = df.iloc[test]
+            test_df = df[mask]
 
             ### 1
             fpr, tpr, thresholds = metrics.roc_curve(get_Y_array_pfms(test_df[~test_df['decoy2']]), test_df[~test_df['decoy2']]['preds'])
@@ -1378,6 +1401,8 @@ def process_peptides(args):
         Writes result of search to csv file every search iteration."""
 
         threshold = 0
+
+        
 
         # Dataframe for results
         results = pd.DataFrame(columns = ['sharpe', 'params', 'iteration', 'all_res'],
@@ -1541,6 +1566,27 @@ def process_peptides(args):
         writer.writerow(headers)
         of_connection.close()
 
+
+
+        all_id_list = list(set(df1[df1['decoy']]['peptide']))
+        all_id_list = random.sample(all_id_list, len(all_id_list))
+        seq_gmap = {}
+        for idx, split in enumerate(np.array_split(all_id_list, 3)):
+            for id_ftr in split:
+                seq_gmap[id_ftr] = idx
+                
+        all_id_list = list(set(df1[~df1['decoy']]['peptide']))
+        all_id_list = random.sample(all_id_list, len(all_id_list))
+        for idx, split in enumerate(np.array_split(all_id_list, 3)):
+            for id_ftr in split:
+                seq_gmap[id_ftr] = idx
+
+
+
+        df1['G'] = df1['peptide'].apply(lambda x: seq_gmap[x])
+
+
+
         random_results = random_search_pfms(df1, param_grid, out_file, MAX_EVALS)
 
         random_results = pd.read_csv(out_file)
@@ -1550,25 +1596,25 @@ def process_peptides(args):
                     }
         random_results = random_results.astype(convert_dict)
 
+
         bestparams = random_results.sort_values(by='auc',ascending=False)['params'].values[0]
+
         bestparams['num_threads'] = args['nproc']
 
-        groups = df1['peptide']
-        ix = df1.index.values
-        unique = np.unique(groups)
-        np.random.RandomState(SEED).shuffle(unique)
-        result = []
-        for split in np.array_split(unique, 3):
-            mask = groups.isin(split)
-            train, test = ix[~mask], ix[mask]
-            train_df = df1.iloc[train]
-            test_df = df1.iloc[test]
+
+
+        for group_val in range(3):
+            
+            mask = df1['G'] == group_val
+            test_df = df1[mask]
+            test_ids = set(test_df['ids'])
+            train_df = df1[(~mask) & (df1['ids'].apply(lambda x: x not in test_ids))]
+
 
             feature_columns = list(get_features_pfms(train_df))
-            ### 1
             model = get_cat_model_final_pfms(train_df[~train_df['decoy2']], bestparams, feature_columns)
 
-            df1.loc[test, 'preds'] = model.predict(get_X_array(test_df, feature_columns))
+            df1.loc[mask, 'preds'] = model.predict(get_X_array(test_df, feature_columns))
 
     else:
         df1['preds'] = np.power(df1['mass_diff'], 2) + np.power(df1['rt_diff'], 2)
