@@ -699,9 +699,9 @@ def process_peptides(args):
             elif mass_calib_arg == 1:
                 df1['im'] = 0
 
+            im_set = set(df1['im'].unique())
             if len(im_set) <= 5:
                 df1['im_qcut'] = df1['im']
-                im_set = set(df1['im_qcut'].unique())
                 for im_value in im_set:
                     idx1 = df1['im'] == im_value
                     df1.loc[idx1, 'qpreds'] = str(im_value) + pd.qcut(df1.loc[idx1, 'RT'], 5, labels=range(5)).astype(str)
