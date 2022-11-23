@@ -418,7 +418,7 @@ def peptide_processor(peptide, **kwargs):
     else:
         dm_r = acc_r * m / 1.0e6
     start = nmasses.searchsorted(m - dm_l)
-    end = nmasses.searchsorted(m + dm_r)
+    end = nmasses.searchsorted(m + dm_r, side='right')
     for i in range(start, end):
         massdiff = (m - nmasses[i]) / m * 1e6
         mods = 0
