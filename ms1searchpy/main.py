@@ -602,7 +602,8 @@ def process_peptides(args):
     resdict = get_results(ms1results)
     del ms1results
 
-    resdict['mc'] = np.array([parser.num_sites(z, args['enzyme']) for z in resdict['seqs']])
+    if args['mc'] > 0:
+        resdict['mc'] = np.array([parser.num_sites(z, args['enzyme']) for z in resdict['seqs']])
 
     isdecoy = lambda x: x[0].startswith(prefix)
     isdecoy_key = lambda x: x.startswith(prefix)
@@ -617,8 +618,9 @@ def process_peptides(args):
     e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= min_scans_calibration
     resdict2 = filter_results(resdict2, e_ind)
 
-    e_ind = resdict2['mc'] == 0
-    resdict2 = filter_results(resdict2, e_ind)
+    if args['mc'] > 0:
+        e_ind = resdict2['mc'] == 0
+        resdict2 = filter_results(resdict2, e_ind)
 
     p1 = set(resdict2['seqs'])
 
@@ -673,7 +675,7 @@ def process_peptides(args):
 
         df1 = pd.DataFrame()
         df1['mass diff'] = resdict['md']
-        df1['mc'] = resdict['mc']
+        df1['mc'] = (resdict['mc'] if args['mc'] > 0 else 0)
         df1['iorig'] = resdict['iorig']
         df1['seqs'] = resdict['seqs']
         # df1['orig_md'] = true_md
@@ -787,8 +789,9 @@ def process_peptides(args):
         e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= min_scans_calibration
         resdict2 = filter_results(resdict2, e_ind)
 
-        e_ind = resdict2['mc'] == 0
-        resdict2 = filter_results(resdict2, e_ind)
+        if args['mc'] > 0:
+            e_ind = resdict2['mc'] == 0
+            resdict2 = filter_results(resdict2, e_ind)
 
         p1 = set(resdict2['seqs'])
 
@@ -846,8 +849,10 @@ def process_peptides(args):
         e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= 1
         resdict2 = filter_results(resdict, e_ind)
 
-        e_ind = resdict2['mc'] == 0
-        resdict2 = filter_results(resdict2, e_ind)
+
+        if args['mc'] > 0:
+            e_ind = resdict2['mc'] == 0
+            resdict2 = filter_results(resdict2, e_ind)
 
 
         true_seqs = []
