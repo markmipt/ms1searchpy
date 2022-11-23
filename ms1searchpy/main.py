@@ -406,25 +406,6 @@ def process_file(args):
     return 1
 
 
-def peptide_processor(peptide, **kwargs):
-    seqm = peptide
-    results = []
-    m = cmass.fast_mass(seqm, aa_mass=kwargs['aa_mass']) + kwargs['aa_mass'].get('Nterm', 0) + kwargs['aa_mass'].get('Cterm', 0)
-    acc_l = kwargs['acc_l']
-    acc_r = kwargs['acc_r']
-    dm_l = acc_l * m / 1.0e6
-    if acc_r == acc_l:
-        dm_r = dm_l
-    else:
-        dm_r = acc_r * m / 1.0e6
-    start = nmasses.searchsorted(m - dm_l)
-    end = nmasses.searchsorted(m + dm_r, side='right')
-    for i in range(start, end):
-        massdiff = (m - nmasses[i]) / m * 1e6
-        mods = 0
-        results.append((seqm, massdiff, mods, i))
-    return results
-
 
 def prepare_peptide_processor(fname, args):
     global nmasses
@@ -497,32 +478,42 @@ def prepare_peptide_processor(fname, args):
 
     return {'aa_mass': aa_mass, 'acc_l': acc_l, 'acc_r': acc_r, 'args': args}, df_features
 
+def get_resdict(it, **kwargs):
 
-def peptide_processor_iter_isoforms(peptide, **kwargs):
-    out = []
-    out.append(peptide_processor(peptide, **kwargs))
-    return out
+    resdict = {
+        'seqs': [],
+        'md': [],
+        'mods': [],
+        'iorig': [],
+    }
 
-def get_results(ms1results):
-    resdict = dict()
-    labels = [
-        'seqs',
-        'md',
-        'mods',
-        'iorig',
-        # 'rt',
-        # 'ids',
-        # 'Is',
-        # 'Scans',
-        # 'Isotopes',
-        # 'mzraw',
-        # 'av',
-        # 'ch',
-        # 'im',
-    ]
-    for label, val in zip(labels, zip(*ms1results)):
-        resdict[label] = np.array(val)
+    for seqm in it:
+        results = []
+        m = cmass.fast_mass(seqm, aa_mass=kwargs['aa_mass']) + kwargs['aa_mass'].get('Nterm', 0) + kwargs['aa_mass'].get('Cterm', 0)
+        acc_l = kwargs['acc_l']
+        acc_r = kwargs['acc_r']
+        dm_l = acc_l * m / 1.0e6
+        if acc_r == acc_l:
+            dm_r = dm_l
+        else:
+            dm_r = acc_r * m / 1.0e6
+        start = nmasses.searchsorted(m - dm_l)
+        end = nmasses.searchsorted(m + dm_r, side='right')
+        for i in range(start, end):
+            massdiff = (m - nmasses[i]) / m * 1e6
+            mods = 0
+
+            resdict['seqs'].append(seqm)
+            resdict['md'].append(massdiff)
+            resdict['mods'].append(mods)
+            resdict['iorig'].append(i)
+
+    for k in list(resdict.keys()):
+        resdict[k] = np.array(resdict[k])
+
     return resdict
+
+
 
 def filter_results(resultdict, idx):
     tmp = dict()
@@ -531,6 +522,9 @@ def filter_results(resultdict, idx):
     return tmp
 
 def process_peptides(args):
+
+    logger.info('Starting search...')
+
     fname_orig = args['file']
     if fname_orig.lower().endswith('mzml'):
         fname = os.path.splitext(fname_orig)[0] + '.features.tsv'
@@ -586,21 +580,15 @@ def process_peptides(args):
 
     args['enzyme'] = utils.get_enzyme(args['e'])
 
-    ms1results = []
-    peps = utils.peptide_gen(args)
-    kwargs, df_features = prepare_peptide_processor(fname_orig, args)
-    func = peptide_processor_iter_isoforms
-    logger.info('Running the search ...')
-    for y in utils.multimap(1, func, peps, **kwargs):
-        for result in y:
-            if len(result):
-                ms1results.extend(result)
 
     prefix = args['prefix']
     protsN, pept_prot = utils.get_prot_pept_map(args)
+    # peps = pept_prot.keys()
 
-    resdict = get_results(ms1results)
-    del ms1results
+    kwargs, df_features = prepare_peptide_processor(fname_orig, args)
+    logger.info('Running the search ...')
+
+    resdict = get_resdict(pept_prot, **kwargs)
 
     if args['mc'] > 0:
         resdict['mc'] = np.array([parser.num_sites(z, args['enzyme']) for z in resdict['seqs']])
