@@ -1644,19 +1644,23 @@ def process_peptides(args):
 
     df1.to_csv(base_out_name + '_PFMs_ML.tsv', sep='\t', index=False)
 
+    df1 = df1[df1['qpreds'] <= 10]
+
+    resdict = {}
+    resdict['seqs'] = df1['seqs'].values
     resdict['qpreds'] = df1['qpreds'].values
     resdict['ids'] = df1['ids'].values
-    resdict['Is'] = df1['Is'].values
-    resdict['ch'] = df1['ch'].values
-    resdict['im'] = df1['im'].values
+    # resdict['Is'] = df1['Is'].values
+    # resdict['ch'] = df1['ch'].values
+    # resdict['im'] = df1['im'].values
     # residct['qz'] = df1['qz'].values
 
 
-    e_ind = resdict['qpreds'] <= 10
-    resdict = filter_results(resdict, e_ind)
+    # e_ind = resdict['qpreds'] <= 10
+    # resdict = filter_results(resdict, e_ind)
 
     mass_diff = resdict['qpreds']
-    rt_diff = resdict['qpreds']
+    rt_diff = []
 
     p1 = set(resdict['seqs'])
 
