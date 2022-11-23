@@ -761,8 +761,8 @@ def process_peptides(args):
             except:
                 mass_shift, mass_sigma, covvalue = calibrate_mass(0.01, mass_left, mass_right, df1[df1['top_peps']]['mass diff'])
 
-                logger.info('Uncalibrated mass shift: %.3f ppm', mass_shift)
-                logger.info('Uncalibrated mass sigma: %.3f ppm', mass_sigma)
+            logger.info('Uncalibrated mass shift: %.3f ppm', mass_shift)
+            logger.info('Uncalibrated mass sigma: %.3f ppm', mass_sigma)
 
         logger.info('Estimated mass shift: %.3f ppm', mass_shift_cor)
         logger.info('Estimated mass sigma: %.3f ppm', mass_sigma_cor)
