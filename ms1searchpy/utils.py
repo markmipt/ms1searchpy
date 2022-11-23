@@ -342,9 +342,6 @@ def convert_tandem_cleave_rule_to_regexp(cleavage_rule):
                 out_rules.append('(?=[%s])' % (cut, ))
     return '|'.join(out_rules)
 
-def multimap(n, func, it, **kw):
-    for s in it:
-        yield func(s, **kw)
 
 def keywithmaxval(d):
      """ a) create a list of the dict's keys and values;
@@ -359,53 +356,3 @@ def calc_sf_all(v, n, p, prev_best_score=False):
     sf_values[np.isinf(sf_values)] = (prev_best_score if prev_best_score is not False else max(sf_values[~np.isinf(sf_values)]) * 2)
     return sf_values
 
-
-# def multimap(n, func, it, **kw):
-#     if n == 0:
-#         try:
-#             n = cpu_count()
-#         except NotImplementedError:
-#             n = 1
-#     # if n == 1:
-#     #     for s in it:
-#     #         result = func(s, best_res, **kw)
-#     #         if result:
-#     #             for x in result:
-#     #                 peptide, m, snp_label, res = x
-
-#     #                 for score, spec_t, c, info in res:
-#     #                     if -score <= best_res.get(spec_t, 0):
-#     #                         best_res_raw[spec_t] = [peptide, m, snp_label, score, spec_t, c, info]
-#     #                         best_res[spec_t] = -score
-#     #     return best_res_raw, best_res
-
-#     else:
-
-#         qout = Queue()
-#         count = 0
-
-#         while True:
-#             qin = list(islice(it, 5000000))
-#             if not len(qin):
-#                 break
-# #           print 'Loaded 500000 items. Ending cycle.'
-#             procs = []
-#             for proc_num in range(n):
-#                 p = Process(target=worker, args=(qin, qout, proc_num, n, best_res, best_res_raw))
-#                 p.start()
-#                 procs.append(p)
-
-#             count = len(qin)
-
-#             for _ in range(n):
-#                 for item in iter(qout.get, None):
-#                     for k, v in item.items():
-#                         if -v[3] <= best_res.get(k, 0):
-#                             best_res_raw[k] = v
-#                             best_res[k] = -v[3]
-#                     # yield item
-
-#             for p in procs:
-#                 p.join()
-
-#         return best_res_raw, best_res
