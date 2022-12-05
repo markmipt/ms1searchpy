@@ -658,6 +658,9 @@ def process_peptides(args):
         for x in filtered_prots:
             identified_proteins += 1
         logger.info('Stage 0 search: identified proteins = %d', identified_proteins)
+        if identified_proteins <= 25:
+            logger.info('Low number of identified proteins, using first 25 top scored proteins for calibration...')
+            filtered_prots = sorted(prots_spc.items(), key=lambda x: -x[1])[:25]
 
         logger.info('Running mass recalibration...')
 
@@ -828,6 +831,9 @@ def process_peptides(args):
         for x in filtered_prots:
             identified_proteins += 1
         logger.info('Stage 1 search: identified proteins = %d', identified_proteins)
+        if identified_proteins <= 25:
+            logger.info('Low number of identified proteins, using first 25 top scored proteins for calibration...')
+            filtered_prots = sorted(prots_spc.items(), key=lambda x: -x[1])[:25]
 
 
 
@@ -1319,6 +1325,7 @@ def process_peptides(args):
             'md',
             'qpreds',
             'decoy2',
+            'top_25_targets',
             'G',
         }
 
@@ -1540,8 +1547,17 @@ def process_peptides(args):
     df1['proteins'] = df1['seqs'].apply(lambda x: ';'.join(pept_prot[x]))
     df1['decoy2'] = df1['decoy']
     df1['decoy'] = df1['proteins'].apply(lambda x: all(z not in target_prots_25_fdr for z in x.split(';')))
+    df1['top_25_targets'] = df1['decoy']
 
-    if args['ml']:
+
+    if len(target_prots_25_fdr) <= 25:
+        logger.info('Low number of identified proteins, turning off LightGBM...')
+        filtered_prots = sorted(prots_spc.items(), key=lambda x: -x[1])[:25]
+        skip_ml = 1
+    else:
+        skip_ml = 0
+
+    if args['ml'] and not skip_ml:
 
         logger.info('Start Machine Learning on PFMs...')
 
@@ -1614,13 +1630,15 @@ def process_peptides(args):
     df1['decoy'] = df1['decoy2']
 
 
-    df1u = df1.sort_values(by='preds')
-    df1u = df1u.drop_duplicates(subset='seqs')
+    # df1u = df1.sort_values(by='preds')
+    # df1u = df1u.drop_duplicates(subset='seqs')
+    df1u = df1
 
     qval_ok = 0
     for qval_cur in range(50):
         df1ut = df1u[df1u['qpreds'] == qval_cur]
         decoy_ratio = df1ut['decoy'].sum() / len(df1ut)
+        print(decoy_ratio)
         if decoy_ratio < 0.5:
             qval_ok = qval_cur
         else:
@@ -1630,9 +1648,27 @@ def process_peptides(args):
     df1un = df1u[df1u['qpreds'] <= qval_ok].copy()
     df1un['qpreds'] = pd.qcut(df1un['preds'], 10, labels=range(10))
 
-    qdict = df1un.set_index('seqs').to_dict()['qpreds']
+    qdict = df1un.set_index(['seqs', 'ids']).to_dict()['qpreds']
+    # qdict = df1un.set_index('seqs').to_dict()['qpreds']
 
-    df1['qpreds'] = df1['seqs'].apply(lambda x: qdict.get(x, 11))
+
+    # df4 = pd.read_table('/home/mark/test_intensity_2022_oct/testnew2_keep.tsv')
+    # qset4 = set(df4.apply(lambda x: (x['origseq'], x['peak_id']), axis=1))
+
+    # for k in list(qdict.keys()):
+    #     if k not in qset4:
+    #         qdict[k] = 11 
+
+    
+
+
+
+
+    # df1['qpreds'] = df1['seqs'].apply(lambda x: qdict.get(x, 11))
+    df1['qpreds'] = df1.apply(lambda x: qdict.get((x['seqs'], x['ids']), 11), axis=1)
+
+
+
     # df1['qz'] = df1['seqs'].apply(lambda x: qval_dict.get(qdict.get(x, 11), 1.0))
 
     df1.to_csv(base_out_name + '_PFMs_ML.tsv', sep='\t', index=False)
@@ -1654,6 +1690,9 @@ def process_peptides(args):
 
     mass_diff = resdict['qpreds']
     rt_diff = []
+    if skip_ml:
+        # mass_diff = np.array([0 for _ in range(len(mass_diff))])
+        mass_diff = np.zeros(len(mass_diff))
 
     p1 = set(resdict['seqs'])
 
