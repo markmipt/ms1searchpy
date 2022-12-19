@@ -222,8 +222,10 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
                         prots_spc_final[k] = v
 
                 break
-
-            prot_fdr = aux.fdr(prots_spc_final.items(), is_decoy=isdecoy)
+            try:
+                prot_fdr = aux.fdr(prots_spc_final.items(), is_decoy=isdecoy)
+            except:
+                prot_fdr = 100.0
             if prot_fdr >= 12.5 * fdr:
 
                 v_arr = np.array([prots_spc[k] for k in names_arr])
@@ -1880,7 +1882,7 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
 
                 try:
                     prot_fdr = aux.fdr(prots_spc_final.items(), is_decoy=isdecoy)
-                except ZeroDivisionError:
+                except:
                     prot_fdr = 100.0
                 if prot_fdr >= 12.5 * fdr:
 
