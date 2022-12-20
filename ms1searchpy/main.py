@@ -1632,15 +1632,14 @@ def process_peptides(args):
     df1['decoy'] = df1['decoy2']
 
 
-    # df1u = df1.sort_values(by='preds')
-    # df1u = df1u.drop_duplicates(subset='seqs')
-    df1u = df1
+    df1u = df1.sort_values(by='preds')
+    df1u = df1u.drop_duplicates(subset='seqs')
 
     qval_ok = 0
     for qval_cur in range(50):
         df1ut = df1u[df1u['qpreds'] == qval_cur]
         decoy_ratio = df1ut['decoy'].sum() / len(df1ut)
-        print(decoy_ratio)
+        # print(decoy_ratio)
         if decoy_ratio < 0.5:
             qval_ok = qval_cur
         else:
@@ -1650,24 +1649,15 @@ def process_peptides(args):
     df1un = df1u[df1u['qpreds'] <= qval_ok].copy()
     df1un['qpreds'] = pd.qcut(df1un['preds'], 10, labels=range(10))
 
-    qdict = df1un.set_index(['seqs', 'ids']).to_dict()['qpreds']
-    # qdict = df1un.set_index('seqs').to_dict()['qpreds']
+    qdict = df1un.set_index('seqs').to_dict()['qpreds']
 
-
-    # df4 = pd.read_table('/home/mark/test_intensity_2022_oct/testnew2_keep.tsv')
-    # qset4 = set(df4.apply(lambda x: (x['origseq'], x['peak_id']), axis=1))
-
-    # for k in list(qdict.keys()):
-    #     if k not in qset4:
-    #         qdict[k] = 11 
 
     
 
 
 
 
-    # df1['qpreds'] = df1['seqs'].apply(lambda x: qdict.get(x, 11))
-    df1['qpreds'] = df1.apply(lambda x: qdict.get((x['seqs'], x['ids']), 11), axis=1)
+    df1['qpreds'] = df1['seqs'].apply(lambda x: qdict.get(x, 11))
 
 
 
