@@ -47,8 +47,9 @@ def run():
     parser.add_argument('-debug', help='Produce debugging output', action='store_true')
     parser.add_argument('-save_calib', help='Save RT calibration list', action='store_true')
     parser.add_argument('-check_unique', help='Experimental. check_unique', default=1, type=int)
+    parser.add_argument('-csd', help='Employ chrge-state distribution model', action='store_true')
+    parser.add_argument('-trfp', help='Path to ThermoRawFileParser executable', default='')
 
-    
     args = vars(parser.parse_args())
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
             datefmt='[%H:%M:%S]', level=[logging.INFO, logging.DEBUG][args['debug']])
