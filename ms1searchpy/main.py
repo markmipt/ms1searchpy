@@ -1387,6 +1387,8 @@ def process_peptides(args):
         import json
         from keras import models
 
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
         #constants
         PROTON = 1.00727646677
 
@@ -1473,7 +1475,9 @@ def process_peptides(args):
         #expand each feature to 1 - 4 charge states
         mz_table = pd.concat(used_features.apply(expand_charges, args=(1, 4), axis=1).tolist())
         #need better way to filter impossible m/z-s
-        mz_table = mz_table.query('mz > 375 & mz < 1500').copy()
+        mzmin = np.floor(mzraw.min())
+        mzmax = np.ceil(mzraw.max())
+        mz_table = mz_table.query('mz >= @mzmin & mz <= @mzmax').copy()
 
         logger.debug(f'{mz_table.shape[0]} XICs scheduled for extraction')
 
