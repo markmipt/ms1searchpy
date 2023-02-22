@@ -27,6 +27,7 @@ setup(
     packages             = find_packages(),
     entry_points         = {'console_scripts': ['ms1searchpy = ms1searchpy.search:run',
                                                 'ms1combine = ms1searchpy.combine:run',
+                                                'ms1combine_proteins = ms1searchpy.combine_proteins:run',
                                                 'directms1quant = ms1searchpy.directms1quant:run',
                                                 'ms1quant = ms1searchpy.directms1quant:run',
                                                 'ms1todiffacto = ms1searchpy.ms1todiffacto:run',
