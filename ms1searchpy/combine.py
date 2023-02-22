@@ -24,6 +24,7 @@ def run():
     parser.add_argument('-fdr', help='protein fdr filter in %%', default=1.0, type=float)
     parser.add_argument('-prefix', help='decoy prefix', default='DECOY_')
     parser.add_argument('-nproc', help='number of processes', default=1, type=int)
+    parser.add_argument('-pp', help='protein priority table for keeping protein groups when merge results by scoring', default='')
     args = vars(parser.parse_args())
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
             datefmt='[%H:%M:%S]', level=logging.INFO)
@@ -33,7 +34,8 @@ def run():
 
     df1 = None
     for idx, filen in enumerate(args['file']):
-        df3 = pd.read_csv(filen, sep='\t')
+        print('Reading file %s' % (filen, ))
+        df3 = pd.read_csv(filen, sep='\t', usecols=['ids', 'qpreds', 'preds', 'decoy', 'seqs', 'proteins', 'peptide', 'iorig'])
         df3['ids'] = df3['ids'].apply(lambda x: '%d:%s' % (idx, str(x)))
         df3['fidx'] = idx
 
@@ -46,7 +48,7 @@ def run():
                 df1ut = df3[df3['qpreds'] == qval_cur]
                 decoy_ratio = df1ut['decoy'].sum() / len(df1ut)
                 d_tmp[(idx, qval_cur)] = decoy_ratio
-                print(filen, qval_cur, decoy_ratio)
+                # print(filen, qval_cur, decoy_ratio)
 
         if df1 is None:
             df1 = df3
@@ -103,8 +105,14 @@ def run():
 
     mass_diff = resdict['qpreds']
     rt_diff = resdict['qpreds']
+
+    if args['pp']:
+        df4 = pd.read_table(args['pp'])
+        prots_spc_basic2 = df4.set_index('dbname')['score'].to_dict()
+    else:
+        prots_spc_basic2 = False
     
-    final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, args['nproc'])
+    final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, args['nproc'], prots_spc_basic2=prots_spc_basic2)
 
 
 if __name__ == '__main__':
