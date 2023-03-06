@@ -584,7 +584,7 @@ def process_peptides(args):
 
 
     prefix = args['prefix']
-    protsN, pept_prot = utils.get_prot_pept_map(args)
+    protsN, pept_prot, ml_correction = utils.get_prot_pept_map(args)
     # peps = pept_prot.keys()
 
     kwargs, df_features = prepare_peptide_processor(fname_orig, args)
@@ -671,6 +671,7 @@ def process_peptides(args):
         df1['mc'] = (resdict['mc'] if args['mc'] > 0 else 0)
         df1['iorig'] = resdict['iorig']
         df1['seqs'] = resdict['seqs']
+
         # df1['orig_md'] = true_md
 
 
@@ -774,6 +775,8 @@ def process_peptides(args):
         r = 3.0
         e_ind = e_all <= r
         resdict = filter_results(resdict, e_ind)
+
+
 
         e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
         resdict2 = filter_results(resdict, e_ind)
@@ -1182,6 +1185,13 @@ def process_peptides(args):
             outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
         outtrain.close()
 
+        if args['save_calib']:
+            with open(base_out_name + '_calib.tsv', 'w') as output:
+                output.write('peptide\tRT exp\n')
+                for seq, RT in zip(ns, nr):
+                    output.write('%s\t%s\n' % (seq, str(RT)))
+
+
 
         outtest_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
         outtest = open(outtest_name, 'w')
@@ -1237,6 +1247,7 @@ def process_peptides(args):
     resdict = filter_results(resdict, e_ind)
     rt_diff = rt_diff[e_ind]
     rt_pred = rt_pred[e_ind]
+
 
 
     with open(base_out_name + '_protsN.tsv', 'w') as output:
@@ -1639,17 +1650,35 @@ def process_peptides(args):
     for qval_cur in range(50):
         df1ut = df1u[df1u['qpreds'] == qval_cur]
         decoy_ratio = df1ut['decoy'].sum() / len(df1ut)
-        # print(decoy_ratio)
-        if decoy_ratio < 0.5:
+        print(decoy_ratio)
+        if decoy_ratio < ml_correction:
             qval_ok = qval_cur
         else:
             break
     logger.info('%d %% of PFMs were removed from protein scoring after Machine Learning', (100 - (qval_ok+1)*2))
 
+    # df1un = df1[df1['qpreds'] <= qval_ok].copy()
     df1un = df1u[df1u['qpreds'] <= qval_ok].copy()
+
+
+    # df1un['dec_cum'] = np.cumsum(df1un['decoy'])
+
+    # max_dec_number = df1un['dec_cum'].max()
+
+    # for idx, i in list(enumerate(np.arange(0.1, 1.1, 0.1)))[::-1]:
+    #     print(idx, i)
+        
+    #     max_p = df1un[df1un['dec_cum'] <= i * max_dec_number]['preds'].max()
+        
+    #     df1un.loc[df1un['preds'] <= max_p, 'qpreds'] = idx
+
+
+
+
     df1un['qpreds'] = pd.qcut(df1un['preds'], 10, labels=range(10))
 
     qdict = df1un.set_index('seqs').to_dict()['qpreds']
+    # qdict = df1un.set_index(['seqs', 'ids']).to_dict()['qpreds']
 
 
     
@@ -1658,6 +1687,7 @@ def process_peptides(args):
 
 
     df1['qpreds'] = df1['seqs'].apply(lambda x: qdict.get(x, 11))
+    # df1['qpreds'] = df1.apply(lambda x: qdict.get((x['seqs'], x['ids']), 11), axis=1)
 
 
 

@@ -289,12 +289,17 @@ def get_prot_pept_map(args):
 
     logger.info('Database information:')
     logger.info('Target/Decoy proteins: %d/%d', target_prot_count, decoy_prot_count)
-    logger.info('Target/Decoy peptides: %d/%d', len(target_peps), len(decoy_peps))
+    target_peps_number = len(target_peps)
+    decoy_peps_number = len(decoy_peps)
+    intersection_number = len(target_peps.intersection(decoy_peps)) / (target_peps_number + decoy_peps_number)
+    logger.info('Target/Decoy peptides: %d/%d', target_peps_number, decoy_peps_number)
     logger.info('Target-Decoy peptide intersection: %.1f %%',
-        100 * len(target_peps.intersection(decoy_peps)) / (len(target_peps) + len(decoy_peps)))
+        100 * intersection_number)
+       
+    ml_correction = decoy_peps_number * (1 - intersection_number) / target_peps_number * 0.5
     del decoy_peps
     del target_peps
-    return protsN, pept_prot
+    return protsN, pept_prot, ml_correction
 
 
 def convert_tandem_cleave_rule_to_regexp(cleavage_rule):
