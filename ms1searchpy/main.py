@@ -510,6 +510,7 @@ def get_resdict(it, **kwargs):
             resdict['mods'].append(mods)
             resdict['iorig'].append(i)
 
+
     for k in list(resdict.keys()):
         resdict[k] = np.array(resdict[k])
 
@@ -601,11 +602,12 @@ def process_peptides(args):
 
 
     e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
-    # e_ind = resdict['Isotopes'] >= min_isotopes_calibration
-    # e_ind = resdict['Isotopes'] >= 1
     resdict2 = filter_results(resdict, e_ind)
 
     e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= min_scans_calibration
+    resdict2 = filter_results(resdict2, e_ind)
+
+    e_ind = resdict2['mods'] == 0
     resdict2 = filter_results(resdict2, e_ind)
 
     if args['mc'] > 0:
@@ -672,6 +674,8 @@ def process_peptides(args):
         df1['iorig'] = resdict['iorig']
         df1['seqs'] = resdict['seqs']
 
+        df1['mods'] = resdict['mods']
+        
         # df1['orig_md'] = true_md
 
 
@@ -777,13 +781,16 @@ def process_peptides(args):
         resdict = filter_results(resdict, e_ind)
 
 
-
         e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
         resdict2 = filter_results(resdict, e_ind)
         
 
         e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= min_scans_calibration
         resdict2 = filter_results(resdict2, e_ind)
+
+        e_ind = resdict2['mods'] == 0
+        resdict2 = filter_results(resdict2, e_ind)
+
 
         if args['mc'] > 0:
             e_ind = resdict2['mc'] == 0
@@ -848,6 +855,8 @@ def process_peptides(args):
         e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= 1
         resdict2 = filter_results(resdict, e_ind)
 
+        e_ind = resdict2['mods'] == 0
+        resdict2 = filter_results(resdict2, e_ind)
 
         if args['mc'] > 0:
             e_ind = resdict2['mc'] == 0
@@ -1239,7 +1248,8 @@ def process_peptides(args):
                 p.join()
 
     rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
-    rt_diff = np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred
+    # rt_diff = np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred
+    rt_diff = np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred - XRT_shift
     # rt_diff = resdict['rt'] - rt_pred
     e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
     r = 9.0
@@ -1278,7 +1288,7 @@ def process_peptides(args):
 
     mass_diff = (resdict['md'] - mass_shift) / (mass_sigma)
 
-    rt_diff = (np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred) / RT_sigma
+    rt_diff = (np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred - XRT_shift) / RT_sigma
     # rt_diff = (resdict['rt'] - rt_pred) / RT_sigma
 
     prefix = 'DECOY_'
