@@ -1494,7 +1494,7 @@ def process_peptides(args):
 
         trfp_params = [args['trfp'], 'xic', '-i', f'{base_out_name[:-9]}.raw', '-b', trfp_xic_out, '-j', trfp_xic_in]
 
-        if os.name != 'nt':
+        if os.name != 'nt' and os.path.splitext(args['trfp'])[1].lower() == '.exe':
             trfp_params.insert(0, 'mono')
 
         logger.info('Running XIC extraction')
