@@ -531,33 +531,6 @@ def filter_results(resultdict, idx):
     return tmp
 
 def process_peptides(args):
-
-    #foo
-    # args = {'file': 'D:/RawData/Eclipse/11052020_HeLa01.features.tsv',
-    #         'd': 'D:/Fasta/sprot_human_smartdecoy.fasta',
-    #         'ptol': 8.,
-    #         'fdr': 1.,
-    #         'i': 2,
-    #         'ci': 4,
-    #         'csc': 4,
-    #         'ts': 2,
-    #         'sc': 1,
-    #         'lmin': 6,
-    #         'lmax': 30,
-    #         'e': '[RK]|{P}',
-    #         'mc': 0,
-    #         'cmin': 1,
-    #         'cmax': 4,
-    #         'fmods': '57.021464@C',
-    #         'ad': 0,
-    #         'ml': 1,
-    #         'prefix': 'DECOY_',
-    #         'nproc': 8,
-    #         'mcalib': 0,
-    #         'trfp': 'D:/Code/ThermoRawFileParser/bin/x64/Debug/ThermoRawFileParser.exe'
-    #     }
-    #foo-end
-
     logger.info('Starting search...')
 
     fname_orig = args['file']
@@ -1378,10 +1351,6 @@ def process_peptides(args):
 
     df1['id_count'] = df1.groupby('ids')['mass_diff'].transform('count')
 
-    #foo
-    #df1 = pd.read_csv('D:/RawData/Eclipse/11052020_HeLa01.features_PFMs_ML.tsv', sep='\t').loc[:, :'id_count']
-    #foo-end
-
     if args['csd']:
         #imports and functions: should be global?
         import json
@@ -1393,13 +1362,11 @@ def process_peptides(args):
         PROTON = 1.00727646677
 
         psi_to_single_ptm = {'[Acetyl]-': 'B',
-                             '(Carbamyl)': 'O',
                              '[Carbamidomethyl]': '',
                              'M[Oxidation]': 'J',
-                             '(Gln->pyro-Glu)Q': 'X',
-                             'N(Deamidated)': 'D',
-                             'Q(Deamidated)': 'E'}
-
+                             'S[Phosphorylation]': 'X',
+                             'T[Phosphorylation]': 'O',
+                             'Y[Phosphorylation]': 'U'}
         #functions
         def reshapeOneHot(X):
             X = np.dstack(X)
@@ -1417,12 +1384,11 @@ def process_peptides(args):
             peptide = get_single_ptm_code(psi_sequence)
             if len(peptide) > MAX_LENGTH:
                 print('Peptide length is larger than maximal length of ', str(MAX_LENGTH))
-                return None
+                return ['', None]
             else:
-                AA_vocabulary = 'KRPTNAQVSGILCMJHFYWEDBXOU'#B: acetyl; O: Carbamyl; J: oxidized Met; X:pyro_glu
-                no_not_used_aas = 1#U: not used
+                AA_vocabulary = 'KRPTNAQVSGILCMJHFYWEDBXOU'#B: acetyl; J: oxidized Met; O: PhosphoT; X: PhosphoS; U: PhosphoY
 
-                one_hot_peptide = np.zeros((len(peptide), len(AA_vocabulary) - no_not_used_aas))
+                one_hot_peptide = np.zeros((len(peptide), len(AA_vocabulary)))
 
                 for j in range(0, len(peptide)):
                     try:
@@ -1531,7 +1497,9 @@ def process_peptides(args):
 
         #loading model
         CSD_model = models.load_model(
-            os.path.normpath(os.path.join(os.path.dirname(__file__), 'models', 'CSD_model_LCMSMS.hdf5')))
+            os.path.normpath(os.path.join(os.path.dirname(__file__), 'models', 'CSD_model_LCMSMS.hdf5')),
+            compile=False)
+        CSD_model.compile()
 
         #using only unique sequences for prediction
         unique_sequences = pd.DataFrame(df1.drop_duplicates('seqs')['seqs'])
