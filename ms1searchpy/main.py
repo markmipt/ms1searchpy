@@ -1436,7 +1436,7 @@ def process_peptides(args):
         ## extracting feature CSDs
 
         faims_mode = np.any(df_features['FAIMS'] != 0)
-        logger.info('FAIMS mode: {faims_mode}')
+        logger.info(f'FAIMS mode: {faims_mode}')
 
         #find all features that has been maped to sequence
         if faims_mode:
@@ -1475,10 +1475,10 @@ def process_peptides(args):
         logger.info('Running XIC extraction')
 
         try:
-            subprocess.check_output(trfp_params, shell=True)
+            subprocess.check_output(trfp_params)
             os.remove(trfp_xic_in)
         except subprocess.CalledProcessError as ex:
-            logger.error('TRFP execution failed\nOutput:\n{}', ex.output)
+            logger.error(f'TRFP execution failed\nOutput:\n{ex.output}')
             raise Exception('TRFP XIC extraction failed')
 
         #read TRFP output
