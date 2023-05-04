@@ -1360,6 +1360,7 @@ def process_peptides(args):
 
         #constants
         PROTON = 1.00727646677
+        TINY = 1e-6
 
         psi_to_single_ptm = {'[Acetyl]-': 'B',
                              '[Carbamidomethyl]': '',
@@ -1407,14 +1408,16 @@ def process_peptides(args):
 
                 return peptide, full_one_hot_peptide
 
-        def expand_charges(row, min_charge, max_charge):
+        def expand_charges(row, min_charge, max_charge, mode=1):
             charge = np.arange(min_charge, max_charge + 1).reshape(-1, 1)
-            mz = row['massCalib']/charge + PROTON
+            mz = row['massCalib']/charge + PROTON * mode
             index = [f'{int(row["id"])}_{z[0]}' for z in charge]
             result = pd.DataFrame(mz, columns=['mz'], index=index)
             result['z'] = charge
             result['rt_start'] = row['rtStart']
             result['rt_end'] = row['rtEnd']
+            if 'FAIMS' in row.keys():
+                result['scan_filter'] = f'ms cv={row["FAIMS"]}'
 
             return result
 
@@ -1432,8 +1435,14 @@ def process_peptides(args):
 
         ## extracting feature CSDs
 
+        faims_mode = np.any(df_features['FAIMS'] != 0)
+        logger.info('FAIMS mode: {faims_mode}')
+
         #find all features that has been maped to sequence
-        used_features = df_features.loc[df1['ids'].unique(), ['massCalib', 'rtStart', 'rtEnd']].copy()
+        if faims_mode:
+            used_features = df_features.loc[df1['ids'].unique(), ['massCalib', 'rtStart', 'rtEnd', 'FAIMS']].copy()
+        else:
+            used_features = df_features.loc[df1['ids'].unique(), ['massCalib', 'rtStart', 'rtEnd']].copy()
         used_features['id'] = used_features.index.astype(int)
 
         logger.debug(f'{used_features.shape[0]} features has been mapped to peptide sequence')
@@ -1466,7 +1475,7 @@ def process_peptides(args):
         logger.info('Running XIC extraction')
 
         try:
-            subprocess.check_output(trfp_params)
+            subprocess.check_output(trfp_params, shell=True)
             os.remove(trfp_xic_in)
         except subprocess.CalledProcessError as ex:
             logger.error('TRFP execution failed\nOutput:\n{}', ex.output)
@@ -1510,7 +1519,7 @@ def process_peptides(args):
 
         #prediction
         #current model predict up to z=6, but could not predict much for z > 4
-        CSD_pred = CSD_model.predict(CSD_X, batch_size=1024)[:, :4]
+        CSD_pred = CSD_model.predict(CSD_X, batch_size=2048)[:, :4]
         unique_sequences[['1', '2', '3', '4']] = CSD_pred
         pfm_csd_pred = unique_sequences.set_index('seqs').reindex(df1['seqs']).values
 
@@ -1520,12 +1529,20 @@ def process_peptides(args):
         pfm_csd_pred[mask] = 0
 
         #normalizing CSDs
-        pfm_csd = pfm_csd / pfm_csd.sum(axis=1).reshape(-1, 1)
-        pfm_csd_pred = pfm_csd_pred / pfm_csd_pred.sum(axis=1).reshape(-1, 1)
+        pfm_csd = pfm_csd / (pfm_csd.sum(axis=1) + TINY).reshape(-1, 1)
+        pfm_csd_pred = pfm_csd_pred / (pfm_csd_pred.sum(axis=1) + TINY).reshape(-1, 1)
 
+        #spectrum angle feature
+        df1['z_angle'] = 1 - 2 * np.arccos((pfm_csd * pfm_csd_pred).sum(axis=1) /\
+            (np.linalg.norm(pfm_csd, 2, axis=1) * np.linalg.norm(pfm_csd_pred, 2, axis=1) + TINY)) / np.pi
+
+        #adding average_charge
+        pfm_csd = np.concatenate([pfm_csd, (pfm_csd * np.arange(1, 5).reshape(1, 4)).sum(axis=1).reshape(-1, 1)], axis=1)
+        pfm_csd_pred = np.concatenate([pfm_csd_pred, (pfm_csd_pred * np.arange(1, 5).reshape(1, 4)).sum(axis=1).reshape(-1, 1)], axis=1)
+
+        #prediction error features for individual intensities and average charge
         z_deltas = pfm_csd - pfm_csd_pred
-        df1[[f'z{z}_err' for z in '1234']] = z_deltas / z_deltas.std(axis=0).reshape(1, -1)
-        df1['z_mse'] = np.sqrt(np.power(z_deltas, 2).sum(axis=1)) / (pfm_csd > 0).sum(axis=1)
+        df1[[f'z{z}_err' for z in '1234a']] = (z_deltas - z_deltas.mean(axis=0)) / z_deltas.std(axis=0).reshape(1, -1)
 
         logger.info('Charge-state distribution features added')
 
