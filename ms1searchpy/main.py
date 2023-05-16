@@ -1436,7 +1436,7 @@ def process_peptides(args):
         ## extracting feature CSDs
 
         faims_mode = np.any(df_features['FAIMS'] != 0)
-        logger.info(f'FAIMS mode: {faims_mode}')
+        logger.debug(f'FAIMS mode: {faims_mode}')
 
         #find all features that has been maped to sequence
         if faims_mode:
@@ -1518,9 +1518,8 @@ def process_peptides(args):
         logger.info('Running charge-state distribution prediction model')
 
         #prediction
-        #current model predict up to z=6, but could not predict much for z > 4
-        CSD_pred = CSD_model.predict(CSD_X, batch_size=2048)[:, :4]
-        unique_sequences[['1', '2', '3', '4']] = CSD_pred
+        CSD_pred = CSD_model.predict(CSD_X, batch_size=2048)
+        unique_sequences[['1', '2', '3', '4']] = CSD_pred[:, :4]
         pfm_csd_pred = unique_sequences.set_index('seqs').reindex(df1['seqs']).values
 
         #masking impossible m/z-s in prediction
@@ -1543,7 +1542,7 @@ def process_peptides(args):
         #prediction error features for individual intensities and average charge
         z_deltas = pfm_csd - pfm_csd_pred
         df1[[f'z{z}_err' for z in '1234a']] = (z_deltas - z_deltas.mean(axis=0)) / z_deltas.std(axis=0).reshape(1, -1)
-
+        
         logger.info('Charge-state distribution features added')
 
     p1 = set(resdict['seqs'])
