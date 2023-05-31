@@ -2,7 +2,7 @@ pyteomics>=4.5.1
 lxml
 scipy
 numpy
-sklearn
+scikit-learn
 lightgbm
 pandas
 biosaur2
