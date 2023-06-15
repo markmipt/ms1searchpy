@@ -1,4 +1,4 @@
-from pyteomics import fasta, parser
+from pyteomics import fasta, parser, mass
 import os
 from scipy.stats import binom
 import numpy as np
@@ -7,9 +7,67 @@ import random
 import itertools
 from biosaur2 import main as bio_main
 import logging
+from copy import deepcopy
 
 logger = logging.getLogger(__name__)
 
+# Temporary for pyteomics <= Version 4.5.5 bug
+if 'H-' in mass.std_aa_mass:
+    del mass.std_aa_mass['H-']
+if '-OH' in mass.std_aa_mass:
+    del mass.std_aa_mass['-OH']
+
+mods_custom_dict = {
+    'Oxidation': 15.994915,
+    'Carbamidomethyl': 57.021464,
+    'TMT6plex': 229.162932,
+}
+
+
+def get_aa_mass_with_fixed_mods(fmods, fmods_legend):
+
+    if fmods_legend:
+        for mod in fmods_legend.split(','):
+            psiname, m = mod.split('@')
+            mods_custom_dict[psiname] = float(m)
+
+    aa_mass = deepcopy(mass.std_aa_mass)
+    aa_to_psi = dict()
+
+    mass_h2o = mass.calculate_mass('H2O')
+    for k in list(aa_mass.keys()):
+        aa_mass[k] = round(mass.calculate_mass(sequence=k) - mass_h2o, 7)
+
+    if fmods:
+        for mod in fmods.split(','):
+            psiname, aa = mod.split('@')
+            if psiname not in mods_custom_dict:
+                logger.error('PSI Name for modification %s is missing in the modification legend' % (psiname, ))
+                raise Exception('Exception: missing PSI Name for modification')
+            if aa == '[':
+                aa_mass['Nterm'] = float(mods_custom_dict[psiname])#float(m)
+                aa_to_psi['Nterm'] = psiname
+            elif aa == ']':
+                aa_mass['Cterm'] = float(mods_custom_dict[psiname])#float(m)
+                aa_to_psi['Cterm'] = psiname
+            else:
+                aa_mass[aa] += float(mods_custom_dict[psiname])#float(m)
+                aa_to_psi[aa] = psiname
+
+    logger.debug(aa_mass)
+
+    return aa_mass, aa_to_psi
+
+
+def mods_for_deepLC(seq, aa_to_psi):
+    if 'Nterm' in aa_to_psi:
+        mods_list = ['0|%s' % (aa_to_psi['Nterm'], ), ]
+    else:
+        mods_list = []
+    mods_list.extend([str(idx+1)+'|%s' % (aa_to_psi[aa]) for idx, aa in enumerate(seq) if aa in aa_to_psi])
+    if 'Cterm' in aa_to_psi:
+        mods_list.append(['-1|%s' % (aa_to_psi['Cterm'], ), ])
+    return '|'.join(mods_list)
 
 def recalc_spc(banned_dict, unstable_prots, prots_spc2):
     tmp = dict()
@@ -17,7 +75,7 @@ def recalc_spc(banned_dict, unstable_prots, prots_spc2):
         tmp[k] = sum(banned_dict.get(l, 1) > 0 for l in prots_spc2[k])
     return tmp
 
-def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans, nproc):
+def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans, nproc, check_unique=True):
     if os.path.splitext(fname)[-1].lower() == '.mzml':
         args = {
             'file': fname,
@@ -80,9 +138,10 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans, nproc):
     #     df_features['I-0-2'] = -1
     #     df_features.loc[df_features['intensity_2'] > 0, 'I-0-2'] = df_features.loc[df_features['intensity_2'] > 0, :].apply(lambda x: x['intensityApex'] / x['intensity_2'], axis=1)
 
-    # Check unique ids
-    if len(df_features['id']) != len(set(df_features['id'])):
-        df_features['id'] = df_features.index + 1
+    if check_unique:
+        # Check unique ids
+        if len(df_features['id']) != len(set(df_features['id'])):
+            df_features['id'] = df_features.index + 1
 
     # Remove features with low number of isotopes
     df_features = df_features[df_features['nIsotopes'] >= min_isotopes]

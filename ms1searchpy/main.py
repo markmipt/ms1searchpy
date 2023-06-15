@@ -430,7 +430,7 @@ def prepare_peptide_processor(fname, args):
 
     logger.info('Reading file %s', fname)
 
-    df_features = utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans, args['nproc'])
+    df_features = utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans, args['nproc'], args['check_unique'])
 
     # Sort by neutral mass
     df_features = df_features.sort_values(by='massCalib')
@@ -457,28 +457,12 @@ def prepare_peptide_processor(fname, args):
 
     logger.info('Number of peptide isotopic clusters passed filters: %d', len(nmasses))
 
-    fmods = args['fmods']
-    aa_mass = deepcopy(mass.std_aa_mass)
-
-    mass_h2o = mass.calculate_mass('H2O')
-
-    for k in list(aa_mass.keys()):
-        aa_mass[k] = round(mass.calculate_mass(sequence=k) - mass_h2o, 7)
-
-    if fmods:
-        for mod in fmods.split(','):
-            m, aa = mod.split('@')
-            if aa == '[':
-                aa_mass['Nterm'] = float(m)
-            elif aa == ']':
-                aa_mass['Cterm'] = float(m)
-            else:
-                aa_mass[aa] += float(m)
+    aa_mass, aa_to_psi = utils.get_aa_mass_with_fixed_mods(args['fmods'], args['fmods_legend'])
 
     acc_l = args['ptol']
     acc_r = args['ptol']
 
-    return {'aa_mass': aa_mass, 'acc_l': acc_l, 'acc_r': acc_r, 'args': args}, df_features
+    return {'aa_mass': aa_mass, 'aa_to_psi': aa_to_psi, 'acc_l': acc_l, 'acc_r': acc_r, 'args': args}, df_features
 
 def get_resdict(it, **kwargs):
 
@@ -592,6 +576,8 @@ def process_peptides(args):
     logger.info('Running the search ...')
 
     resdict = get_resdict(pept_prot, **kwargs)
+
+    aa_to_psi = kwargs['aa_to_psi']
 
     if args['mc'] > 0:
         resdict['mc'] = np.array([parser.num_sites(z, args['enzyme']) for z in resdict['seqs']])
@@ -933,26 +919,28 @@ def process_peptides(args):
 
             outtrain.write('seq,modifications,tr\n')
             for seq, RT in zip(ns2, nr2):
-                mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
+                # mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
+                mods_tmp = utils.mods_for_deepLC(seq, aa_to_psi)
                 outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
             outtrain.close()
 
+            train_RT = []
+            train_seq = []
             outcalib.write('seq,modifications,tr\n')
             for seq, RT in zip(ns, nr):
-                mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
+                # mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
+                mods_tmp = utils.mods_for_deepLC(seq, aa_to_psi)
                 outcalib.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
+                train_seq.append(seq)
+                train_RT.append(float(RT))
             outcalib.close()
 
             subprocess.call([deeplc_path, '--file_pred', outcalib_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name] + deeplc_extra_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
             pepdict = dict()
-            train_RT = []
-            train_seq = []
-            for x in open(outres_name).readlines()[1:]:
-                _, seq, _, RTexp, RT = x.strip().split(',')
+            for seq, x in zip(train_seq, open(outres_name).readlines()[1:]):
+                _, RT = x.strip().split(',')
                 pepdict[seq] = float(RT)
-                train_seq.append(seq)
-                train_RT.append(float(RTexp))
 
 
             train_RT = np.array(train_RT)
@@ -1071,27 +1059,29 @@ def process_peptides(args):
 
             outcal.write('seq,modifications,tr\n')
             for seq, RT in zip(ns[:int(ll/2)], nr[:int(ll/2)]):
-                mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
+                # mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
+                mods_tmp = utils.mods_for_deepLC(seq, aa_to_psi)
                 outcal.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
             outcal.close()
 
+            train_RT = []
+            train_seq = []
             outtrain.write('seq,modifications,tr\n')
             for seq, RT in zip(ns[int(ll/2):], nr[int(ll/2):]):
-                mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
+                # mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
+                mods_tmp = utils.mods_for_deepLC(seq, aa_to_psi)
                 outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
+                train_seq.append(seq)
+                train_RT.append(float(RT))
             outtrain.close()
 
             # [:int(len(ns)/2)]
 
             subprocess.call([deeplc_path, '--file_pred', outtrain_name, '--file_cal', outcal_name, '--file_pred_out', outres_name] + deeplc_extra_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             pepdict = dict()
-            train_RT = []
-            train_seq = []
-            for x in open(outres_name).readlines()[1:]:
-                _, seq, _, RTexp, RT = x.strip().split(',')
+            for seq, x in zip(train_seq, open(outres_name).readlines()[1:]):
+                _, RT = x.strip().split(',')
                 pepdict[seq] = float(RT)
-                train_seq.append(seq)
-                train_RT.append(float(RTexp))
 
 
             train_RT = np.array(train_RT)
@@ -1190,7 +1180,8 @@ def process_peptides(args):
 
         outtrain.write('seq,modifications,tr\n')
         for seq, RT in zip(ns, nr):
-            mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
+            # mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
+            mods_tmp = utils.mods_for_deepLC(seq, aa_to_psi)
             outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
         outtrain.close()
 
@@ -1205,16 +1196,18 @@ def process_peptides(args):
         outtest_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
         outtest = open(outtest_name, 'w')
 
-
+        test_seqs = []
         outtest.write('seq,modifications\n')
         for seq in p1:
-            mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
+            # mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
+            mods_tmp = utils.mods_for_deepLC(seq, aa_to_psi)
             outtest.write(seq + ',' + str(mods_tmp) + '\n')
+            test_seqs.append(seq)
         outtest.close()
 
         subprocess.call([deeplc_path, '--file_pred', outtest_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name] + deeplc_extra_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for x in open(outres_name).readlines()[1:]:
-            _, seq, _, RT = x.strip().split(',')
+        for seq, x in zip(test_seqs, open(outres_name).readlines()[1:]):
+            _, RT = x.strip().split(',')
             pepdict[seq] = float(RT)
 
     else:

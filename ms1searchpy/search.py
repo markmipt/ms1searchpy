@@ -31,7 +31,8 @@ def run():
     parser.add_argument('-mc', help='number of missed cleavages', default=0, type=int)
     parser.add_argument('-cmin', help='min precursor charge', default=1, type=int)
     parser.add_argument('-cmax', help='max precursor charge', default=4, type=int)
-    parser.add_argument('-fmods', help='fixed modifications. in mass1@aminoacid1,mass2@aminoacid2 format', default='57.021464@C')
+    parser.add_argument('-fmods', help='fixed modifications. Use "[" and "]" for N-term and C-term amino acids. in psiname1@aminoacid1,psiname2@aminoacid2 format', default='Carbamidomethyl@C')
+    parser.add_argument('-fmods_legend', help='PSI Names for extra fixed modifications. Oxidation, Carbamidomethyl and TMT6plex are stored by default in source code. in psiname1@monomass1,psiname2@monomass2 format', default='')
     parser.add_argument('-ad', help='add decoy', default=0, type=int)
     parser.add_argument('-ml', help='use machine learning for PFMs', default=1, type=int)
     parser.add_argument('-prefix', help='decoy prefix', default='DECOY_')
@@ -45,6 +46,9 @@ def run():
     parser.add_argument('-mcalib', help='mass calibration: 2 - group by ion mobility and RT, 1 - by RT, 0 - no calibration', default=0, type=int)
     parser.add_argument('-debug', help='Produce debugging output', action='store_true')
     parser.add_argument('-save_calib', help='Save RT calibration list', action='store_true')
+    parser.add_argument('-check_unique', help='Experimental. check_unique', default=1, type=int)
+
+    
     args = vars(parser.parse_args())
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
             datefmt='[%H:%M:%S]', level=[logging.INFO, logging.DEBUG][args['debug']])

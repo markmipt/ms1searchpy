@@ -26,7 +26,7 @@ Using pip:
 
     pip install ms1searchpy
 
-It is recommended to additionally install [DeepLC](https://github.com/compomics/DeepLC); you may also want to install
+It is recommended to additionally install [DeepLC](https://github.com/compomics/DeepLC) version 2.2.0+; you may also want to install
 [diffacto](https://github.com/statisticalbiotechnology/diffacto):
 
     pip install deeplc diffacto
