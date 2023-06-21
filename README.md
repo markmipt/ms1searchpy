@@ -30,7 +30,7 @@ Using pip:
 
 It is recommended to additionally install [DeepLC](https://github.com/compomics/DeepLC) version 1.1.2 (newer version has some issues right now):
 
-    pip install deeplc deeplc==1.1.2
+    pip install deeplc==1.1.2
 
 This should work on recent versions of Python (3.8-3.10).
 
