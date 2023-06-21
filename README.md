@@ -16,6 +16,8 @@ Read further for detailed info, including quantitative analysis.
 
 ## Citing ms1searchpy
 
+Ivanov et al. DirectMS1Quant: Ultrafast Quantitative Proteomics with MS/MS-Free Mass Spectrometry. https://pubs.acs.org/doi/10.1021/acs.analchem.2c02255
+
 Ivanov et al. Boosting MS1-only Proteomics with Machine Learning Allows 2000 Protein Identifications in Single-Shot Human Proteome Analysis Using 5 min HPLC Gradient. https://doi.org/10.1021/acs.jproteome.0c00863
 
 Ivanov et al. DirectMS1: MS/MS-free identification of 1000 proteins of cellular proteomes in 5 minutes. https://doi.org/10.1021/acs.analchem.9b05095
@@ -26,10 +28,9 @@ Using pip:
 
     pip install ms1searchpy
 
-It is recommended to additionally install [DeepLC](https://github.com/compomics/DeepLC) version 2.2.0+; you may also want to install
-[diffacto](https://github.com/statisticalbiotechnology/diffacto):
+It is recommended to additionally install [DeepLC](https://github.com/compomics/DeepLC) version 1.1.2 (newer version has some issues right now):
 
-    pip install deeplc diffacto
+    pip install deeplc deeplc==1.1.2
 
 This should work on recent versions of Python (3.8-3.10).
 
@@ -92,19 +93,11 @@ You can combine the results from several replicate runs with `ms1combine` by fee
 
 After obtaining the protein identification results, you can proceed to compare your samples using LFQ.
 
-### Using diffacto
-
-Here's an example where we use Bourne Shell syntax for brevity. Each sample contains three replicates:
-
-    ms1todiffacto -dif diffacto -S1 sample1_r{1,2,3}.features_proteins.tsv -S2 sample2_r{1,2,3}.features_proteins.tsv -norm median -out diffacto_output.tsv -min_samples 3
-
-`ms1todiffacto` prepares input file for [diffacto](https://github.com/statisticalbiotechnology/diffacto) from ms1searchpy output and to automatically runs diffacto.
-
 ### Using directms1quant
 
 New LFQ method designed specifically for DirectMS1 is invoked like this:
 
-    directms1quant -S1 sample1_r{1,2,3}.features_proteins_full.tsv -S2 sample2_r{1,2,3}.features_proteins_full.tsv -min_samples 3
+    directms1quant -S1 sample1_r{1,2,3}.features_proteins_full.tsv -S2 sample2_r{1,2,3}.features_proteins_full.tsv
 
 It produces a filtered table of significantly changed proteins with p-values and fold changes,
 as well as the full protein table and a separate file simply listing all
@@ -115,5 +108,4 @@ IDs of significantly modified proteins (e.g. for easy copy-paste into a StringDB
 - GitHub repo & issue tracker: https://github.com/markmipt/ms1searchpy
 - Mailing list: markmipt@gmail.com
 
-- Diffacto repo: https://github.com/statisticalbiotechnology/diffacto
 - DeepLC repo: https://github.com/compomics/DeepLC

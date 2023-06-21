@@ -939,7 +939,10 @@ def process_peptides(args):
 
             pepdict = dict()
             for seq, x in zip(train_seq, open(outres_name).readlines()[1:]):
-                _, RT = x.strip().split(',')
+                try:
+                    _, _, _, _, RT = x.strip().split(',')
+                except:
+                    _, RT = x.strip().split(',')
                 pepdict[seq] = float(RT)
 
 
@@ -1080,7 +1083,10 @@ def process_peptides(args):
             subprocess.call([deeplc_path, '--file_pred', outtrain_name, '--file_cal', outcal_name, '--file_pred_out', outres_name] + deeplc_extra_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             pepdict = dict()
             for seq, x in zip(train_seq, open(outres_name).readlines()[1:]):
-                _, RT = x.strip().split(',')
+                try:
+                    _, _, _, _, RT = x.strip().split(',')
+                except:
+                    _, RT = x.strip().split(',')
                 pepdict[seq] = float(RT)
 
 
@@ -1207,7 +1213,10 @@ def process_peptides(args):
 
         subprocess.call([deeplc_path, '--file_pred', outtest_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name] + deeplc_extra_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for seq, x in zip(test_seqs, open(outres_name).readlines()[1:]):
-            _, RT = x.strip().split(',')
+            try:
+                _, _, _, RT = x.strip().split(',')
+            except:
+                _, RT = x.strip().split(',')
             pepdict[seq] = float(RT)
 
     else:
