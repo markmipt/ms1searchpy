@@ -450,6 +450,7 @@ def prepare_peptide_processor(fname, args):
     Isotopes = df_features['nIsotopes'].values
     mzraw = df_features['mz'].values
     avraw = np.zeros(len(df_features))
+    # avraw = df_features['isoerror'].values
     if len(set(df_features['FAIMS'])) > 1:
         imraw = df_features['FAIMS'].values
     else:
@@ -493,6 +494,30 @@ def get_resdict(it, **kwargs):
             resdict['md'].append(massdiff)
             resdict['mods'].append(mods)
             resdict['iorig'].append(i)
+
+        if kwargs['args']['phospho']:
+            # if 'S' in seqm or 'T' in seqm or 'Y' in seqm:
+            if 'M' in seqm:
+                # m = m + 79.966331
+                m = m + 15.994915
+
+                acc_l = kwargs['acc_l']
+                acc_r = kwargs['acc_r']
+                dm_l = acc_l * m / 1.0e6
+                if acc_r == acc_l:
+                    dm_r = dm_l
+                else:
+                    dm_r = acc_r * m / 1.0e6
+                start = nmasses.searchsorted(m - dm_l)
+                end = nmasses.searchsorted(m + dm_r, side='right')
+                for i in range(start, end):
+                    massdiff = (m - nmasses[i]) / m * 1e6
+                    mods = 1
+
+                    resdict['seqs'].append(seqm)
+                    resdict['md'].append(massdiff)
+                    resdict['mods'].append(mods)
+                    resdict['iorig'].append(i)
 
 
     for k in list(resdict.keys()):
@@ -1219,6 +1244,41 @@ def process_peptides(args):
                 _, RT = x.strip().split(',')
             pepdict[seq] = float(RT)
 
+
+
+
+        if args['phospho']:
+            print('HERE!')
+
+            pepdict2 = dict()
+
+
+            e_ind = resdict['mods'] == 1
+            resdict2 = filter_results(resdict, e_ind)
+            p2 = set(resdict2['seqs'])
+
+
+            outtest = open(outtest_name, 'w')
+
+            test_seqs = []
+            outtest.write('seq,modifications\n')
+            for seq in p2:
+                # mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
+                mods_tmp = utils.mods_for_deepLC_phospho(seq, aa_to_psi)
+                outtest.write(seq + ',' + str(mods_tmp) + '\n')
+                test_seqs.append(seq)
+            outtest.close()
+
+            subprocess.call([deeplc_path, '--file_pred', outtest_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name] + deeplc_extra_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            for seq, x in zip(test_seqs, open(outres_name).readlines()[1:]):
+                try:
+                    _, _, _, RT = x.strip().split(',')
+                except:
+                    _, RT = x.strip().split(',')
+                pepdict2[seq] = float(RT)
+
+
+
     else:
 
         if n == 1 or os.name == 'nt':
@@ -1249,7 +1309,12 @@ def process_peptides(args):
             for p in procs:
                 p.join()
 
-    rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
+    # rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
+
+
+
+    rt_pred = np.array([(pepdict[s] if z == 0 else pepdict2[s]) for s,z in zip(resdict['seqs'], resdict['mods'])])
+
     # rt_diff = np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred
     rt_diff = np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred - XRT_shift
     # rt_diff = resdict['rt'] - rt_pred
@@ -1268,9 +1333,9 @@ def process_peptides(args):
             output.write('\t'.join((k, str(v))) + '\n')
 
     with open(base_out_name + '_PFMs.tsv', 'w') as output:
-        output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tIntensitySum\tnScans\tnIsotopes\tproteins\tm/z\tRT\taveragineCorr\tcharge\tion_mobility\n')
+        output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tIntensitySum\tnScans\tnIsotopes\tproteins\tm/z\tRT\taveragineCorr\tcharge\tion_mobility\tmods\n')
         # for seq, md, rtd, peak_id, I, nScans, nIsotopes, mzr, rtr, av, ch, im in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['ids'], resdict['Is'], resdict['Scans'], resdict['Isotopes'], resdict['mzraw'], resdict['rt'], resdict['av'], resdict['ch'], resdict['im']):
-        for seq, md, rtd, iorig in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['iorig']):
+        for seq, md, rtd, iorig, modsnum in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['iorig'], resdict['mods']):
             peak_id = ids[iorig]
             I = Is[iorig]
             Isum = Isums[iorig]
@@ -1281,12 +1346,30 @@ def process_peptides(args):
             av = avraw[iorig]
             ch = charges[iorig]
             im = imraw[iorig]
-            output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), str(Isum), str(nScans), str(nIsotopes), ';'.join(pept_prot[seq]), str(mzr), str(rtr), str(av), str(ch), str(im))) + '\n')
+            output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), str(Isum), str(nScans), str(nIsotopes), ';'.join(pept_prot[seq]), str(mzr), str(rtr), str(av), str(ch), str(im), str(modsnum))) + '\n')
 
     # e_ind = resdict['mc'] == 0
     # resdict = filter_results(resdict, e_ind)
     # rt_diff = rt_diff[e_ind]
     # rt_pred = rt_pred[e_ind]
+
+
+
+
+
+    # if kwargs['args']['phospho']:
+
+    #     double_mods = defaultdict(set)
+    #     for z in zip(resdict['seqs'], resdict['mods']):
+    #         double_mods[z[0]].add(z[1])
+
+    #     idx_mods = [(True if ('M' not in z or len(double_mods[z]) == 2) else False) for z in resdict['seqs']]
+
+    #     resdict = filter_results(resdict, idx_mods)
+    #     rt_diff = rt_diff[idx_mods]
+    #     rt_pred = rt_pred[idx_mods]
+
+
 
     mass_diff = (resdict['md'] - mass_shift) / (mass_sigma)
 

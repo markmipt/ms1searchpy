@@ -69,6 +69,36 @@ def mods_for_deepLC(seq, aa_to_psi):
         mods_list.append(['-1|%s' % (aa_to_psi['Cterm'], ), ])
     return '|'.join(mods_list)
 
+
+
+def mods_for_deepLC_phospho(seq, aa_to_psi):
+
+    # aa_to_psi['S'] = 'Phospho'
+    # aa_to_psi['T'] = 'Phospho'
+    # aa_to_psi['Y'] = 'Phospho'
+    aa_to_psi['M'] = 'Oxidation'
+    
+    if 'Nterm' in aa_to_psi:
+        mods_list = ['0|%s' % (aa_to_psi['Nterm'], ), ]
+    else:
+        mods_list = []
+
+    flag = 1
+    for idx, aa in enumerate(seq):
+        if aa in aa_to_psi and (flag or aa_to_psi[aa] != 'Oxidation'):
+        # if aa in aa_to_psi and (flag or aa_to_psi[aa] != 'Phospho'):
+            mods_list.append(str(idx+1)+'|%s' % (aa_to_psi[aa]))
+            if aa_to_psi[aa] == 'Oxidation':
+            # if aa_to_psi[aa] == 'Phospho':
+                flag = 0
+
+
+    # mods_list.extend([str(idx+1)+'|%s' % (aa_to_psi[aa]) for idx, aa in enumerate(seq) if aa in aa_to_psi])
+    if 'Cterm' in aa_to_psi:
+        mods_list.append(['-1|%s' % (aa_to_psi['Cterm'], ), ])
+    return '|'.join(mods_list)
+
+
 def recalc_spc(banned_dict, unstable_prots, prots_spc2):
     tmp = dict()
     for k in unstable_prots:

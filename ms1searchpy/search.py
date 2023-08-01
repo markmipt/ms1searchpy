@@ -46,6 +46,7 @@ def run():
     parser.add_argument('-mcalib', help='mass calibration: 2 - group by ion mobility and RT, 1 - by RT, 0 - no calibration', default=0, type=int)
     parser.add_argument('-debug', help='Produce debugging output', action='store_true')
     parser.add_argument('-save_calib', help='Save RT calibration list', action='store_true')
+    parser.add_argument('-phospho', help='Save RT calibration list', action='store_true')
     parser.add_argument('-check_unique', help='Experimental. check_unique', default=1, type=int)
 
     
