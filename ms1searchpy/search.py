@@ -38,7 +38,7 @@ def run():
     parser.add_argument('-prefix', help='decoy prefix', default='DECOY_')
     parser.add_argument('-nproc',   help='number of processes', default=4, type=int)
     parser.add_argument('-force_nproc', help='Force using multiprocessing for Windows', action='store_true')
-    parser.add_argument('-deeplc', help='use deeplc: 0 - turn off, 1 - turn one', default=1, type=int)
+    parser.add_argument('-deeplc', help='use deeplc: 0 - turn off, 1 - turn one', default=0, type=int)
     parser.add_argument('-deeplc_batch_num', help='batch_num for deeplc', default=100000, type=int)
     parser.add_argument('-deeplc_model_path', help='path to deeplc model or folder with deeplc models', default='')
     parser.add_argument('-deeplc_library', help='path to deeplc library', default='')
