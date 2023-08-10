@@ -7,4 +7,3 @@ lightgbm
 pandas
 biosaur2
 matplotlib
-deeplc @ git+https://github.com/markmipt/DeepLC@alternative_best_model
