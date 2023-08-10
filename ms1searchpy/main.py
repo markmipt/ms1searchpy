@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from scipy.stats import scoreatpercentile
+from scipy.stats import scoreatpercentile, rankdata
 from scipy.optimize import curve_fit
 from scipy import exp
 import operator
@@ -40,45 +40,38 @@ from sklearn import metrics
 import csv
 import ast
 
+
 logger = logging.getLogger(__name__)
 
-def worker_RT(qin, qout, shift, step, RC=False, elude_path=False, ns=False, nr=False, win_sys=False):
+def worker_RT(qin, qout, shift, step, RC=False, ns=False, nr=False, win_sys=False):
     pepdict = dict()
-    if elude_path:
-        outtrain_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
-        outtrain = open(outtrain_name, 'w')
-        outres_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
-        for seq, RT in zip(ns, nr):
-            outtrain.write(seq + '\t' + str(RT) + '\n')
-        outtrain.close()
-
-        outtest_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
-        outtest = open(outtest_name, 'w')
-
-        maxval = len(qin)
-        start = 0
-        while start + shift < maxval:
-            item = qin[start+shift]
-            outtest.write(item + '\n')
-            start += step
-        outtest.close()
-
-        subprocess.call([elude_path, '-t', outtrain_name, '-e', outtest_name, '-o', outres_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for x in open(outres_name).readlines()[3:]:
-            seq, RT = x.strip().split('\t')
-            pepdict[seq] = float(RT)
-    else:
-        maxval = len(qin)
-        start = 0
-        while start + shift < maxval:
-            item = qin[start+shift]
-            pepdict[item] = achrom.calculate_RT(item, RC)
-            start += step
+    maxval = len(qin)
+    start = 0
+    while start + shift < maxval:
+        item = qin[start+shift]
+        pepdict[item] = achrom.calculate_RT(item, RC)
+        start += step
     if win_sys:
         return pepdict
     else:
         qout.put(pepdict)
         qout.put(None)
+
+def calibrate_RT_gaus_full(rt_diff_tmp):
+    RT_left = -min(rt_diff_tmp)
+    RT_right = max(rt_diff_tmp)
+
+    try:
+        start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 100
+        XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
+    except:
+        start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
+        XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
+    if np.isinf(covvalue):
+        XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
+    if np.isinf(covvalue):
+        XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
+    return XRT_shift, XRT_sigma, covvalue
 
 def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, nproc, fname=False, prots_spc_basic2=False):
     n = nproc
@@ -536,27 +529,36 @@ def process_peptides(args):
     out_log.close()
     out_log = open(base_out_name + '_log.txt', 'w')
 
-    elude_path = args['elude']
-    elude_path = elude_path.strip()
-
     deeplc_path = args['deeplc']
-    deeplc_path = deeplc_path.strip()
+    if deeplc_path:
+        from deeplc import DeepLC
+        logging.getLogger('deeplc').setLevel(logging.ERROR)
 
     deeplc_model_path = args['deeplc_model_path']
     deeplc_model_path = deeplc_model_path.strip()
 
-    deeplc_extra_args = []
     if len(deeplc_model_path) > 0:
-        deeplc_extra_args.append("--file_model")
         if deeplc_model_path.endswith('.hdf5'):
-            deeplc_extra_args.append(deeplc_model_path)
-            # deeplc_models = deeplc_model_path
+            path_model = deeplc_model_path
         else:
-            deeplc_extra_args.extend([os.path.join(deeplc_model_path,f) for f in os.listdir(deeplc_model_path) if f.endswith(".hdf5")])
-            # deeplc_models = " ".join([os.path.join(deeplc_model_path,f) for f in os.listdir(deeplc_model_path) if f.endswith(".hdf5")])
-        # deeplc_extra_args.extend(["--file_model", deeplc_models, ])
+            path_model = [os.path.join(deeplc_model_path,f) for f in os.listdir(deeplc_model_path) if f.endswith(".hdf5")]
+
+    else:
+        path_model = None
+
     if args['deeplc_library']:
-        deeplc_extra_args.extend(['--use_library', args['deeplc_library'], '--write_library'])
+
+        path_to_lib = args['deeplc_library']
+        if not os.path.isfile(path_to_lib):
+            lib_file = open(path_to_lib, 'w')
+            lib_file.close()
+        write_library = True
+
+    else:
+        path_to_lib = None
+        write_library = False
+
+
 
     calib_path = args['pl']
     calib_path = calib_path.strip()
@@ -570,7 +572,6 @@ def process_peptides(args):
 
     prefix = args['prefix']
     protsN, pept_prot, ml_correction = utils.get_prot_pept_map(args)
-    # peps = pept_prot.keys()
 
     kwargs, df_features = prepare_peptide_processor(fname_orig, args)
     logger.info('Running the search ...')
@@ -585,6 +586,7 @@ def process_peptides(args):
     isdecoy = lambda x: x[0].startswith(prefix)
     isdecoy_key = lambda x: x.startswith(prefix)
     escore = lambda x: -x[1]
+
 
 
     e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
@@ -874,11 +876,13 @@ def process_peptides(args):
         e_ind = np.argsort(zs_all_tmp)
         true_seqs = true_seqs[e_ind]
         true_rt = true_rt[e_ind]
-        true_isotopes = true_isotopes[e_ind]
 
         true_seqs = true_seqs[:2500]
         true_rt = true_rt[:2500]
-        true_isotopes = true_isotopes[:2500]
+
+        per_ind = np.random.RandomState(seed=SEED).permutation(len(true_seqs))
+        true_seqs = true_seqs[per_ind]
+        true_rt = true_rt[per_ind]
 
         best_seq = defaultdict(list)
         newseqs = []
@@ -897,135 +901,60 @@ def process_peptides(args):
             true_rt2 = df1['RT exp'].values
 
         else:
-            true_seqs2 = true_seqs
-            true_rt2 = true_rt
+
+            ll = len(true_seqs)
+
+            true_seqs2 = true_seqs[int(ll/2):]
+            true_rt2 = true_rt[int(ll/2):]
+            true_seqs = true_seqs[:int(ll/2)]
+            true_rt = true_rt[:int(ll/2)]
+
+        ns = true_seqs
+        nr = true_rt
+        ns2 = true_seqs2
+        nr2 = true_rt2
 
 
         logger.info('First-stage peptides used for RT prediction: %d', len(true_seqs))
 
         if args['ts'] != 2 and deeplc_path:
 
-
-            outtrain_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
-            outtrain = open(outtrain_name, 'w')
-            outcalib_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
-            outcalib = open(outcalib_name, 'w')
-            outres_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
-            ns = true_seqs
-            nr = true_rt
-
-            ns2 = true_seqs2
-            nr2 = true_rt2
-
-            outtrain.write('seq,modifications,tr\n')
-            for seq, RT in zip(ns2, nr2):
-                # mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
-                mods_tmp = utils.mods_for_deepLC(seq, aa_to_psi)
-                outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
-            outtrain.close()
-
-            train_RT = []
-            train_seq = []
-            outcalib.write('seq,modifications,tr\n')
-            for seq, RT in zip(ns, nr):
-                # mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
-                mods_tmp = utils.mods_for_deepLC(seq, aa_to_psi)
-                outcalib.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
-                train_seq.append(seq)
-                train_RT.append(float(RT))
-            outcalib.close()
-
-            subprocess.call([deeplc_path, '--file_pred', outcalib_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name] + deeplc_extra_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-            pepdict = dict()
-            for seq, x in zip(train_seq, open(outres_name).readlines()[1:]):
-                try:
-                    _, _, _, _, RT = x.strip().split(',')
-                except:
-                    _, RT = x.strip().split(',')
-                pepdict[seq] = float(RT)
+            dlc = DeepLC(verbose=False, batch_num=args['deeplc_batch_num'], path_model=path_model, write_library=write_library, use_library=path_to_lib, pygam_calibration=False)
 
 
-            train_RT = np.array(train_RT)
-            RT_pred = np.array([pepdict[s] for s in train_seq])
+            df_for_calib = pd.DataFrame({
+                'seq': ns2,
+                'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in ns2],
+                'tr': nr2,
+            })
 
-            rt_diff_tmp = RT_pred - train_RT
-            RT_left = -min(rt_diff_tmp)
-            RT_right = max(rt_diff_tmp)
+            df_for_check = pd.DataFrame({
+                'seq': ns,
+                'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in ns],
+                'tr': nr,
+            })
 
             try:
-                start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 100
-                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
+                dlc.calibrate_preds(seq_df=df_for_calib, check_df=df_for_check)
             except:
-                start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
-                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
-            if np.isinf(covvalue):
-                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
-            if np.isinf(covvalue):
-                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
+                dlc.calibrate_preds(seq_df=df_for_calib)
+
+            df_for_check['pr'] =  dlc.make_preds(seq_df=df_for_check)
+            df_for_calib['pr'] =  dlc.make_preds(seq_df=df_for_calib)
+            nr2_pred = df_for_calib['pr']
+
+            rt_diff_tmp = df_for_check['pr'] - df_for_check['tr']
+
+            XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
 
         else:
-            if args['ts'] != 2 and elude_path:
+            RC = achrom.get_RCs_vary_lcp(ns2, nr2, metric='mae')
+            nr2_pred = np.array([achrom.calculate_RT(s, RC) for s in ns2])
+            nr_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
 
+            rt_diff_tmp = nr_pred - nr
 
-                outtrain_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
-                outtrain = open(outtrain_name, 'w')
-                outcalib_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
-                outcalib = open(outcalib_name, 'w')
-                outres_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
-
-                ns = true_seqs
-                nr = true_rt
-                ns2 = true_seqs2
-                nr2 = true_rt2
-                for seq, RT in zip(ns, nr):
-                    outtrain.write(seq + '\t' + str(RT) + '\n')
-                outtrain.close()
-                for seq, RT in zip(ns, nr):
-                    outcalib.write(seq + '\t' + str(RT) + '\n')
-                outcalib.close()
-
-                subprocess.call([elude_path, '-t', outtrain_name, '-e', outcalib_name, '-g', '-o', outres_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                pepdict = dict()
-                train_RT = []
-                train_seq = []
-                for x in open(outres_name).readlines()[3:]:
-                    seq, RT, RTexp = x.strip().split('\t')
-                    pepdict[seq] = float(RT)
-                    train_seq.append(seq)
-                    train_RT.append(float(RTexp))
-                train_RT = np.array(train_RT)
-
-                rt_diff_tmp = RT_pred - train_RT
-                RT_left = -min(rt_diff_tmp)
-                RT_right = max(rt_diff_tmp)
-
-                start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
-                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
-                if np.isinf(covvalue):
-                    XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
-                if np.isinf(covvalue):
-                    XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
-            else:
-                ns = true_seqs
-                nr = true_rt
-                ns2 = true_seqs2
-                nr2 = true_rt2
-                RC = achrom.get_RCs_vary_lcp(ns2, nr2)
-                RT_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
-                train_RT = nr
-                # aa, bb, RR, ss = aux.linear_regression(RT_pred, nr)
-
-                rt_diff_tmp = RT_pred - nr
-                RT_left = -min(rt_diff_tmp)
-                RT_right = max(rt_diff_tmp)
-
-                start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
-                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
-                if np.isinf(covvalue):
-                    XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
-                if np.isinf(covvalue):
-                    XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
+            XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
 
 
         logger.info('First-stage calibrated RT shift: %.3f min', XRT_shift)
@@ -1036,131 +965,64 @@ def process_peptides(args):
     else:
         logger.info('No matches found')
 
+
+
     if args['ts']:
+
+
+
         ns = np.array(ns)
         nr = np.array(nr)
         idx = np.abs((rt_diff_tmp) - XRT_shift) <= 3 * XRT_sigma
         ns = ns[idx]
         nr = nr[idx]
+
+        rt_diff_tmp2 = nr2_pred - nr2
+        ns2 = np.array(ns2)
+        nr2 = np.array(nr2)
+        idx = np.abs((rt_diff_tmp2) - XRT_shift) <= 3 * XRT_sigma
+        ns2 = ns2[idx]
+        nr2 = nr2[idx]
+
         logger.info('Second-stage peptides used for RT prediction: %d', len(ns))
 
         if deeplc_path:
 
+            dlc = DeepLC(verbose=False, batch_num=args['deeplc_batch_num'], path_model=path_model, write_library=write_library, use_library=path_to_lib, pygam_calibration=False)
 
 
-            outtrain_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
-            outtrain = open(outtrain_name, 'w')
+            df_for_calib = pd.DataFrame({
+                'seq': ns2,
+                'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in ns2],
+                'tr': nr2,
+            })
 
-            outcal_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
-            outcal = open(outcal_name, 'w')
+            df_for_check = pd.DataFrame({
+                'seq': ns,
+                'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in ns],
+                'tr': nr,
+            })
 
-            outres_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
-
-            ll = len(ns)
-            ns = ns[:ll]
-            nr = nr[:ll]
-
-            outcal.write('seq,modifications,tr\n')
-            for seq, RT in zip(ns[:int(ll/2)], nr[:int(ll/2)]):
-                # mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
-                mods_tmp = utils.mods_for_deepLC(seq, aa_to_psi)
-                outcal.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
-            outcal.close()
-
-            train_RT = []
-            train_seq = []
-            outtrain.write('seq,modifications,tr\n')
-            for seq, RT in zip(ns[int(ll/2):], nr[int(ll/2):]):
-                # mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
-                mods_tmp = utils.mods_for_deepLC(seq, aa_to_psi)
-                outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
-                train_seq.append(seq)
-                train_RT.append(float(RT))
-            outtrain.close()
-
-            # [:int(len(ns)/2)]
-
-            subprocess.call([deeplc_path, '--file_pred', outtrain_name, '--file_cal', outcal_name, '--file_pred_out', outres_name] + deeplc_extra_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            pepdict = dict()
-            for seq, x in zip(train_seq, open(outres_name).readlines()[1:]):
-                try:
-                    _, _, _, _, RT = x.strip().split(',')
-                except:
-                    _, RT = x.strip().split(',')
-                pepdict[seq] = float(RT)
-
-
-            train_RT = np.array(train_RT)
-            RT_pred = np.array([pepdict[s] for s in train_seq])
-
-            rt_diff_tmp = RT_pred - train_RT
-            RT_left = -min(rt_diff_tmp)
-            RT_right = max(rt_diff_tmp)
 
             try:
-                start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 100
-                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
+                dlc.calibrate_preds(seq_df=df_for_calib, check_df=df_for_check)
             except:
-                start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
-                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
-            if np.isinf(covvalue):
-                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
-            if np.isinf(covvalue):
-                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
+                dlc.calibrate_preds(seq_df=df_for_calib)
+
+            df_for_check['pr'] =  dlc.make_preds(seq_df=df_for_check)
+
+            rt_diff_tmp = df_for_check['pr'] - df_for_check['tr']
+
+            XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
 
         else:
 
-            if elude_path:
+            RC = achrom.get_RCs_vary_lcp(ns, nr)
+            RT_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
 
-                outtrain_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
-                outtrain = open(outtrain_name, 'w')
-                outres_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
+            rt_diff_tmp = RT_pred - nr
 
-                logger.debug(len(ns))
-                ll = len(ns)
-                ns = ns[:ll]
-                nr = nr[:ll]
-                for seq, RT in zip(ns, nr):
-                    outtrain.write(seq + '\t' + str(RT) + '\n')
-                outtrain.close()
-
-                subprocess.call([elude_path, '-t', outtrain_name, '-e', outtrain_name, '-g', '-o', outres_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                pepdict = dict()
-                train_RT = []
-                train_seq = []
-                for x in open(outres_name).readlines()[3:]:
-                    seq, RT, RTexp = x.strip().split('\t')
-                    pepdict[seq] = float(RT)
-                    train_seq.append(seq)
-                    train_RT.append(float(RTexp))
-                train_RT = np.array(train_RT)
-                RT_pred = np.array([pepdict[s] for s in train_seq])
-
-                rt_diff_tmp = RT_pred - train_RT
-                RT_left = -min(rt_diff_tmp)
-                RT_right = max(rt_diff_tmp)
-
-                start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
-                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
-                if np.isinf(covvalue):
-                    XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
-                if np.isinf(covvalue):
-                    XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
-            else:
-                RC = achrom.get_RCs_vary_lcp(ns, nr)
-                RT_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
-                # aa, bb, RR, ss = aux.linear_regression(RT_pred, nr)
-
-                rt_diff_tmp = RT_pred - nr
-                RT_left = -min(rt_diff_tmp)
-                RT_right = max(rt_diff_tmp)
-
-                start_width = (scoreatpercentile(rt_diff_tmp, 95) - scoreatpercentile(rt_diff_tmp, 5)) / 50
-                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(start_width, RT_left, RT_right, rt_diff_tmp)
-                if np.isinf(covvalue):
-                    XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(0.1, RT_left, RT_right, rt_diff_tmp)
-                if np.isinf(covvalue):
-                    XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
+            XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
 
         RT_sigma = XRT_sigma
 
@@ -1175,21 +1037,14 @@ def process_peptides(args):
 
     n = args['nproc']
 
+
+    def divide_chunks(l, n):
+        for i in range(0, len(l), n): 
+            yield l[i:i + n]
+
     if deeplc_path:
 
-
         pepdict = dict()
-
-        outtrain_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
-        outtrain = open(outtrain_name, 'w')
-        outres_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
-
-        outtrain.write('seq,modifications,tr\n')
-        for seq, RT in zip(ns, nr):
-            # mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
-            mods_tmp = utils.mods_for_deepLC(seq, aa_to_psi)
-            outtrain.write(seq + ',' + str(mods_tmp) + ',' + str(RT) + '\n')
-        outtrain.close()
 
         if args['save_calib']:
             with open(base_out_name + '_calib.tsv', 'w') as output:
@@ -1197,57 +1052,26 @@ def process_peptides(args):
                 for seq, RT in zip(ns, nr):
                     output.write('%s\t%s\n' % (seq, str(RT)))
 
+        seqs_batch = list(p1)
+
+        df_for_check = pd.DataFrame({
+            'seq': seqs_batch,
+            'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in seqs_batch],
+        })
 
 
-        outtest_name = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
-        outtest = open(outtest_name, 'w')
+        df_for_check['pr'] =  dlc.make_preds(seq_df=df_for_check)
 
-        test_seqs = []
-        outtest.write('seq,modifications\n')
-        for seq in p1:
-            # mods_tmp = '|'.join([str(idx+1)+'|Carbamidomethyl' for idx, aa in enumerate(seq) if aa == 'C'])
-            mods_tmp = utils.mods_for_deepLC(seq, aa_to_psi)
-            outtest.write(seq + ',' + str(mods_tmp) + '\n')
-            test_seqs.append(seq)
-        outtest.close()
+        pepdict_batch = df_for_check.set_index('seq')['pr'].to_dict()
 
-        subprocess.call([deeplc_path, '--file_pred', outtest_name, '--file_cal', outtrain_name, '--file_pred_out', outres_name] + deeplc_extra_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for seq, x in zip(test_seqs, open(outres_name).readlines()[1:]):
-            try:
-                _, _, _, RT = x.strip().split(',')
-            except:
-                _, RT = x.strip().split(',')
-            pepdict[seq] = float(RT)
+        pepdict.update(pepdict_batch)
+
 
     else:
 
-        if n == 1 or os.name == 'nt':
-            qin = list(p1)
-            qout = []
-            if elude_path:
-                pepdict = worker_RT(qin, qout, 0, 1, False, elude_path, ns, nr, True)
-            else:
-                pepdict = worker_RT(qin, qout, 0, 1, RC, False, False, False, True)
-        else:
-            qin = list(p1)
-            qout = Queue()
-            procs = []
-            for i in range(n):
-                if elude_path:
-                    p = Process(target=worker_RT, args=(qin, qout, i, n, False, elude_path, ns, nr))
-                else:
-                    p = Process(target=worker_RT, args=(qin, qout, i, n, RC, False, False, False))
-                p.start()
-                procs.append(p)
-
-            pepdict = dict()
-            for _ in range(n):
-                for item in iter(qout.get, None):
-                    for k, v in item.items():
-                        pepdict[k] = v
-
-            for p in procs:
-                p.join()
+        qin = list(p1)
+        qout = []
+        pepdict = worker_RT(qin, qout, 0, 1, RC, False, False, True)
 
     rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
     # rt_diff = np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred
@@ -1283,29 +1107,19 @@ def process_peptides(args):
             im = imraw[iorig]
             output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), str(Isum), str(nScans), str(nIsotopes), ';'.join(pept_prot[seq]), str(mzr), str(rtr), str(av), str(ch), str(im))) + '\n')
 
-    # e_ind = resdict['mc'] == 0
-    # resdict = filter_results(resdict, e_ind)
-    # rt_diff = rt_diff[e_ind]
-    # rt_pred = rt_pred[e_ind]
-
     mass_diff = (resdict['md'] - mass_shift) / (mass_sigma)
 
     rt_diff = (np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred - XRT_shift) / RT_sigma
-    # rt_diff = (resdict['rt'] - rt_pred) / RT_sigma
 
     prefix = 'DECOY_'
     isdecoy = lambda x: x[0].startswith(prefix)
     isdecoy_key = lambda x: x.startswith(prefix)
     escore = lambda x: -x[1]
 
-    SEED = 42
-
     param_grid = {
         'boosting_type': ['gbdt', ],
         'num_leaves': list(range(10, 1000)),
         'learning_rate': list(np.logspace(np.log10(0.001), np.log10(0.3), base = 10, num = 1000)),
-    #     'learning_rate': list(np.logspace(np.log10(0.1), np.log10(0.3), base = 10, num = 1000)),
-        # 'subsample_for_bin': list(range(1, 10000, 10)),
         'min_child_samples': list(range(1, 1000, 5)),
         'reg_alpha': list(np.linspace(0, 1)),
         'reg_lambda': list(np.linspace(0, 1)),
@@ -1316,16 +1130,6 @@ def process_peptides(args):
         'verbose': [-1, ],
         'num_threads': [args['nproc'], ],
     }
-
-    # # Hyperparameter grid
-    # param_grid = {
-    #     'boosting_type': ['gbdt', ],
-    #     'num_leaves': list(range(10, 1000)),
-    #     'learning_rate': list(np.logspace(np.log10(0.001), np.log10(0.05), base = 10, num = 1000)),
-    #     'metric': ['rmse', ],
-    #     'verbose': [-1, ],
-    #     'num_threads': [args['nproc'], ],
-    # }
 
     def get_X_array(df, feature_columns):
         return df.loc[:, feature_columns].values
@@ -1366,46 +1170,24 @@ def process_peptides(args):
 
         all_res = []
 
-
-        # groups = df['peptide']
-        # ix = df.index.values
-        # unique = np.unique(groups)
-        # np.random.RandomState(SEED).shuffle(unique)
-        # for split in np.array_split(unique, 3):
-        #     mask = groups.isin(split)
-        #     train, test = ix[~mask], ix[mask]
-        #     train_df = df.iloc[train]
-        #     test_df = df.iloc[test]
-
         for group_val in range(3):
             
             mask = df['G'] == group_val
             test_df = df[mask]
             test_ids = set(test_df['ids'])
-    #         train_df = df[~mask]
-    #         train_df = train_df[train_df['ids'].apply(lambda x: x not in test_ids)]
             train_df = df[(~mask) & (df['ids'].apply(lambda x: x not in test_ids))]
 
 
 
             feature_columns = get_features_pfms(df)
-            ### 1
-            # model = get_cat_model_pfms(df[~df['decoy2']], hyperparameters, feature_columns, train_df[~train_df['decoy2']], test_df[~test_df['decoy2']])
-            # all_iters.append(model.best_iteration)
             model = get_cat_model_final_pfms(train_df[~train_df['decoy2']], hyperparameters, feature_columns)
-            # model = get_cat_model_final_pfms(train_df, hyperparameters, feature_columns)
 
             df.loc[mask, 'preds'] = model.predict(get_X_array(df.loc[mask, :], feature_columns))
 
-            # train_df = df.iloc[train]
-            # test_df = df.iloc[test]
             test_df = df[mask]
 
-            ### 1
             fpr, tpr, thresholds = metrics.roc_curve(get_Y_array_pfms(test_df[~test_df['decoy2']]), test_df[~test_df['decoy2']]['preds'])
-            # fpr, tpr, thresholds = metrics.roc_curve(get_Y_array_pfms(test_df), test_df['preds'])
             shr_v = metrics.auc(fpr, tpr)
-            # shr_v = len(aux.filter(test_df, fdr=0.25, key='preds', is_decoy='decoy'))
 
             all_res.append(shr_v)
 
@@ -1414,7 +1196,6 @@ def process_peptides(args):
                 break
 
         shr_v = np.mean(all_res)
-        # hyperparameters['n_estimators'] = int(np.max(all_iters))# * 1.5)
 
         return np.array([shr_v, hyperparameters, iteration, all_res], dtype=object)
 
@@ -1432,7 +1213,7 @@ def process_peptides(args):
         for i in range(max_evals):
 
             # Choose random hyperparameters
-            random_params = {k: random.sample(v, 1)[0] for k, v in param_grid.items()}
+            random_params = {k: np.random.RandomState(seed=SEED).choice(v, 1)[0] for k, v in param_grid.items()}
 
             # Evaluate randomly selected hyperparameters
             eval_results = objective_pfms(df, random_params, i, threshold)
@@ -1444,8 +1225,6 @@ def process_peptides(args):
             of_connection = open(out_file, 'a')
             writer = csv.writer(of_connection)
             writer.writerow(eval_results)
-
-            # make sure to close connection
             of_connection.close()
 
         # Sort with best score on top
@@ -1476,15 +1255,15 @@ def process_peptides(args):
     for k in resdict.keys():
         df1[k] = resdict[k]
 
-    df1['ids'] = ids[df1['iorig'].values]#df1['iorig'].apply(lambda x: ids[x])
-    df1['Is'] = Is[df1['iorig'].values]#df1['iorig'].apply(lambda x: Is[x])
-    df1['Scans'] = Scans[df1['iorig'].values]#df1['iorig'].apply(lambda x: Scans[x])
-    df1['Isotopes'] = Isotopes[df1['iorig'].values]#df1['iorig'].apply(lambda x: Isotopes[x])
-    df1['mzraw'] = mzraw[df1['iorig'].values]#df1['iorig'].apply(lambda x: mzraw[x])
-    df1['rt'] = rts[df1['iorig'].values]#df1['iorig'].apply(lambda x: rts[x])
-    df1['av'] = avraw[df1['iorig'].values]#df1['iorig'].apply(lambda x: avraw[x])
-    df1['ch'] = charges[df1['iorig'].values]#df1['iorig'].apply(lambda x: charges[x])
-    df1['im'] = imraw[df1['iorig'].values]#df1['iorig'].apply(lambda x: imraw[x])
+    df1['ids'] = ids[df1['iorig'].values]
+    df1['Is'] = Is[df1['iorig'].values]
+    df1['Scans'] = Scans[df1['iorig'].values]
+    df1['Isotopes'] = Isotopes[df1['iorig'].values]
+    df1['mzraw'] = mzraw[df1['iorig'].values]
+    df1['rt'] = rts[df1['iorig'].values]
+    df1['av'] = avraw[df1['iorig'].values]
+    df1['ch'] = charges[df1['iorig'].values]
+    df1['im'] = imraw[df1['iorig'].values]
 
     df1['mass_diff'] = mass_diff
     df1['rt_diff'] = rt_diff
@@ -1524,22 +1303,6 @@ def process_peptides(args):
     df1['mass_diff_abs_pnorm'] = df1['mass_diff_abs'] / (df1.groupby('ids')['mass_diff_abs'].transform('sum') + 1e-2)
 
     df1['id_count'] = df1.groupby('ids')['mass_diff'].transform('count')
-    # df1['seq_count'] = df1.groupby('peptide')['mass_diff'].transform('count')
-    # df1['charge_count'] = df1.groupby('peptide')['ch'].transform('nunique')
-    # df1['im_count'] = df1.groupby('peptide')['im'].transform('nunique')
-
-    # df1['id_count_mass'] = df1.groupby('ids')['mass'].transform('nunique')
-
-    # if 'mz_std_1' in df_features.columns:
-    #     for k in [
-    #         'mz_diff_ppm_1',
-    #         'mz_diff_ppm_2',
-    #         'I-0-1',
-    #         'I-0-2',
-    #     ]:
-    #         tmp_dict = df_features.set_index('id').to_dict()[k]
-    #         df1[k] = df1['ids'].apply(lambda x: tmp_dict[x])
-
 
     p1 = set(resdict['seqs'])
 
@@ -1592,22 +1355,19 @@ def process_peptides(args):
         of_connection = open(out_file, 'w')
         writer = csv.writer(of_connection)
 
-        # Write column names
         headers = ['auc', 'params', 'iteration', 'all_res']
         writer.writerow(headers)
         of_connection.close()
 
-
-
         all_id_list = list(set(df1[df1['decoy']]['peptide']))
-        all_id_list = random.sample(all_id_list, len(all_id_list))
+        np.random.RandomState(seed=SEED).shuffle(all_id_list)
         seq_gmap = {}
         for idx, split in enumerate(np.array_split(all_id_list, 3)):
             for id_ftr in split:
                 seq_gmap[id_ftr] = idx
                 
         all_id_list = list(set(df1[~df1['decoy']]['peptide']))
-        all_id_list = random.sample(all_id_list, len(all_id_list))
+        np.random.RandomState(seed=SEED).shuffle(all_id_list)
         for idx, split in enumerate(np.array_split(all_id_list, 3)):
             for id_ftr in split:
                 seq_gmap[id_ftr] = idx
@@ -1645,7 +1405,7 @@ def process_peptides(args):
             feature_columns = list(get_features_pfms(train_df))
             model = get_cat_model_final_pfms(train_df[~train_df['decoy2']], bestparams, feature_columns)
 
-            df1.loc[mask, 'preds'] = model.predict(get_X_array(test_df, feature_columns))
+            df1.loc[mask, 'preds'] = rankdata(model.predict(get_X_array(test_df, feature_columns)), method='ordinal') / sum(mask)
 
     else:
         df1['preds'] = np.power(df1['mass_diff'], 2) + np.power(df1['rt_diff'], 2)
@@ -1662,48 +1422,20 @@ def process_peptides(args):
     for qval_cur in range(50):
         df1ut = df1u[df1u['qpreds'] == qval_cur]
         decoy_ratio = df1ut['decoy'].sum() / len(df1ut)
-        print(decoy_ratio)
+        # print(decoy_ratio)
         if decoy_ratio < ml_correction:
             qval_ok = qval_cur
         else:
             break
     logger.info('%d %% of PFMs were removed from protein scoring after Machine Learning', (100 - (qval_ok+1)*2))
 
-    # df1un = df1[df1['qpreds'] <= qval_ok].copy()
     df1un = df1u[df1u['qpreds'] <= qval_ok].copy()
-
-
-    # df1un['dec_cum'] = np.cumsum(df1un['decoy'])
-
-    # max_dec_number = df1un['dec_cum'].max()
-
-    # for idx, i in list(enumerate(np.arange(0.1, 1.1, 0.1)))[::-1]:
-    #     print(idx, i)
-        
-    #     max_p = df1un[df1un['dec_cum'] <= i * max_dec_number]['preds'].max()
-        
-    #     df1un.loc[df1un['preds'] <= max_p, 'qpreds'] = idx
-
-
-
 
     df1un['qpreds'] = pd.qcut(df1un['preds'], 10, labels=range(10))
 
     qdict = df1un.set_index('seqs').to_dict()['qpreds']
-    # qdict = df1un.set_index(['seqs', 'ids']).to_dict()['qpreds']
-
-
-    
-
-
-
 
     df1['qpreds'] = df1['seqs'].apply(lambda x: qdict.get(x, 11))
-    # df1['qpreds'] = df1.apply(lambda x: qdict.get((x['seqs'], x['ids']), 11), axis=1)
-
-
-
-    # df1['qz'] = df1['seqs'].apply(lambda x: qval_dict.get(qdict.get(x, 11), 1.0))
 
     df1.to_csv(base_out_name + '_PFMs_ML.tsv', sep='\t', index=False)
 
@@ -1713,19 +1445,10 @@ def process_peptides(args):
     resdict['seqs'] = df1['seqs'].values
     resdict['qpreds'] = df1['qpreds'].values
     resdict['ids'] = df1['ids'].values
-    # resdict['Is'] = df1['Is'].values
-    # resdict['ch'] = df1['ch'].values
-    # resdict['im'] = df1['im'].values
-    # residct['qz'] = df1['qz'].values
-
-
-    # e_ind = resdict['qpreds'] <= 10
-    # resdict = filter_results(resdict, e_ind)
 
     mass_diff = resdict['qpreds']
     rt_diff = []
     if skip_ml:
-        # mass_diff = np.array([0 for _ in range(len(mass_diff))])
         mass_diff = np.zeros(len(mass_diff))
 
     p1 = set(resdict['seqs'])
@@ -1781,7 +1504,6 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
         pid_pep = defaultdict(set)
         banned_dict = dict()
         for pep, pid in zip(resdict2['seqs'], resdict2['ids']):
-        # for pep, pid in zip(resdict2['seqs'], [ids[iorig] for iorig in resdict2['iorig']]):
             pep_pid[pep].add(pid)
             pid_pep[pid].add(pep)
             if pep in banned_dict:

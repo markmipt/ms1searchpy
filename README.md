@@ -28,11 +28,6 @@ Using pip:
 
     pip install ms1searchpy
 
-It is recommended to additionally install [DeepLC](https://github.com/compomics/DeepLC) version 1.1.2 (newer version has some issues right now):
-
-    pip install deeplc==1.1.2
-
-This should work on recent versions of Python (3.8-3.10).
 
 ## Usage tutorial: protein identification
 
@@ -56,18 +51,17 @@ with default parameters.
 
 ### RT predictor
 
-For protein identification, `ms1searchpy` needs a retention time prediction model. The recommended one is [DeepLC](https://github.com/compomics/DeepLC),
-but you can also use the Elude predictor from [Percolator](https://github.com/percolator/percolator) or the built-in additive model (default).
+For protein identification, `ms1searchpy` needs a retention time prediction model. The recommended one is [DeepLC](https://github.com/compomics/DeepLC)  (default),
+but you can also use built-in additive model.
 
 ### Examples
 
-    ms1searchpy test.mzML -d sprot_human.fasta -deeplc deeplc -ad 1
+    ms1searchpy test.mzML -d sprot_human.fasta -deeplc 1 -ad 1
 
-This command will run `ms1searchpy` with DeepLC RT predictor available as `deeplc` (should work if you install DeepLC
-alongside `ms1searchpy`. `-ad 1` creates a shuffled decoy database for FDR estimation.
+This command will run `ms1searchpy` with DeepLC RT predictor available as `deeplc` . `-ad 1` creates a shuffled decoy database for FDR estimation.
 You should use it only once and just use the created database for other searches.
 
-    ms1searchpy test.features.tsv -d sprot_human_shuffled.fasta -deeplc env_deeplc/bin/deeplc
+    ms1searchpy test.features.tsv -d sprot_human_shuffled.fasta -deeplc 1
 
 Here, instead of mzML file, a file with peptide features is used. Also, DeepLC is installed in a separate environment, so
 a path is specified.
