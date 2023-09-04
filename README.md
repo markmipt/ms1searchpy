@@ -78,8 +78,8 @@ Here, instead of mzML file, a file with peptide features is used.
 ### Output files
 
 `ms1searchpy` produces several tables:
- - findetified proteins, FDR-filtered (`sample.features_proteins.tsv`);
- - all identified proteins (`sample.features_proteins_full.tsv`) - this is the main result;
+ - identified proteins, FDR-filtered (`sample.features_proteins.tsv`) - this is the main result;
+ - all identified proteins (`sample.features_proteins_full.tsv`);
  - all identified proteins based on all PFMs (`sample.features_proteins_full_noexclusion.tsv`);
  - all matched peptide match fingerprints, or peptide-feature matches (`sample.features_PFMs.tsv`);
  - all PFMs with features prepared for Machnine Learning (`sample.features_PFMs_ML.tsv`);
