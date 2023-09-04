@@ -897,8 +897,14 @@ def process_peptides(args):
 
         if calib_path:
             df1 = pd.read_csv(calib_path, sep='\t')
-            true_seqs2 = df1['peptide'].values
-            true_rt2 = df1['RT exp'].values
+            true_seqs = df1['peptide'].values
+            true_rt = df1['RT exp'].values
+
+            ll = len(true_seqs)
+            true_seqs2 = true_seqs[int(ll/2):]
+            true_rt2 = true_rt[int(ll/2):]
+            true_seqs = true_seqs[:int(ll/2)]
+            true_rt = true_rt[:int(ll/2)]
 
         else:
 
@@ -1017,7 +1023,7 @@ def process_peptides(args):
 
         else:
 
-            RC = achrom.get_RCs_vary_lcp(ns, nr)
+            RC = achrom.get_RCs_vary_lcp(ns, nr, metric='mae')
             RT_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
 
             rt_diff_tmp = RT_pred - nr
@@ -1050,6 +1056,8 @@ def process_peptides(args):
             with open(base_out_name + '_calib.tsv', 'w') as output:
                 output.write('peptide\tRT exp\n')
                 for seq, RT in zip(ns, nr):
+                    output.write('%s\t%s\n' % (seq, str(RT)))
+                for seq, RT in zip(ns2, nr2):
                     output.write('%s\t%s\n' % (seq, str(RT)))
 
         seqs_batch = list(p1)
