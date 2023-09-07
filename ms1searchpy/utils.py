@@ -334,7 +334,7 @@ def get_prot_pept_map(args):
     for desc, prot in prot_gen(args):
         dbinfo = desc.split(' ')[0]
         for pep in prot_peptides(prot, enzyme, mc, minlen, maxlen, desc.startswith(prefix), dont_use_seen_peptides=True):
-            pept_prot.setdefault(pep, []).append(dbinfo)
+            pept_prot.setdefault(pep, set()).add(dbinfo)
             protsN.setdefault(dbinfo, set()).add(pep)
     for k, v in protsN.items():
         if k.startswith(prefix):

@@ -1424,13 +1424,13 @@ def process_peptides(args):
 
         df1['G'] = df1['peptide'].apply(lambda x: seq_gmap[x])
 
-        train = df1[~df1['decoy']]
-        train_extra = df1[df1['decoy']]
-        train_extra = train_extra.sample(frac=min(1.0, len(train)/len(train_extra)))
-        train = pd.concat([train, train_extra], ignore_index=True).reset_index(drop=True)
-        random_results = random_search_pfms(train, param_grid, out_file, MAX_EVALS)
+        # train = df1[~df1['decoy']]
+        # train_extra = df1[df1['decoy']]
+        # train_extra = train_extra.sample(frac=min(1.0, len(train)/len(train_extra)))
+        # train = pd.concat([train, train_extra], ignore_index=True).reset_index(drop=True)
+        # random_results = random_search_pfms(train, param_grid, out_file, MAX_EVALS)
 
-        # random_results = random_search_pfms(df1, param_grid, out_file, MAX_EVALS)
+        random_results = random_search_pfms(df1, param_grid, out_file, MAX_EVALS)
 
         random_results = pd.read_csv(out_file)
         random_results = random_results[random_results['auc'] != 'auc']
@@ -1451,10 +1451,11 @@ def process_peptides(args):
             mask = df1['G'] == group_val
             test_df = df1[mask]
             test_ids = set(test_df['ids'])
+            train_df = df1[(~mask) & (df1['ids'].apply(lambda x: x not in test_ids))]
 
-            mask2 = train['G'] != group_val
+            # mask2 = train['G'] != group_val
 
-            train_df = train[(mask2) & (train['ids'].apply(lambda x: x not in test_ids))]
+            # train_df = train[(mask2) & (train['ids'].apply(lambda x: x not in test_ids))]
 
 
             feature_columns = list(get_features_pfms(train_df))
@@ -1701,8 +1702,8 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                                 unstable_prots.add(best_prot_val)
                                 # for bprot in pept_prot[pep]:
                                 #     if bprot == best_prot_val:
-                                        # tmp_spc_new[bprot] -= 1
-                                        # unstable_prots.add(bprot)
+                                #         tmp_spc_new[bprot] -= 1
+                                #         unstable_prots.add(bprot)
 
                     banned_pids_total.update(banned_pids)
 
