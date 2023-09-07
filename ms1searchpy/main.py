@@ -101,6 +101,9 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
         names_arr = False
         tmp_spc_new = False
         decoy_set = False
+            
+        cnt_target_final = 0
+        cnt_decoy_final = 0
 
         while 1:
             if not prots_spc2:
@@ -114,7 +117,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
                 for k in protsN:
                     if isdecoy_key(k):
                         decoy_set.add(k)
-                decoy_set = list(decoy_set)
+                # decoy_set = list(decoy_set)
 
 
                 prots_spc2 = defaultdict(set)
@@ -137,22 +140,24 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
                 tmp_spc_new = dict((k, len(v)) for k, v in prots_spc2.items())
 
 
-                top100decoy_score_tmp = [tmp_spc_new.get(dprot, 0) for dprot in decoy_set]
-                top100decoy_score_tmp_sum = float(sum(top100decoy_score_tmp))
+                # top100decoy_score_tmp = [tmp_spc_new.get(dprot, 0) for dprot in decoy_set]
+                # top100decoy_score_tmp_sum = float(sum(top100decoy_score_tmp))
+                top100decoy_score_tmp = {dprot: tmp_spc_new.get(dprot, 0) for dprot in decoy_set}
+                top100decoy_score_tmp_sum = float(sum(top100decoy_score_tmp.values()))
 
             prots_spc = tmp_spc_new
             if not prots_spc_copy:
                 prots_spc_copy = deepcopy(prots_spc)
 
-            for idx, v in enumerate(decoy_set):
-                if v in unstable_prots:
-                    top100decoy_score_tmp_sum -= top100decoy_score_tmp[idx]
-                    top100decoy_score_tmp[idx] = prots_spc.get(v, 0)
-                    top100decoy_score_tmp_sum += top100decoy_score_tmp[idx]
-            p = float(sum(top100decoy_score_tmp)) / top100decoy_N
+            for v in decoy_set.intersection(unstable_prots):
+                top100decoy_score_tmp_sum -= top100decoy_score_tmp[v]
+                top100decoy_score_tmp[v] = prots_spc.get(v, 0)
+                top100decoy_score_tmp_sum += top100decoy_score_tmp[v]
             p = top100decoy_score_tmp_sum / top100decoy_N
 
             n_change = set(protsN[k] for k in unstable_prots)
+            if len(best_match_dict) == 0:
+                n_change = sorted(n_change)
             for n_val in n_change:
                 for k in n_map_dict[n_val]:
                     v = prots_spc[k]
@@ -161,10 +166,25 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
             n_arr_small = []
             names_arr_small = []
             v_arr_small = []
+            # for k, v in best_match_dict.items():
+            #     n_arr_small.append(k)
+            #     names_arr_small.append(v)
+            #     v_arr_small.append(prots_spc[v])
+
+
+
+            max_k = 0
+
             for k, v in best_match_dict.items():
-                n_arr_small.append(k)
-                names_arr_small.append(v)
-                v_arr_small.append(prots_spc[v])
+                num_matched = prots_spc[v]
+                if num_matched >= max_k:
+
+                    max_k = num_matched
+
+                    n_arr_small.append(k)
+                    names_arr_small.append(v)
+                    v_arr_small.append(prots_spc[v])
+
 
             prots_spc_basic = dict()
             all_pvals = utils.calc_sf_all(np.array(v_arr_small), n_arr_small, p)
@@ -203,6 +223,14 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
                             for bprot in pept_prot[pep]:
                                 tmp_spc_new[bprot] -= 1
                                 unstable_prots.add(bprot)
+
+
+                if best_prot in decoy_set:
+                    cnt_decoy_final += 1
+                else:
+                    cnt_target_final += 1
+
+
             else:
 
                 v_arr = np.array([prots_spc[k] for k in names_arr])
@@ -216,7 +244,8 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
 
                 break
             try:
-                prot_fdr = aux.fdr(prots_spc_final.items(), is_decoy=isdecoy)
+                prot_fdr = cnt_decoy_final / cnt_target_final
+                # prot_fdr = aux.fdr(prots_spc_final.items(), is_decoy=isdecoy)
             except:
                 prot_fdr = 100.0
             if prot_fdr >= 12.5 * fdr:
@@ -1067,7 +1096,6 @@ def process_peptides(args):
             'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in seqs_batch],
         })
 
-
         df_for_check['pr'] =  dlc.make_preds(seq_df=df_for_check)
 
         pepdict_batch = df_for_check.set_index('seq')['pr'].to_dict()
@@ -1093,6 +1121,8 @@ def process_peptides(args):
     rt_pred = rt_pred[e_ind]
 
 
+    logger.info('RT prediction was finished')
+
 
     with open(base_out_name + '_protsN.tsv', 'w') as output:
         output.write('dbname\ttheor peptides\n')
@@ -1101,7 +1131,6 @@ def process_peptides(args):
 
     with open(base_out_name + '_PFMs.tsv', 'w') as output:
         output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tIntensitySum\tnScans\tnIsotopes\tproteins\tm/z\tRT\taveragineCorr\tcharge\tion_mobility\n')
-        # for seq, md, rtd, peak_id, I, nScans, nIsotopes, mzr, rtr, av, ch, im in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['ids'], resdict['Is'], resdict['Scans'], resdict['Isotopes'], resdict['mzraw'], resdict['rt'], resdict['av'], resdict['ch'], resdict['im']):
         for seq, md, rtd, iorig in zip(resdict['seqs'], resdict['md'], rt_diff, resdict['iorig']):
             peak_id = ids[iorig]
             I = Is[iorig]
@@ -1137,6 +1166,7 @@ def process_peptides(args):
         'metric': ['rmse', ],
         'verbose': [-1, ],
         'num_threads': [args['nproc'], ],
+        # 'use_quantized_grad': [True, ]
     }
 
     def get_X_array(df, feature_columns):
@@ -1161,6 +1191,7 @@ def process_peptides(args):
             'peptide',
             'md',
             'qpreds',
+            'decoy1',
             'decoy2',
             'top_25_targets',
             'G',
@@ -1241,6 +1272,8 @@ def process_peptides(args):
 
         return results
 
+
+
     def get_cat_model_pfms(df, hyperparameters, feature_columns, train, test):
         feature_columns = list(feature_columns)
         dtrain = lgb.Dataset(get_X_array(train, feature_columns), get_Y_array_pfms(train), feature_name=feature_columns, free_raw_data=False)
@@ -1257,7 +1290,11 @@ def process_peptides(args):
         dtrain = lgb.Dataset(get_X_array(train, feature_columns), get_Y_array_pfms(train), feature_name=feature_columns, free_raw_data=False)
         np.random.seed(SEED)
         model = lgb.train(hyperparameters, dtrain, num_boost_round=100)
+
         return model
+
+
+    logger.info('Prepare ML features')
 
     df1 = pd.DataFrame()
     for k in resdict.keys():
@@ -1278,23 +1315,25 @@ def process_peptides(args):
     df1['decoy'] = df1['seqs'].apply(lambda x: all(z.startswith(prefix) for z in pept_prot[x]))
 
     df1['peptide'] = df1['seqs']
-    mass_dict = {}
-    pI_dict = {}
-    charge_dict = {}
-    for pep in set(df1['peptide']):
-        try:
-            mass_dict[pep] = mass.fast_mass2(pep)
-            pI_dict[pep] = electrochem.pI(pep)
-            charge_dict[pep] = electrochem.charge(pep, pH=7.0)
-        except:
-            mass_dict[pep] = 0
-            pI_dict[pep] = 0
-            charge_dict[pep] = 0
+    # mass_dict = {}
+    # pI_dict = {}
+    # charge_dict = {}
+    # for pep in set(df1['peptide']):
+    #     try:
+    #         mass_dict[pep] = mass.fast_mass2(pep)
+    #         pI_dict[pep] = electrochem.pI(pep)
+    #         charge_dict[pep] = electrochem.charge(pep, pH=7.0)
+    #     except:
+    #         mass_dict[pep] = 0
+    #         pI_dict[pep] = 0
+    #         charge_dict[pep] = 0
 
     df1['plen'] = df1['peptide'].apply(lambda z: len(z))
-    df1['mass'] = df1['peptide'].apply(lambda x: mass_dict[x])
-    df1['pI'] = df1['peptide'].apply(lambda x: pI_dict[x])
-    df1['charge_theor'] = df1['peptide'].apply(lambda x: charge_dict[x])
+
+
+    # df1['mass'] = df1['peptide'].apply(lambda x: mass_dict[x])
+    # df1['pI'] = df1['peptide'].apply(lambda x: pI_dict[x])
+    # df1['charge_theor'] = df1['peptide'].apply(lambda x: charge_dict[x])
 
     for aa in mass.std_aa_mass:
         df1['c_%s' % (aa, )] = df1['peptide'].apply(lambda x: x.count(aa))
@@ -1311,6 +1350,7 @@ def process_peptides(args):
     df1['mass_diff_abs_pnorm'] = df1['mass_diff_abs'] / (df1.groupby('ids')['mass_diff_abs'].transform('sum') + 1e-2)
 
     df1['id_count'] = df1.groupby('ids')['mass_diff'].transform('count')
+
 
     p1 = set(resdict['seqs'])
 
@@ -1384,9 +1424,13 @@ def process_peptides(args):
 
         df1['G'] = df1['peptide'].apply(lambda x: seq_gmap[x])
 
+        train = df1[~df1['decoy']]
+        train_extra = df1[df1['decoy']]
+        train_extra = train_extra.sample(frac=min(1.0, len(train)/len(train_extra)))
+        train = pd.concat([train, train_extra], ignore_index=True).reset_index(drop=True)
+        random_results = random_search_pfms(train, param_grid, out_file, MAX_EVALS)
 
-
-        random_results = random_search_pfms(df1, param_grid, out_file, MAX_EVALS)
+        # random_results = random_search_pfms(df1, param_grid, out_file, MAX_EVALS)
 
         random_results = pd.read_csv(out_file)
         random_results = random_results[random_results['auc'] != 'auc']
@@ -1407,7 +1451,10 @@ def process_peptides(args):
             mask = df1['G'] == group_val
             test_df = df1[mask]
             test_ids = set(test_df['ids'])
-            train_df = df1[(~mask) & (df1['ids'].apply(lambda x: x not in test_ids))]
+
+            mask2 = train['G'] != group_val
+
+            train_df = train[(mask2) & (train['ids'].apply(lambda x: x not in test_ids))]
 
 
             feature_columns = list(get_features_pfms(train_df))
@@ -1415,8 +1462,12 @@ def process_peptides(args):
 
             df1.loc[mask, 'preds'] = rankdata(model.predict(get_X_array(test_df, feature_columns)), method='ordinal') / sum(mask)
 
+
     else:
         df1['preds'] = np.power(df1['mass_diff'], 2) + np.power(df1['rt_diff'], 2)
+
+
+    
 
     df1['qpreds'] = pd.qcut(df1['preds'], 50, labels=range(50))
 
@@ -1430,18 +1481,17 @@ def process_peptides(args):
     for qval_cur in range(50):
         df1ut = df1u[df1u['qpreds'] == qval_cur]
         decoy_ratio = df1ut['decoy'].sum() / len(df1ut)
-        # print(decoy_ratio)
         if decoy_ratio < ml_correction:
             qval_ok = qval_cur
         else:
             break
     logger.info('%d %% of PFMs were removed from protein scoring after Machine Learning', (100 - (qval_ok+1)*2))
 
-    df1un = df1u[df1u['qpreds'] <= qval_ok].copy()
+    df1u = df1u[df1u['qpreds'] <= qval_ok]#.copy()
 
-    df1un['qpreds'] = pd.qcut(df1un['preds'], 10, labels=range(10))
+    df1u['qpreds'] = pd.qcut(df1u['preds'], 10, labels=range(10))
 
-    qdict = df1un.set_index('seqs').to_dict()['qpreds']
+    qdict = df1u.set_index('seqs').to_dict()['qpreds']
 
     df1['qpreds'] = df1['seqs'].apply(lambda x: qdict.get(x, 11))
 
@@ -1534,6 +1584,9 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
             tmp_spc_new = False
             decoy_set = False
 
+            cnt_target_final = 0
+            cnt_decoy_final = 0
+
             while 1:
                 if not prots_spc2:
 
@@ -1546,7 +1599,7 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                     for k in protsN:
                         if isdecoy_key(k):
                             decoy_set.add(k)
-                    decoy_set = list(decoy_set)
+                    # decoy_set = list(decoy_set)
 
 
                     prots_spc2 = defaultdict(set)
@@ -1570,24 +1623,36 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                     tmp_spc_new = dict((k, len(v)) for k, v in prots_spc2.items())
 
 
-                    top100decoy_score_tmp = [tmp_spc_new.get(dprot, 0) for dprot in decoy_set]
-                    top100decoy_score_tmp_sum = float(sum(top100decoy_score_tmp))
+                    top100decoy_score_tmp = {dprot: tmp_spc_new.get(dprot, 0) for dprot in decoy_set}
+                    top100decoy_score_tmp_sum = float(sum(top100decoy_score_tmp.values()))
+
+                    prots_spc_basic = False
 
                 prots_spc = tmp_spc_new
                 if not prots_spc_copy:
                     prots_spc_copy = deepcopy(prots_spc)
 
-                for idx, v in enumerate(decoy_set):
-                    if v in unstable_prots:
-                        top100decoy_score_tmp_sum -= top100decoy_score_tmp[idx]
-                        top100decoy_score_tmp[idx] = prots_spc.get(v, 0)
-                        top100decoy_score_tmp_sum += top100decoy_score_tmp[idx]
-                p = float(sum(top100decoy_score_tmp)) / top100decoy_N
+                # for idx, v in enumerate(decoy_set):
+                #     if v in unstable_prots:
+                #         top100decoy_score_tmp_sum -= top100decoy_score_tmp[idx]
+                #         top100decoy_score_tmp[idx] = prots_spc.get(v, 0)
+                #         top100decoy_score_tmp_sum += top100decoy_score_tmp[idx]
+
+
+                for v in decoy_set.intersection(unstable_prots):
+                    top100decoy_score_tmp_sum -= top100decoy_score_tmp[v]
+                    top100decoy_score_tmp[v] = prots_spc.get(v, 0)
+                    top100decoy_score_tmp_sum += top100decoy_score_tmp[v]
+
+
+                # p = float(sum(top100decoy_score_tmp)) / top100decoy_N
                 p = top100decoy_score_tmp_sum / top100decoy_N
                 if not p0:
                     p0 = float(p)
 
                 n_change = set(protsN[k] for k in unstable_prots)
+                if len(best_match_dict) == 0:
+                    n_change = sorted(n_change)
                 for n_val in n_change:
                     for k in n_map_dict[n_val]:
                         v = prots_spc[k]
@@ -1596,13 +1661,21 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                 n_arr_small = []
                 names_arr_small = []
                 v_arr_small = []
+                max_k = 0
+
                 for k, v in best_match_dict.items():
-                    n_arr_small.append(k)
-                    names_arr_small.append(v)
-                    v_arr_small.append(prots_spc[v])
+                    num_matched = prots_spc[v]
+                    if num_matched >= max_k:
+
+                        max_k = num_matched
+
+                        n_arr_small.append(k)
+                        names_arr_small.append(v)
+                        v_arr_small.append(prots_spc[v])
 
                 prots_spc_basic = dict()
                 all_pvals = utils.calc_sf_all(np.array(v_arr_small), n_arr_small, p)
+
                 for idx, k in enumerate(names_arr_small):
                     prots_spc_basic[k] = all_pvals[idx]
 
@@ -1617,18 +1690,27 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                     banned_pids = set()
                     for pep in prots_spc2[best_prot]:
                         for pid in pep_pid[pep]:
-                            banned_pids.add(pid)
-                    for pid in banned_pids.difference(banned_pids_total):
+                            if pid not in banned_pids_total:
+                                banned_pids.add(pid)
+                    for pid in banned_pids:#banned_pids.difference(banned_pids_total):
                         for pep in pid_pep[pid]:
                             banned_dict[pep] -= 1
                             if banned_dict[pep] == 0:
                                 best_prot_val = features_dict[pep][0]
-                                for bprot in pept_prot[pep]:
-                                    if bprot == best_prot_val:
-                                        tmp_spc_new[bprot] -= 1
-                                        unstable_prots.add(bprot)
+                                tmp_spc_new[best_prot_val] -= 1
+                                unstable_prots.add(best_prot_val)
+                                # for bprot in pept_prot[pep]:
+                                #     if bprot == best_prot_val:
+                                        # tmp_spc_new[bprot] -= 1
+                                        # unstable_prots.add(bprot)
 
-                        banned_pids_total.add(pid)
+                    banned_pids_total.update(banned_pids)
+
+                    if best_prot in decoy_set:
+                        cnt_decoy_final += 1
+                    else:
+                        cnt_target_final += 1
+
                 else:
 
                     v_arr = np.array([prots_spc[k] for k in names_arr])
@@ -1642,8 +1724,11 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
 
                     break
 
+                prots_spc_basic[best_prot] = 0
+
                 try:
-                    prot_fdr = aux.fdr(prots_spc_final.items(), is_decoy=isdecoy)
+                    prot_fdr = cnt_decoy_final / cnt_target_final
+                    # prot_fdr = aux.fdr(prots_spc_final.items(), is_decoy=isdecoy)
                 except:
                     prot_fdr = 100.0
                 if prot_fdr >= 12.5 * fdr:
