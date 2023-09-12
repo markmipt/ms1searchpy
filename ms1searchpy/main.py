@@ -1351,7 +1351,16 @@ def process_peptides(args):
 
     df1['id_count'] = df1.groupby('ids')['mass_diff'].transform('count')
 
-    if args['csd']:
+    #limited CSD information
+    if args['csd'] == 1:
+        logging.info('Using limited CSD')
+        df1['seq_count'] = df1.groupby('peptide')['mass_diff'].transform('count')
+        df1['charge_count'] = df1.groupby('peptide')['ch'].transform('nunique')
+        df1['im_count'] = df1.groupby('peptide')['im'].transform('nunique')
+
+    #complete CSD information
+    elif args['csd'] == 2:
+        logging.info('Using complete CSD')
         #imports and functions: should be global?
         import json
         from keras import models
@@ -1542,7 +1551,7 @@ def process_peptides(args):
         #prediction error features for individual intensities and average charge
         z_deltas = pfm_csd - pfm_csd_pred
         df1[[f'z{z}_err' for z in '1234a']] = (z_deltas - z_deltas.mean(axis=0)) / z_deltas.std(axis=0).reshape(1, -1)
-        
+
         logger.info('Charge-state distribution features added')
 
     p1 = set(resdict['seqs'])
@@ -1681,7 +1690,7 @@ def process_peptides(args):
             break
     logger.info('%d %% of PFMs were removed from protein scoring after Machine Learning', (100 - (qval_ok+1)*2))
 
-#merge conflict was from here
+#CHECK merge conflict was from here
     df1u = df1u[df1u['qpreds'] <= qval_ok]#.copy()
 
     df1u['qpreds'] = pd.qcut(df1u['preds'], 10, labels=range(10))

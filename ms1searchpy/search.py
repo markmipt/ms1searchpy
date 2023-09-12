@@ -38,7 +38,7 @@ def run():
     parser.add_argument('-prefix', help='decoy prefix', default='DECOY_')
     parser.add_argument('-nproc',   help='number of processes', default=4, type=int)
     parser.add_argument('-force_nproc', help='Force using multiprocessing for Windows', action='store_true')
-    parser.add_argument('-deeplc', help='use deeplc: 0 - turn off, 1 - turn one', default=0, type=int)
+    parser.add_argument('-deeplc', help='use deeplc: 0 - turn off, 1 - turn on', default=0, type=int)
     parser.add_argument('-deeplc_batch_num', help='batch_num for deeplc', default=100000, type=int)
     parser.add_argument('-deeplc_model_path', help='path to deeplc model or folder with deeplc models', default='')
     parser.add_argument('-deeplc_library', help='path to deeplc library', default='')
@@ -47,7 +47,7 @@ def run():
     parser.add_argument('-debug', help='Produce debugging output', action='store_true')
     parser.add_argument('-save_calib', help='Save RT calibration list', action='store_true')
     parser.add_argument('-check_unique', help='Experimental. check_unique', default=1, type=int)
-    parser.add_argument('-csd', help='Employ chrge-state distribution model', action='store_true')
+    parser.add_argument('-csd', help='Employ limited (1) or comlete (2) chrge-state distribution model; for complete model path to ThermoRawFileParser 1.4.2+ has to be provided. Default - (0) - don\'t use charge-state distribution' , default=0, type=int)
     parser.add_argument('-trfp', help='Path to ThermoRawFileParser executable', default='')
 
     args = vars(parser.parse_args())
