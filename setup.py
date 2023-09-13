@@ -25,6 +25,8 @@ setup(
                             'Topic :: Scientific/Engineering :: Physics'],
     license              = 'License :: OSI Approved :: Apache Software License',
     packages             = find_packages(),
+    package_data         = {'': ['models/CSD_model_LCMSMS.hdf5']},
+    include_package_data = True,
     entry_points         = {'console_scripts': ['ms1searchpy = ms1searchpy.search:run',
                                                 'ms1combine = ms1searchpy.combine:run',
                                                 'ms1combine_proteins = ms1searchpy.combine_proteins:run',
