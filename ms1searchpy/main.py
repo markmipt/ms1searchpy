@@ -101,7 +101,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
         names_arr = False
         tmp_spc_new = False
         decoy_set = False
-            
+
         cnt_target_final = 0
         cnt_decoy_final = 0
 
@@ -531,7 +531,6 @@ def filter_results(resultdict, idx):
     return tmp
 
 def process_peptides(args):
-
     logger.info('Starting search...')
 
     fname_orig = args['file']
@@ -692,7 +691,7 @@ def process_peptides(args):
         df1['seqs'] = resdict['seqs']
 
         df1['mods'] = resdict['mods']
-        
+
         # df1['orig_md'] = true_md
 
 
@@ -800,7 +799,7 @@ def process_peptides(args):
 
         e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
         resdict2 = filter_results(resdict, e_ind)
-        
+
 
         e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= min_scans_calibration
         resdict2 = filter_results(resdict2, e_ind)
@@ -1074,7 +1073,7 @@ def process_peptides(args):
 
 
     def divide_chunks(l, n):
-        for i in range(0, len(l), n): 
+        for i in range(0, len(l), n):
             yield l[i:i + n]
 
     if deeplc_path:
@@ -1148,6 +1147,7 @@ def process_peptides(args):
 
     rt_diff = (np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred - XRT_shift) / RT_sigma
 
+    ## Will it override the settings provided in args? :k
     prefix = 'DECOY_'
     isdecoy = lambda x: x[0].startswith(prefix)
     isdecoy_key = lambda x: x.startswith(prefix)
@@ -1210,7 +1210,7 @@ def process_peptides(args):
         all_res = []
 
         for group_val in range(3):
-            
+
             mask = df['G'] == group_val
             test_df = df[mask]
             test_ids = set(test_df['ids'])
@@ -1244,7 +1244,7 @@ def process_peptides(args):
 
         threshold = 0
 
-        
+
 
         # Dataframe for results
         results = pd.DataFrame(columns = ['sharpe', 'params', 'iteration', 'all_res'],
@@ -1351,6 +1351,208 @@ def process_peptides(args):
 
     df1['id_count'] = df1.groupby('ids')['mass_diff'].transform('count')
 
+    #limited CSD information
+    if args['csd'] == 1:
+        logging.info('Using limited CSD')
+        df1['seq_count'] = df1.groupby('peptide')['mass_diff'].transform('count')
+        df1['charge_count'] = df1.groupby('peptide')['ch'].transform('nunique')
+        df1['im_count'] = df1.groupby('peptide')['im'].transform('nunique')
+
+    #complete CSD information
+    elif args['csd'] == 2:
+        logging.info('Using complete CSD')
+        #imports and functions: should be global?
+        import json
+        from keras import models
+
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
+        #constants
+        PROTON = 1.00727646677
+        TINY = 1e-6
+
+        psi_to_single_ptm = {'[Acetyl]-': 'B',
+                             '[Carbamidomethyl]': '',
+                             'M[Oxidation]': 'J',
+                             'S[Phosphorylation]': 'X',
+                             'T[Phosphorylation]': 'O',
+                             'Y[Phosphorylation]': 'U'}
+        #functions
+        def reshapeOneHot(X):
+            X = np.dstack(X)
+            X = np.swapaxes(X, 1, 2)
+            X = np.swapaxes(X, 0, 1)
+            return X
+
+        def get_single_ptm_code(psi_sequence):
+            sequence = psi_sequence
+            for ptm in psi_to_single_ptm:
+                sequence = sequence.replace(ptm, psi_to_single_ptm[ptm])
+            return sequence
+
+        def one_hot_encode_peptide(psi_sequence, MAX_LENGTH = 40):
+            peptide = get_single_ptm_code(psi_sequence)
+            if len(peptide) > MAX_LENGTH:
+                print('Peptide length is larger than maximal length of ', str(MAX_LENGTH))
+                return ['', None]
+            else:
+                AA_vocabulary = 'KRPTNAQVSGILCMJHFYWEDBXOU'#B: acetyl; J: oxidized Met; O: PhosphoT; X: PhosphoS; U: PhosphoY
+
+                one_hot_peptide = np.zeros((len(peptide), len(AA_vocabulary)))
+
+                for j in range(0, len(peptide)):
+                    try:
+                        aa = peptide[j]
+                        one_hot_peptide[j, AA_vocabulary.index(aa)] = 1
+                    except:
+                        print(f'WARN: "{aa}" is not in vocabulary; it will be skipped')
+
+                no_front_paddings = int((MAX_LENGTH - len(peptide))/2)
+                peptide_front_paddings = np.zeros((no_front_paddings, one_hot_peptide.shape[1]))
+
+                no_back_paddings = MAX_LENGTH - len(peptide) - no_front_paddings
+                peptide_back_paddings = np.zeros((no_back_paddings, one_hot_peptide.shape[1]))
+
+                full_one_hot_peptide = np.vstack((peptide_front_paddings, one_hot_peptide, peptide_back_paddings))
+
+                return peptide, full_one_hot_peptide
+
+        def expand_charges(row, min_charge, max_charge, mode=1):
+            charge = np.arange(min_charge, max_charge + 1).reshape(-1, 1)
+            mz = row['massCalib']/charge + PROTON * mode
+            index = [f'{int(row["id"])}_{z[0]}' for z in charge]
+            result = pd.DataFrame(mz, columns=['mz'], index=index)
+            result['z'] = charge
+            result['rt_start'] = row['rtStart']
+            result['rt_end'] = row['rtEnd']
+            if 'FAIMS' in row.keys():
+                result['scan_filter'] = f'ms cv={row["FAIMS"]}'
+
+            return result
+
+        def AUC(x, y):
+            return (0.5 * (y[1:] + y[:-1]) * (x[1:] - x[:-1])).sum()
+
+        def aggregate_csd(g):
+            result = {k: v for k,v in zip(g['z'], g['area'])}
+            result['pepid'] = g['pepid'].iloc[0]
+            return result
+
+        #imports and functions: end
+
+        logger.info('Running charge-state distribution prediction')
+
+        ## extracting feature CSDs
+
+        faims_mode = np.any(df_features['FAIMS'] != 0)
+        logger.debug(f'FAIMS mode: {faims_mode}')
+
+        #find all features that has been maped to sequence
+        if faims_mode:
+            used_features = df_features.loc[df1['ids'].unique(), ['massCalib', 'rtStart', 'rtEnd', 'FAIMS']].copy()
+        else:
+            used_features = df_features.loc[df1['ids'].unique(), ['massCalib', 'rtStart', 'rtEnd']].copy()
+        used_features['id'] = used_features.index.astype(int)
+
+        logger.debug(f'{used_features.shape[0]} features has been mapped to peptide sequence')
+
+        #expand each feature to 1 - 4 charge states
+        mz_table = pd.concat(used_features.apply(expand_charges, args=(1, 4), axis=1).tolist())
+        #need better way to filter impossible m/z-s
+        mzmin = np.floor(mzraw.min())
+        mzmax = np.ceil(mzraw.max())
+        mz_table = mz_table.query('mz >= @mzmin & mz <= @mzmax').copy()
+
+        logger.debug(f'{mz_table.shape[0]} XICs scheduled for extraction')
+
+        #writing JSON input for TRFP
+        mz_table['tolerance'] = 5
+        mz_table['tolerance_unit'] = 'ppm'
+        mz_table['comment'] = mz_table.index
+        trfp_xic_in = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
+        with open(trfp_xic_in, 'w') as out:
+            json.dump(mz_table.drop(['z'], axis=1).apply(lambda row: {k:v for k,v in zip(row.index, row)}, axis=1).tolist(), out)
+
+        #running TRFP to extract XICs (needs RAW file)
+        trfp_xic_out = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
+
+        trfp_params = [args['trfp'], 'xic', '-i', f'{base_out_name[:-9]}.raw', '-b', trfp_xic_out, '-j', trfp_xic_in]
+
+        if os.name != 'nt' and os.path.splitext(args['trfp'])[1].lower() == '.exe':
+            trfp_params.insert(0, 'mono')
+
+        logger.info('Running XIC extraction')
+
+        try:
+            subprocess.check_output(trfp_params)
+            os.remove(trfp_xic_in)
+        except subprocess.CalledProcessError as ex:
+            logger.error(f'TRFP execution failed\nOutput:\n{ex.output}')
+            raise Exception('TRFP XIC extraction failed')
+
+        #read TRFP output
+        with open(trfp_xic_out, 'r') as xic_input:
+            chromatograms = json.load(xic_input)
+
+        os.remove(trfp_xic_out)
+
+        #calculate AUCs
+        mz_table['area'] = [AUC(np.array(cr['RetentionTimes']), np.array(cr['Intensities'])) for cr in chromatograms['Content']]
+        mz_table['pepid'] = mz_table['comment'].str.split('_', expand=True).iloc[:, 0].astype(int)
+
+        #building CSD table
+        csd_table = pd.DataFrame(mz_table.groupby('pepid').apply(aggregate_csd).tolist())
+        csd_table.rename(columns={k:v for k,v in zip(csd_table.columns, csd_table.columns.astype(str))}, inplace=True)
+        csd_table = csd_table.reindex(columns=sorted(csd_table.columns))
+
+        #add CSD information
+        used_features = used_features.join(csd_table.set_index('pepid', verify_integrity=True), how='left')
+
+        #map CSD of features for the PFM information
+        pfm_csd = used_features.reindex(df1['ids'])[['1', '2', '3', '4']].values
+
+        ## predict CSDs for all sequences using the model
+
+        #loading model
+        CSD_model = models.load_model(
+            os.path.normpath(os.path.join(os.path.dirname(__file__), 'models', 'CSD_model_LCMSMS.hdf5')),
+            compile=False)
+        CSD_model.compile()
+
+        #using only unique sequences for prediction
+        unique_sequences = pd.DataFrame(df1.drop_duplicates('seqs')['seqs'])
+        CSD_X = reshapeOneHot(unique_sequences['seqs'].apply(lambda s: one_hot_encode_peptide(s)[1]).values)
+
+        logger.debug(f'{unique_sequences.shape[0]} unique peptide sequence detected')
+        logger.info('Running charge-state distribution prediction model')
+
+        #prediction
+        CSD_pred = CSD_model.predict(CSD_X, batch_size=2048)
+        unique_sequences[['1', '2', '3', '4']] = CSD_pred[:, :4]
+        pfm_csd_pred = unique_sequences.set_index('seqs').reindex(df1['seqs']).values
+
+        #masking impossible m/z-s in prediction
+        mask = np.isnan(pfm_csd)
+        pfm_csd[mask] = 0
+        pfm_csd_pred[mask] = 0
+
+        #normalizing CSDs
+        pfm_csd = pfm_csd / (pfm_csd.sum(axis=1) + TINY).reshape(-1, 1)
+        pfm_csd_pred = pfm_csd_pred / (pfm_csd_pred.sum(axis=1) + TINY).reshape(-1, 1)
+
+        #spectrum angle feature
+        df1['z_angle'] = 1 - 2 * np.arccos((pfm_csd * pfm_csd_pred).sum(axis=1) /\
+            (np.linalg.norm(pfm_csd, 2, axis=1) * np.linalg.norm(pfm_csd_pred, 2, axis=1) + TINY)) / np.pi
+
+        #adding average_charge
+        pfm_csd = np.concatenate([pfm_csd, (pfm_csd * np.arange(1, 5).reshape(1, 4)).sum(axis=1).reshape(-1, 1)], axis=1)
+        pfm_csd_pred = np.concatenate([pfm_csd_pred, (pfm_csd_pred * np.arange(1, 5).reshape(1, 4)).sum(axis=1).reshape(-1, 1)], axis=1)
+
+        #prediction error features for individual intensities and average charge
+        z_deltas = pfm_csd - pfm_csd_pred
+        df1[[f'z{z}_err' for z in '1234a']] = (z_deltas - z_deltas.mean(axis=0)) / z_deltas.std(axis=0).reshape(1, -1)
+
+        logger.info('Charge-state distribution features added')
 
     p1 = set(resdict['seqs'])
 
@@ -1413,7 +1615,7 @@ def process_peptides(args):
         for idx, split in enumerate(np.array_split(all_id_list, 3)):
             for id_ftr in split:
                 seq_gmap[id_ftr] = idx
-                
+
         all_id_list = list(set(df1[~df1['decoy']]['peptide']))
         np.random.RandomState(seed=SEED).shuffle(all_id_list)
         for idx, split in enumerate(np.array_split(all_id_list, 3)):
@@ -1447,7 +1649,7 @@ def process_peptides(args):
 
 
         for group_val in range(3):
-            
+
             mask = df1['G'] == group_val
             test_df = df1[mask]
             test_ids = set(test_df['ids'])
@@ -1468,7 +1670,7 @@ def process_peptides(args):
         df1['preds'] = np.power(df1['mass_diff'], 2) + np.power(df1['rt_diff'], 2)
 
 
-    
+
 
     df1['qpreds'] = pd.qcut(df1['preds'], 50, labels=range(50))
 
@@ -1488,6 +1690,7 @@ def process_peptides(args):
             break
     logger.info('%d %% of PFMs were removed from protein scoring after Machine Learning', (100 - (qval_ok+1)*2))
 
+#CHECK merge conflict was from here
     df1u = df1u[df1u['qpreds'] <= qval_ok]#.copy()
 
     df1u['qpreds'] = pd.qcut(df1u['preds'], 10, labels=range(10))
@@ -1495,6 +1698,18 @@ def process_peptides(args):
     qdict = df1u.set_index('seqs').to_dict()['qpreds']
 
     df1['qpreds'] = df1['seqs'].apply(lambda x: qdict.get(x, 11))
+
+    # df1un = df1u[df1u['qpreds'] <= qval_ok].copy()
+    # df1un['qpreds'] = pd.qcut(df1un['preds'], 10, labels=range(10))
+
+    # qdict = df1un.set_index('seqs').to_dict()['qpreds']
+
+
+    # df1['qpreds'] = df1['seqs'].apply(lambda x: qdict.get(x, 11))
+
+    # # df1['qz'] = df1['seqs'].apply(lambda x: qval_dict.get(qdict.get(x, 11), 1.0))
+
+#to here
 
     df1.to_csv(base_out_name + '_PFMs_ML.tsv', sep='\t', index=False)
 
