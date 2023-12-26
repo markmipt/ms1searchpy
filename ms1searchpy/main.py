@@ -692,6 +692,9 @@ def process_peptides(args):
 
         df1['mods'] = resdict['mods']
 
+        df1['nIsotopes'] = [Isotopes[iorig] for iorig in df1['iorig'].values]
+        df1['nScans'] = [Scans[iorig] for iorig in df1['iorig'].values]
+
         # df1['orig_md'] = true_md
 
 
@@ -701,7 +704,7 @@ def process_peptides(args):
             if any(protein in true_prots for protein in proteins):
                 true_seqs.add(pep)
 
-        df1['top_peps'] = (df1['mc'] == 0) & (df1['seqs'].apply(lambda x: x in true_seqs))
+        df1['top_peps'] = (df1['mc'] == 0) & (df1['seqs'].apply(lambda x: x in true_seqs) & (df1['nIsotopes'] >= min_isotopes_calibration) & (df1['nScans'] >= min_scans_calibration))
 
         mass_calib_arg = args['mcalib']
 
