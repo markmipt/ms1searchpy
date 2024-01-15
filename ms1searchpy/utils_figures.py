@@ -1,6 +1,6 @@
 from __future__ import division
 from scipy.stats import scoreatpercentile
-from pyteomics import mass
+from pyteomics import mass, auxiliary as aux
 from collections import Counter
 import os.path
 import numpy as np
@@ -111,6 +111,8 @@ def plot_protein_figures(df, df_f, fig, subplot_max_x, subplot_start):
     subplot_start += 1
     plot_hist_descriptor(get_descriptor_array(df, df_f, dname='score'), fig, subplot_max_x, subplot_start, xlabel='proteins, score', ylabel='# of identifications', only_true=False)
     subplot_start += 1
+    plot_qvalues(df, fig, subplot_max_x, subplot_start)
+    subplot_start += 1
     return subplot_start
 
 
@@ -147,6 +149,24 @@ def plot_hist_descriptor(inarrays, fig, subplot_max_x, subplot_i, xlabel, ylabel
     if width == 1.0:
         plt.xticks(np.arange(int(cbins[0]), cbins[-1], 1))
         plt.gcf().canvas.draw()
+
+def plot_qvalues(df, fig, subplot_max_x, subplot_i):
+    df1 = df.copy()
+    fig.add_subplot(subplot_max_x, 3, subplot_i)
+    df1['shortname'] = df1['dbname'].apply(lambda x: x.split('|')[1])
+    df1 = df1.sort_values(by='score', ascending=False)
+    df1 = df1.drop_duplicates(subset='shortname')
+    df1 = df1[df1['score'] > 0]
+    qar = aux.qvalues(df1, key='score', is_decoy='decoy', reverse=True, remove_decoy=True)['q']
+    plt.plot(qar*100, np.arange(1, len(qar)+1, 1))
+    plt.ylabel('# identified proteins')
+    plt.xlabel('FDR, %')
+    plt.vlines(1, 0, len(qar), linestyle='--', color='b')
+    plt.text(2, len(qar), '1%% FDR: %d proteins' % (sum(qar<=0.01)), )
+    plt.vlines(5, 0, len(qar)*2/3, linestyle='--', color='b')
+    plt.text(6, len(qar)*2/3, '5%% FDR: %d proteins' % (sum(qar<=0.05)), )
+    plt.vlines(15, 0, len(qar)/3, linestyle='--', color='b')
+    plt.text(15, len(qar)/3, '15%% FDR: %d proteins' % (sum(qar<=0.15)), )
 
 
 def plot_legend(fig, subplot_max_x, subplot_start):
@@ -193,7 +213,7 @@ def plot_aa_stats(df_f, df, fig, subplot_max_x, subplot_i):
 
 
 def calc_max_x_value(df, df_proteins):
-    cnt = 23 # number of basic figures
+    cnt = 24 # number of basic figures
     peptide_columns = set(df.columns)
     features_list = []
     for feature in features_list:
