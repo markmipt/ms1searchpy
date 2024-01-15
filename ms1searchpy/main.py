@@ -73,7 +73,7 @@ def calibrate_RT_gaus_full(rt_diff_tmp):
         XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
     return XRT_shift, XRT_sigma, covvalue
 
-def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, nproc, fname=False, prots_spc_basic2=False):
+def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, nproc, out_log=False, fname=False, prots_spc_basic2=False):
     n = nproc
     prots_spc_basic = dict()
 
@@ -364,21 +364,28 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
             output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]), str(isdecoy(x)))) + '\n')
 
 
+    df0 = pd.read_table(os.path.splitext(fname)[0] + '.tsv')
+    df1_peptides = pd.read_table(os.path.splitext(fname)[0] + '_PFMs.tsv')
+    df1_peptides['decoy'] = df1_peptides['proteins'].apply(lambda x: any(isdecoy_key(z) for z in x.split(';')))
+
+    df1_proteins = pd.read_table(os.path.splitext(fname)[0] + '_proteins_full.tsv')
+    df1_proteins_f = pd.read_table(os.path.splitext(fname)[0] + '_proteins.tsv')
+    top_proteins = set(df1_proteins_f['dbname'])
+    df1_peptides_f = df1_peptides[df1_peptides['proteins'].apply(lambda x: any(z in top_proteins for z in x.split(';')))]
+
     if fname and identified_proteins > 10:
-
-        df0 = pd.read_table(os.path.splitext(fname)[0] + '.tsv')
-        df1_peptides = pd.read_table(os.path.splitext(fname)[0] + '_PFMs.tsv')
-        df1_peptides['decoy'] = df1_peptides['proteins'].apply(lambda x: any(isdecoy_key(z) for z in x.split(';')))
-
-        df1_proteins = pd.read_table(os.path.splitext(fname)[0] + '_proteins_full.tsv')
-        df1_proteins_f = pd.read_table(os.path.splitext(fname)[0] + '_proteins.tsv')
-        top_proteins = set(df1_proteins_f['dbname'])
-        df1_peptides_f = df1_peptides[df1_peptides['proteins'].apply(lambda x: any(z in top_proteins for z in x.split(';')))]
-
         plot_outfigures(df0, df1_peptides, df1_peptides_f,
             base_out_name, df_proteins=df1_proteins,
             df_proteins_f=df1_proteins_f)
 
+    if out_log is not False:
+        df1_peptides_f = df1_peptides_f.sort_values(by='Intensity')
+        df1_peptides_f = df1_peptides_f.drop_duplicates(subset='sequence', keep='last')
+        dynamic_range_estimation = np.log10(df1_peptides_f['Intensity'].quantile(0.99)) - np.log10(df1_peptides_f['Intensity'].quantile(0.01))
+        out_log.write('Estimated dynamic range in Log10 scale: %.1f\n' % (dynamic_range_estimation, ))
+        out_log.write('Matched peptides for top-scored proteins: %d\n' % (len(df1_peptides_f), ))
+        out_log.write('Identified proteins: %d\n' % (identified_proteins, ))
+        out_log.close()
     logger.info('The search for file %s is finished.', base_out_name)
 
 def noisygaus(x, a, x0, sigma, b):
@@ -556,6 +563,8 @@ def process_peptides(args):
     out_log = open(base_out_name + '_log.txt', 'w')
     out_log.close()
     out_log = open(base_out_name + '_log.txt', 'w')
+    out_log.write('Filename: %s\n' % (fname, ))
+    out_log.write('Used parameters: %s\n' % (args.items(), ))
 
     deeplc_path = args['deeplc']
     if deeplc_path:
@@ -603,6 +612,7 @@ def process_peptides(args):
 
     kwargs, df_features = prepare_peptide_processor(fname_orig, args)
     logger.info('Running the search ...')
+    out_log.write('Number of features: %d\n' % (len(df_features), ))
 
     resdict = get_resdict(pept_prot, **kwargs)
 
@@ -786,8 +796,8 @@ def process_peptides(args):
         logger.info('Estimated mass shift: %.3f ppm', mass_shift_cor)
         logger.info('Estimated mass sigma: %.3f ppm', mass_sigma_cor)
 
-        out_log.write('Estimated mass shift: %s ppm\n' % (mass_shift_cor, ))
-        out_log.write('Estimated mass sigma: %s ppm\n' % (mass_sigma_cor, ))
+        out_log.write('Estimated mass shift: %.3f ppm\n' % (mass_shift_cor, ))
+        out_log.write('Estimated mass sigma: %.3f ppm\n' % (mass_sigma_cor, ))
 
         resdict['md'] = df1['mass diff corrected'].values
 
@@ -1066,9 +1076,8 @@ def process_peptides(args):
     logger.info('Second-stage calibrated RT shift: %.3f min', XRT_shift)
     logger.info('Second-stage calibrated RT sigma: %.3f min', XRT_sigma)
 
-    out_log.write('Calibrated RT shift: %s min\n' % (XRT_shift, ))
-    out_log.write('Calibrated RT sigma: %s min\n' % (XRT_sigma, ))
-    out_log.close()
+    out_log.write('Calibrated RT shift: %.3f min\n' % (XRT_shift, ))
+    out_log.write('Calibrated RT sigma: %.3f min\n' % (XRT_sigma, ))
 
     p1 = set(resdict['seqs'])
 
@@ -1756,7 +1765,7 @@ def process_peptides(args):
     for idx, k in enumerate(names_arr):
         prots_spc[k] = all_pvals[idx]
 
-    final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, args['nproc'], fname)
+    final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, args['nproc'], out_log, fname)
 
 
 def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2, win_sys=False):
