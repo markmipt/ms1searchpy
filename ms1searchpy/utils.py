@@ -126,8 +126,8 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans, nproc, check
         df_features['id'] = df_features.index
     if 'FAIMS' not in df_features.columns:
         df_features['FAIMS'] = 0
-    if 'ion_mobility' not in df_features.columns:
-        df_features['ion_mobility'] = 0
+    if 'im' not in df_features.columns:
+        df_features['im'] = 0
 
     # if 'mz_std_1' in df_features.columns:
     #     df_features['mz_diff_ppm_1'] = df_features.apply(lambda x: 1e6 * (x['mz'] - (x['mz_std_1'] - 1.00335 / x['charge'])) / x['mz'], axis=1)
