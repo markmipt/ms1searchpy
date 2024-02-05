@@ -25,6 +25,10 @@ aa_color_1 = '#fca110'
 aa_color_2 = '#a41389'
 
 
+def _get_sf(fig):
+    return isinstance(fig, str)
+
+
 def get_basic_distributions(df):
     if 'mz' in df.columns:
         mz_array = df['mz'].values
@@ -58,8 +62,11 @@ def get_descriptor_array(df, df_f, dname):
 
 def plot_hist_basic(array_all, fig, subplot_max_x, subplot_i,
         xlabel, ylabel='# of identifications', idtype='features', bin_size_one=False):
-
-    fig.add_subplot(subplot_max_x, 3, subplot_i)
+    separate_figures = _get_sf(fig)
+    if separate_figures:
+        plt.figure()
+    else:
+        fig.add_subplot(subplot_max_x, 3, subplot_i)
     cbins = get_bins((array_all, ), bin_size_one)
     if idtype == 'features':
         plt.hist(array_all, bins=cbins, color=redcolor, alpha=0.8, edgecolor='#EEEEEE')
@@ -67,6 +74,9 @@ def plot_hist_basic(array_all, fig, subplot_max_x, subplot_i,
         plt.hist(array_all, bins=cbins, color=greencolor, alpha=0.8, edgecolor='#EEEEEE')
     plt.ylabel(ylabel)
     plt.xlabel(xlabel)
+    if separate_figures:
+        plt.savefig(outpath(fig, xlabel, '.png'))
+        plt.close()
 
 def plot_basic_figures(df, fig, subplot_max_x, subplot_start, idtype):
     mz_array, rt_exp_array, lengths_array, intensity_array, nScans_array, nIsotopes_array, faims_array, mass_diff_array, RT_diff_array = get_basic_distributions(df)
@@ -117,7 +127,11 @@ def plot_protein_figures(df, df_f, fig, subplot_max_x, subplot_start):
 
 
 def plot_hist_descriptor(inarrays, fig, subplot_max_x, subplot_i, xlabel, ylabel='# of identifications', only_true=False, bin_size_one=False):
-    fig.add_subplot(subplot_max_x, 3, subplot_i)
+    separate_figures = _get_sf(fig)
+    if separate_figures:
+        plt.figure()
+    else:
+        fig.add_subplot(subplot_max_x, 3, subplot_i)
     array_t, array_d, array_v = inarrays
     if xlabel == 'proteins, score':
         logscale=True
@@ -149,10 +163,17 @@ def plot_hist_descriptor(inarrays, fig, subplot_max_x, subplot_i, xlabel, ylabel
     if width == 1.0:
         plt.xticks(np.arange(int(cbins[0]), cbins[-1], 1))
         plt.gcf().canvas.draw()
+    if separate_figures:
+        plt.savefig(outpath(fig, xlabel, '.png'))
+        plt.close()
 
 def plot_qvalues(df, fig, subplot_max_x, subplot_i):
+    separate_figures = _get_sf(fig)
     df1 = df.copy()
-    fig.add_subplot(subplot_max_x, 3, subplot_i)
+    if separate_figures:
+        plt.figure()
+    else:
+        fig.add_subplot(subplot_max_x, 3, subplot_i)
     df1['shortname'] = df1['dbname'].apply(lambda x: x.split('|')[1])
     df1 = df1.sort_values(by='score', ascending=False)
     df1 = df1.drop_duplicates(subset='shortname')
@@ -167,6 +188,9 @@ def plot_qvalues(df, fig, subplot_max_x, subplot_i):
     plt.text(6, len(qar)*2/3, '5%% FDR: %d proteins' % (sum(qar<=0.05)), )
     plt.vlines(15, 0, len(qar)/3, linestyle='--', color='b')
     plt.text(15, len(qar)/3, '15%% FDR: %d proteins' % (sum(qar<=0.15)), )
+    if separate_figures:
+        plt.savefig(outpath(fig, 'FDR, %', '.png'))
+        plt.close()
 
 
 def plot_legend(fig, subplot_max_x, subplot_start):
@@ -179,7 +203,11 @@ def plot_legend(fig, subplot_max_x, subplot_start):
 
 
 def plot_aa_stats(df_f, df, fig, subplot_max_x, subplot_i):
-    fig.add_subplot(subplot_max_x, 3, subplot_i)
+    separate_figures = _get_sf(fig)
+    if separate_figures:
+        plt.figure()
+    else:
+        fig.add_subplot(subplot_max_x, 3, subplot_i)
 
     # Generate list of 20 standart amino acids
     std_aa_list = list(mass.std_aa_mass.keys())
@@ -210,6 +238,9 @@ def plot_aa_stats(df_f, df, fig, subplot_max_x, subplot_i):
     plt.xticks(range(len(lbls)), lbls)
     plt.hlines(1.0, range(len(vals))[0]-1, range(len(vals))[-1]+1)
     plt.ylabel('amino acid ID rate')
+    if separate_figures:
+        plt.savefig(outpath(fig, 'amino acid ID rate', '.png'))
+        plt.close()
 
 
 def calc_max_x_value(df, df_proteins):
@@ -227,7 +258,9 @@ def plot_descriptors_figures(df, df_f, fig, subplot_max_x, subplot_start):
     subplot_start += 1
     plot_hist_descriptor(get_descriptor_array(df, df_f, dname='RT diff'), fig, subplot_max_x, subplot_start, xlabel='RT difference, min')
     subplot_start += 1
-    plot_legend(fig, subplot_max_x, subplot_start)
+    separate_figures = _get_sf(fig)
+    if not separate_figures:
+        plot_legend(fig, subplot_max_x, subplot_start)
     subplot_start += 1
 
 
@@ -295,10 +328,24 @@ def get_fdbinsize(data_list):
     return optimal_bin_size
 
 
-def plot_outfigures(df, df_peptides, df_peptides_f, base_out_name, df_proteins, df_proteins_f):
-    fig = plt.figure(figsize=(16, 12))
-    dpi = fig.get_dpi()
-    fig.set_size_inches(3000.0/dpi, 3000.0/dpi)
+def normalize_fname(s):
+    return re.sub(r'[<>:\|/?*]', '', s)
+
+
+def outpath(outfolder, s, ext='.png'):
+    return os.path.join(outfolder, normalize_fname(s) + ext)
+
+
+def plot_outfigures(df, df_peptides, df_peptides_f, base_out_name, df_proteins, df_proteins_f, separate_figures=False):
+    if not separate_figures:
+        fig = plt.figure(figsize=(16, 12))
+        dpi = fig.get_dpi()
+        fig.set_size_inches(3000.0/dpi, 3000.0/dpi)
+    else:
+        outfolder = os.path.join(base_out_name + '_figures')
+        if not os.path.isdir(outfolder):
+            os.makedirs(outfolder)
+        fig = outfolder
     subplot_max_x = calc_max_x_value(df, df_proteins)
     descriptor_start_index = 20
     plot_basic_figures(df, fig, subplot_max_x, 1, 'features')
@@ -316,5 +363,6 @@ def plot_outfigures(df, df_peptides, df_peptides_f, base_out_name, df_proteins, 
     plot_aa_stats(df_peptides_f, df_peptides, fig, subplot_max_x, subplot_current)
     plt.grid(color='#EEEEEE')
     plt.tight_layout()
-    plt.savefig(base_out_name + '.png')
-    plt.close()
+    if not separate_figures:
+        plt.savefig(base_out_name + '.png')
+        plt.close()
