@@ -73,7 +73,7 @@ def calibrate_RT_gaus_full(rt_diff_tmp):
         XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
     return XRT_shift, XRT_sigma, covvalue
 
-def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, nproc, out_log=False, fname=False, prots_spc_basic2=False):
+def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, nproc, out_log=False, fname=False, prots_spc_basic2=False, separate_figures=False):
     n = nproc
     prots_spc_basic = dict()
 
@@ -376,7 +376,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
     if fname and identified_proteins > 10:
         plot_outfigures(df0, df1_peptides, df1_peptides_f,
             base_out_name, df_proteins=df1_proteins,
-            df_proteins_f=df1_proteins_f)
+            df_proteins_f=df1_proteins_f, separate_figures=separate_figures)
 
     if out_log is not False:
         df1_peptides_f = df1_peptides_f.sort_values(by='Intensity')
@@ -1765,7 +1765,9 @@ def process_peptides(args):
     for idx, k in enumerate(names_arr):
         prots_spc[k] = all_pvals[idx]
 
-    final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, args['nproc'], out_log, fname)
+    sf = args['separate_figures']
+
+    final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, args['nproc'], out_log, fname, separate_figures=sf)
 
 
 def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2, win_sys=False):
