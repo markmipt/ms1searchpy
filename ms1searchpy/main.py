@@ -2,7 +2,6 @@ import os
 import numpy as np
 from scipy.stats import scoreatpercentile, rankdata
 from scipy.optimize import curve_fit
-from scipy import exp
 import operator
 from copy import copy, deepcopy
 from collections import defaultdict
@@ -27,8 +26,6 @@ except:
 from . import utils
 from .utils_figures import plot_outfigures
 import lightgbm as lgb
-from pyteomics import electrochem
-import random
 SEED = 50
 import warnings
 warnings.formatwarning = lambda msg, *args, **kw: str(msg) + '\n'
@@ -389,7 +386,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
     logger.info('The search for file %s is finished.', base_out_name)
 
 def noisygaus(x, a, x0, sigma, b):
-    return a * exp(-(x - x0) ** 2 / (2 * sigma ** 2)) + b
+    return a * np.exp(-(x - x0) ** 2 / (2 * sigma ** 2)) + b
 
 def calibrate_mass(bwidth, mass_left, mass_right, true_md):
 
@@ -1471,8 +1468,6 @@ def process_peptides(args):
         #expand each feature to 1 - 4 charge states
         mz_table = pd.concat(used_features.apply(expand_charges, args=(1, 4), axis=1).tolist())
         #need better way to filter impossible m/z-s
-        mzmin = np.floor(mzraw.min())
-        mzmax = np.ceil(mzraw.max())
         mz_table = mz_table.query('mz >= @mzmin & mz <= @mzmax').copy()
 
         logger.debug(f'{mz_table.shape[0]} XICs scheduled for extraction')
