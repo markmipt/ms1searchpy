@@ -137,7 +137,7 @@ def calibrate_RT_gaus_full(rt_diff_tmp):
         XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
     return XRT_shift, XRT_sigma, covvalue
 
-def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, nproc, out_log=False, fname=False, prots_spc_basic2=False, output_all=True):
+def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, nproc, out_log=False, fname=False, prots_spc_basic2=False, output_all=True, separate_figures=False):
     n = nproc
     prots_spc_basic = dict()
 
@@ -443,7 +443,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
 
             plot_outfigures(df0, df1_peptides, df1_peptides_f,
                 base_out_name, df_proteins=df1_proteins,
-                df_proteins_f=df1_proteins_f, prefix=prefix)
+                df_proteins_f=df1_proteins_f, prefix=prefix, separate_figures=separate_figures)
 
         if out_log is not False:
             df1_peptides_f = df1_peptides_f.sort_values(by='Intensity')
@@ -2040,6 +2040,8 @@ def process_peptides(args):
     all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
     for idx, k in enumerate(names_arr):
         prots_spc[k] = all_pvals[idx]
+
+    sf = args['separate_figures']
 
     top_proteins = final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, args['nproc'], out_log, fname)
 
