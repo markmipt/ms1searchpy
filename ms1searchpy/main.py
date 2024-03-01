@@ -54,6 +54,73 @@ def worker_RT(qin, qout, shift, step, RC=False, ns=False, nr=False, win_sys=Fals
         qout.put(pepdict)
         qout.put(None)
 
+
+
+
+def calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=False, p=False):
+
+    if best_base_results is not False:
+
+        sorted_proteins_names = sorted(best_base_results.items(), key=lambda x: -x[1])
+        sorted_proteins_names_dict = {}
+        for idx, k in enumerate(sorted_proteins_names):
+            sorted_proteins_names_dict[k[0]] = idx
+    else:
+        sorted_proteins_names_dict = False
+
+
+    prots_spc2 = defaultdict(set)
+    for pep, proteins in pept_prot.items():
+        if pep in p1:
+            if sorted_proteins_names_dict is not False:
+                best_pos = min(sorted_proteins_names_dict[k] for k in proteins)
+                for protein in proteins:
+                    if sorted_proteins_names_dict[protein] == best_pos:
+                        prots_spc2[protein].add(pep)
+            else:
+                for protein in proteins:
+                    prots_spc2[protein].add(pep)
+
+
+    for k in protsN:
+        if k not in prots_spc2:
+            prots_spc2[k] = set([])
+    prots_spc = dict((k, len(v)) for k, v in prots_spc2.items())
+
+    names_arr = np.array(list(prots_spc.keys()))
+    v_arr = np.array(list(prots_spc.values()))
+    n_arr = np.array([protsN[k] for k in prots_spc])
+    
+    if p is False:
+        top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
+        top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
+        p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
+        logger.info('Probability of random match for theoretical peptide = %.3f', (np.mean(top100decoy_score) / np.mean(top100decoy_N)))
+
+
+    prots_spc = dict()
+    all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
+    for idx, k in enumerate(names_arr):
+        prots_spc[k] = all_pvals[idx]
+
+    if best_base_results is not False:
+        checked = set()
+        for k, v in list(prots_spc.items()):
+            if k not in checked:
+                if isdecoy_key(k):
+                    if prots_spc.get(k.replace(prefix, ''), -1e6) > v:
+                        del prots_spc[k]
+                        checked.add(k.replace(prefix, ''))
+                else:
+                    if prots_spc.get(prefix + k, -1e6) > v:
+                        del prots_spc[k]
+                        checked.add(prefix + k)
+
+    return prots_spc, p
+
+
+
+
 def calibrate_RT_gaus_full(rt_diff_tmp):
     RT_left = -min(rt_diff_tmp)
     RT_right = max(rt_diff_tmp)
@@ -70,7 +137,7 @@ def calibrate_RT_gaus_full(rt_diff_tmp):
         XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus(1.0, RT_left, RT_right, rt_diff_tmp)
     return XRT_shift, XRT_sigma, covvalue
 
-def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, nproc, out_log=False, fname=False, prots_spc_basic2=False, separate_figures=False):
+def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, nproc, out_log=False, fname=False, prots_spc_basic2=False, output_all=True):
     n = nproc
     prots_spc_basic = dict()
 
@@ -198,10 +265,11 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
                     prots_spc_tmp[k] = all_pvals[idx]
 
                 sortedlist_spc = sorted(prots_spc_tmp.items(), key=operator.itemgetter(1))[::-1]
-                with open(base_out_name + '_proteins_full_noexclusion.tsv', 'w') as output:
-                    output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
-                    for x in sortedlist_spc:
-                        output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
+                if output_all:
+                    with open(base_out_name + '_proteins_full_noexclusion.tsv', 'w') as output:
+                        output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\n')
+                        for x in sortedlist_spc:
+                            output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]))) + '\n')
 
             best_prot = utils.keywithmaxval(prots_spc_basic)
 
@@ -324,10 +392,11 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
 
     prots_spc = deepcopy(prots_spc_final)
     sortedlist_spc = sorted(prots_spc.items(), key=operator.itemgetter(1))[::-1]
-    with open(base_out_name + '_proteins_full.tsv', 'w') as output:
-        output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\tdecoy\n')
-        for x in sortedlist_spc:
-            output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]), str(isdecoy(x)))) + '\n')
+    if output_all:
+        with open(base_out_name + '_proteins_full.tsv', 'w') as output:
+            output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\tdecoy\n')
+            for x in sortedlist_spc:
+                output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]), str(isdecoy(x)))) + '\n')
 
     checked = set()
     for k, v in list(prots_spc.items()):
@@ -355,35 +424,45 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
         logger.info('\t'.join((str(x[0]), str(x[1]), str(int(prots_spc_copy[x[0]])), str(protsN[x[0]]))))
     logger.info('Final stage search: identified proteins = %d', identified_proteins)
 
-    with open(base_out_name + '_proteins.tsv', 'w') as output:
-        output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\tdecoy\n')
+    if output_all:
+        with open(base_out_name + '_proteins.tsv', 'w') as output:
+            output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\tdecoy\n')
+            for x in filtered_prots:
+                output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]), str(isdecoy(x)))) + '\n')
+
+        df0 = pd.read_table(os.path.splitext(fname)[0] + '.tsv')
+        df1_peptides = pd.read_table(os.path.splitext(fname)[0] + '_PFMs.tsv')
+        df1_peptides['decoy'] = df1_peptides['proteins'].apply(lambda x: any(isdecoy_key(z) for z in x.split(';')))
+
+        df1_proteins = pd.read_table(os.path.splitext(fname)[0] + '_proteins_full.tsv')
+        df1_proteins_f = pd.read_table(os.path.splitext(fname)[0] + '_proteins.tsv')
+        top_proteins = set(df1_proteins_f['dbname'])
+        df1_peptides_f = df1_peptides[df1_peptides['proteins'].apply(lambda x: any(z in top_proteins for z in x.split(';')))]
+
+        if fname and identified_proteins > 10:
+
+            plot_outfigures(df0, df1_peptides, df1_peptides_f,
+                base_out_name, df_proteins=df1_proteins,
+                df_proteins_f=df1_proteins_f, prefix=prefix)
+
+        if out_log is not False:
+            df1_peptides_f = df1_peptides_f.sort_values(by='Intensity')
+            df1_peptides_f = df1_peptides_f.drop_duplicates(subset='sequence', keep='last')
+            dynamic_range_estimation = np.log10(df1_peptides_f['Intensity'].quantile(0.99)) - np.log10(df1_peptides_f['Intensity'].quantile(0.01))
+            out_log.write('Estimated dynamic range in Log10 scale: %.1f\n' % (dynamic_range_estimation, ))
+            out_log.write('Matched peptides for top-scored proteins: %d\n' % (len(df1_peptides_f), ))
+            out_log.write('Identified proteins: %d\n' % (identified_proteins, ))
+            out_log.close()
+
+    else:
+        top_proteins_fullinfo = []
         for x in filtered_prots:
-            output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]), str(isdecoy(x)))) + '\n')
+            top_proteins_fullinfo.append((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]), str(isdecoy(x))))
 
 
-    df0 = pd.read_table(os.path.splitext(fname)[0] + '.tsv')
-    df1_peptides = pd.read_table(os.path.splitext(fname)[0] + '_PFMs.tsv')
-    df1_peptides['decoy'] = df1_peptides['proteins'].apply(lambda x: any(isdecoy_key(z) for z in x.split(';')))
+        return top_proteins_fullinfo
 
-    df1_proteins = pd.read_table(os.path.splitext(fname)[0] + '_proteins_full.tsv')
-    df1_proteins_f = pd.read_table(os.path.splitext(fname)[0] + '_proteins.tsv')
-    top_proteins = set(df1_proteins_f['dbname'])
-    df1_peptides_f = df1_peptides[df1_peptides['proteins'].apply(lambda x: any(z in top_proteins for z in x.split(';')))]
-
-    if fname and identified_proteins > 10:
-        plot_outfigures(df0, df1_peptides, df1_peptides_f,
-            base_out_name, df_proteins=df1_proteins,
-            df_proteins_f=df1_proteins_f, separate_figures=separate_figures)
-
-    if out_log is not False:
-        df1_peptides_f = df1_peptides_f.sort_values(by='Intensity')
-        df1_peptides_f = df1_peptides_f.drop_duplicates(subset='sequence', keep='last')
-        dynamic_range_estimation = np.log10(df1_peptides_f['Intensity'].quantile(0.99)) - np.log10(df1_peptides_f['Intensity'].quantile(0.01))
-        out_log.write('Estimated dynamic range in Log10 scale: %.1f\n' % (dynamic_range_estimation, ))
-        out_log.write('Matched peptides for top-scored proteins: %d\n' % (len(df1_peptides_f), ))
-        out_log.write('Identified proteins: %d\n' % (identified_proteins, ))
-        out_log.close()
-    logger.info('The search for file %s is finished.', base_out_name)
+    return top_proteins
 
 def noisygaus(x, a, x0, sigma, b):
     return a * np.exp(-(x - x0) ** 2 / (2 * sigma ** 2)) + b
@@ -479,7 +558,7 @@ def prepare_peptide_processor(fname, args):
     if len(set(df_features['FAIMS'])) > 1:
         imraw = df_features['FAIMS'].values
     else:
-        imraw = df_features['ion_mobility'].values
+        imraw = df_features['im'].values
 
     logger.info('Number of peptide isotopic clusters passed filters: %d', len(nmasses))
 
@@ -640,42 +719,116 @@ def process_peptides(args):
     p1 = set(resdict2['seqs'])
 
     if len(p1):
-        prots_spc2 = defaultdict(set)
-        for pep, proteins in pept_prot.items():
-            if pep in p1:
-                for protein in proteins:
-                    prots_spc2[protein].add(pep)
 
-        for k in protsN:
-            if k not in prots_spc2:
-                prots_spc2[k] = set([])
-        prots_spc = dict((k, len(v)) for k, v in prots_spc2.items())
+        # Calculate basic protein scores including homologues
+        prots_spc, p = calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=False, p=False)
+        # Calculate basic protein scores excluding homologues
+        prots_spc, p = calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=prots_spc, p=p)
 
-        names_arr = np.array(list(prots_spc.keys()))
-        v_arr = np.array(list(prots_spc.values()))
-        n_arr = np.array([protsN[k] for k in prots_spc])
 
-        top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
-        top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
-        p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
-        logger.info('Stage 0 search: probability of random match for theoretical peptide = %.3f', (np.mean(top100decoy_score) / np.mean(top100decoy_N)))
 
-        prots_spc = dict()
-        all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
-        for idx, k in enumerate(names_arr):
-            prots_spc[k] = all_pvals[idx]
 
-        checked = set()
-        for k, v in list(prots_spc.items()):
-            if k not in checked:
-                if isdecoy_key(k):
-                    if prots_spc.get(k.replace(prefix, ''), -1e6) > v:
-                        del prots_spc[k]
-                        checked.add(k.replace(prefix, ''))
-                else:
-                    if prots_spc.get(prefix + k, -1e6) > v:
-                        del prots_spc[k]
-                        checked.add(prefix + k)
+        # prots_spc2 = defaultdict(set)
+        # for pep, proteins in pept_prot.items():
+        #     if pep in p1:
+        #         for protein in proteins:
+        #             prots_spc2[protein].add(pep)
+
+        # for k in protsN:
+        #     if k not in prots_spc2:
+        #         prots_spc2[k] = set([])
+        # prots_spc = dict((k, len(v)) for k, v in prots_spc2.items())
+
+        # names_arr = np.array(list(prots_spc.keys()))
+        # v_arr = np.array(list(prots_spc.values()))
+        # n_arr = np.array([protsN[k] for k in prots_spc])
+
+        # top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
+        # top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
+        # p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
+        # logger.info('Stage 0 search: probability of random match for theoretical peptide = %.3f', (np.mean(top100decoy_score) / np.mean(top100decoy_N)))
+
+        # prots_spc = dict()
+        # all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
+        # for idx, k in enumerate(names_arr):
+        #     prots_spc[k] = all_pvals[idx]
+
+        # # checked = set()
+        # # for k, v in list(prots_spc.items()):
+        # #     if k not in checked:
+        # #         if isdecoy_key(k):
+        # #             if prots_spc.get(k.replace(prefix, ''), -1e6) > v:
+        # #                 del prots_spc[k]
+        # #                 checked.add(k.replace(prefix, ''))
+        # #         else:
+        # #             if prots_spc.get(prefix + k, -1e6) > v:
+        # #                 del prots_spc[k]
+        # #                 checked.add(prefix + k)
+
+
+
+
+
+        # for k in protsN:
+        #     if k not in prots_spc:
+        #         prots_spc[k] = 0
+
+        # sorted_proteins_names = sorted(prots_spc.items(), key=lambda x: -x[1])
+        # sorted_proteins_names_dict = {}
+        # for idx, k in enumerate(sorted_proteins_names):
+        #     sorted_proteins_names_dict[k[0]] = idx
+
+        # prots_spc2 = defaultdict(set)
+        # for pep, proteins in pept_prot.items():
+        #     if pep in p1:
+        #         best_pos = min(sorted_proteins_names_dict[k] for k in proteins)
+        #         for protein in proteins:
+        #             if sorted_proteins_names_dict[protein] == best_pos:
+        #                 prots_spc2[protein].add(pep)
+
+        # for k in protsN:
+        #     if k not in prots_spc2:
+        #         prots_spc2[k] = set([])
+        # prots_spc = dict((k, len(v)) for k, v in prots_spc2.items())
+
+        # names_arr = np.array(list(prots_spc.keys()))
+        # v_arr = np.array(list(prots_spc.values()))
+        # n_arr = np.array([protsN[k] for k in prots_spc])
+
+        # prots_spc = dict()
+        # all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
+        # for idx, k in enumerate(names_arr):
+        #     prots_spc[k] = all_pvals[idx]
+
+        # checked = set()
+        # for k, v in list(prots_spc.items()):
+        #     if k not in checked:
+        #         if isdecoy_key(k):
+        #             if prots_spc.get(k.replace(prefix, ''), -1e6) > v:
+        #                 del prots_spc[k]
+        #                 checked.add(k.replace(prefix, ''))
+        #         else:
+        #             if prots_spc.get(prefix + k, -1e6) > v:
+        #                 del prots_spc[k]
+        #                 checked.add(prefix + k)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         filtered_prots = aux.filter(prots_spc.items(), fdr=0.05, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
                                     full_output=True)
@@ -824,42 +977,15 @@ def process_peptides(args):
 
         p1 = set(resdict2['seqs'])
 
-        prots_spc2 = defaultdict(set)
-        for pep, proteins in pept_prot.items():
-            if pep in p1:
-                for protein in proteins:
-                    prots_spc2[protein].add(pep)
 
-        for k in protsN:
-            if k not in prots_spc2:
-                prots_spc2[k] = set([])
-        prots_spc = dict((k, len(v)) for k, v in prots_spc2.items())
+        # Calculate basic protein scores including homologues
+        prots_spc, p = calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=False, p=False)
+        # Calculate basic protein scores excluding homologues
+        prots_spc, p = calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=prots_spc, p=p)
 
-        names_arr = np.array(list(prots_spc.keys()))
-        v_arr = np.array(list(prots_spc.values()))
-        n_arr = np.array([protsN[k] for k in prots_spc])
 
-        top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
-        top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
-        p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
-        logger.info('Stage 1 search: probability of random match for theoretical peptide = %.3f', (np.mean(top100decoy_score) / np.mean(top100decoy_N)))
 
-        prots_spc = dict()
-        all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
-        for idx, k in enumerate(names_arr):
-            prots_spc[k] = all_pvals[idx]
 
-        checked = set()
-        for k, v in list(prots_spc.items()):
-            if k not in checked:
-                if isdecoy_key(k):
-                    if prots_spc.get(k.replace(prefix, ''), -1e6) > v:
-                        del prots_spc[k]
-                        checked.add(k.replace(prefix, ''))
-                else:
-                    if prots_spc.get(prefix + k, -1e6) > v:
-                        del prots_spc[k]
-                        checked.add(prefix + k)
 
         filtered_prots = aux.filter(prots_spc.items(), fdr=0.05, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
                                     full_output=True)
@@ -892,7 +1018,7 @@ def process_peptides(args):
         true_seqs = []
         true_rt = []
         true_isotopes = []
-        true_prots = set(x[0] for x in filtered_prots)#[:5])
+        true_prots = set(x[0] for x in filtered_prots)
         for pep, proteins in pept_prot.items():
             if any(protein in true_prots for protein in proteins):
                 true_seqs.append(pep)
@@ -961,44 +1087,44 @@ def process_peptides(args):
 
         logger.info('First-stage peptides used for RT prediction: %d', len(true_seqs))
 
-        if args['ts'] != 2 and deeplc_path:
+        # if args['ts'] != 2 and deeplc_path:
 
-            dlc = DeepLC(verbose=False, batch_num=args['deeplc_batch_num'], path_model=path_model, write_library=write_library, use_library=path_to_lib, pygam_calibration=False)
+        #     dlc = DeepLC(verbose=False, batch_num=args['deeplc_batch_num'], path_model=path_model, write_library=write_library, use_library=path_to_lib, pygam_calibration=False)
 
 
-            df_for_calib = pd.DataFrame({
-                'seq': ns2,
-                'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in ns2],
-                'tr': nr2,
-            })
+        #     df_for_calib = pd.DataFrame({
+        #         'seq': ns2,
+        #         'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in ns2],
+        #         'tr': nr2,
+        #     })
 
-            df_for_check = pd.DataFrame({
-                'seq': ns,
-                'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in ns],
-                'tr': nr,
-            })
+        #     df_for_check = pd.DataFrame({
+        #         'seq': ns,
+        #         'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in ns],
+        #         'tr': nr,
+        #     })
 
-            try:
-                dlc.calibrate_preds(seq_df=df_for_calib, check_df=df_for_check)
-            except:
-                dlc.calibrate_preds(seq_df=df_for_calib)
+        #     try:
+        #         dlc.calibrate_preds(seq_df=df_for_calib, check_df=df_for_check)
+        #     except:
+        #         dlc.calibrate_preds(seq_df=df_for_calib)
 
-            df_for_check['pr'] =  dlc.make_preds(seq_df=df_for_check)
-            df_for_calib['pr'] =  dlc.make_preds(seq_df=df_for_calib)
-            nr2_pred = df_for_calib['pr']
+        #     df_for_check['pr'] =  dlc.make_preds(seq_df=df_for_check)
+        #     df_for_calib['pr'] =  dlc.make_preds(seq_df=df_for_calib)
+        #     nr2_pred = df_for_calib['pr']
 
-            rt_diff_tmp = df_for_check['pr'] - df_for_check['tr']
+        #     rt_diff_tmp = df_for_check['pr'] - df_for_check['tr']
 
-            XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
+        #     XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
 
-        else:
-            RC = achrom.get_RCs_vary_lcp(ns2, nr2, metric='mae')
-            nr2_pred = np.array([achrom.calculate_RT(s, RC) for s in ns2])
-            nr_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
+        # else:
+        RC = achrom.get_RCs_vary_lcp(ns2, nr2, metric='mae')
+        nr2_pred = np.array([achrom.calculate_RT(s, RC) for s in ns2])
+        nr_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
 
-            rt_diff_tmp = nr_pred - nr
+        rt_diff_tmp = nr_pred - nr
 
-            XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
+        XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
 
 
         logger.info('First-stage calibrated RT shift: %.3f min', XRT_shift)
@@ -1011,22 +1137,174 @@ def process_peptides(args):
 
 
 
+
+
     if args['ts']:
 
 
+        if args['es']:
+            logger.info('Use extra Stage 2 search...')
 
-        ns = np.array(ns)
-        nr = np.array(nr)
-        idx = np.abs((rt_diff_tmp) - XRT_shift) <= 3 * XRT_sigma
-        ns = ns[idx]
-        nr = nr[idx]
+            qin = list(set(resdict['seqs']))
+            qout = []
+            pepdict = worker_RT(qin, qout, 0, 1, RC, False, False, True)
 
-        rt_diff_tmp2 = nr2_pred - nr2
-        ns2 = np.array(ns2)
-        nr2 = np.array(nr2)
-        idx = np.abs((rt_diff_tmp2) - XRT_shift) <= 3 * XRT_sigma
-        ns2 = ns2[idx]
-        nr2 = nr2[idx]
+            rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
+            rt_diff = np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred - XRT_shift
+            e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
+            r = 9.0
+            e_ind = e_all <= r
+            resdict = filter_results(resdict, e_ind)
+
+
+
+
+            e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
+            resdict2 = filter_results(resdict, e_ind)
+
+
+            e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= min_scans_calibration
+            resdict2 = filter_results(resdict2, e_ind)
+
+            e_ind = resdict2['mods'] == 0
+            resdict2 = filter_results(resdict2, e_ind)
+
+
+            if args['mc'] > 0:
+                e_ind = resdict2['mc'] == 0
+                resdict2 = filter_results(resdict2, e_ind)
+
+            p1 = set(resdict2['seqs'])
+
+
+            # Calculate basic protein scores including homologues
+            prots_spc, p = calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=False, p=False)
+            # Calculate basic protein scores excluding homologues
+            prots_spc, p = calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=prots_spc, p=p)
+
+
+
+
+
+            filtered_prots = aux.filter(prots_spc.items(), fdr=0.05, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
+                                        full_output=True)
+
+            identified_proteins = 0
+
+            for x in filtered_prots:
+                identified_proteins += 1
+            logger.info('Stage 2 search: identified proteins = %d', identified_proteins)
+            if identified_proteins <= 25:
+                logger.info('Low number of identified proteins, using first 25 top scored proteins for calibration...')
+                filtered_prots = sorted(prots_spc.items(), key=lambda x: -x[1])[:25]
+
+
+
+
+
+
+
+            e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= 1
+            resdict2 = filter_results(resdict, e_ind)
+
+            e_ind = resdict2['mods'] == 0
+            resdict2 = filter_results(resdict2, e_ind)
+
+            if args['mc'] > 0:
+                e_ind = resdict2['mc'] == 0
+                resdict2 = filter_results(resdict2, e_ind)
+
+
+            true_seqs = []
+            true_rt = []
+            true_isotopes = []
+            true_prots = set(x[0] for x in filtered_prots)
+            for pep, proteins in pept_prot.items():
+                if any(protein in true_prots for protein in proteins):
+                    true_seqs.append(pep)
+            e_ind = np.in1d(resdict2['seqs'], true_seqs)
+
+
+            true_seqs = resdict2['seqs'][e_ind]
+
+            true_rt.extend(np.array([rts[iorig] for iorig in resdict2['iorig']])[e_ind])
+            true_rt = np.array(true_rt)
+            true_isotopes.extend(np.array([Isotopes[iorig] for iorig in resdict2['iorig']])[e_ind])
+            true_isotopes = np.array(true_isotopes)
+
+            e_all = abs(resdict2['md'][e_ind] - mass_shift) / (mass_sigma)
+            zs_all_tmp = e_all ** 2
+
+            zs_all_tmp += (true_isotopes.max() - true_isotopes) * 100
+
+            e_ind = np.argsort(zs_all_tmp)
+            true_seqs = true_seqs[e_ind]
+            true_rt = true_rt[e_ind]
+
+            idx_limit = len(true_seqs)
+            cnt_pep = len(set(true_seqs))
+            while cnt_pep > 2500:
+                idx_limit -= 1
+                cnt_pep = len(set(true_seqs[:idx_limit]))
+            true_seqs = true_seqs[:idx_limit]
+            true_rt = true_rt[:idx_limit]
+
+            per_ind = np.random.RandomState(seed=SEED).permutation(len(true_seqs))
+            true_seqs = true_seqs[per_ind]
+            true_rt = true_rt[per_ind]
+
+            best_seq = defaultdict(list)
+            newseqs = []
+            newRTs = []
+            for seq, RT in zip(true_seqs, true_rt):
+                best_seq[seq].append(RT)
+            for k, v in best_seq.items():
+                newseqs.append(k)
+                newRTs.append(np.median(v))
+            true_seqs = np.array(newseqs)
+            true_rt = np.array(newRTs)
+
+            if calib_path:
+                df1 = pd.read_csv(calib_path, sep='\t')
+                true_seqs = df1['peptide'].values
+                true_rt = df1['RT exp'].values
+
+                ll = len(true_seqs)
+                true_seqs2 = true_seqs[int(ll/2):]
+                true_rt2 = true_rt[int(ll/2):]
+                true_seqs = true_seqs[:int(ll/2)]
+                true_rt = true_rt[:int(ll/2)]
+
+            else:
+
+                ll = len(true_seqs)
+
+                true_seqs2 = true_seqs[int(ll/2):]
+                true_rt2 = true_rt[int(ll/2):]
+                true_seqs = true_seqs[:int(ll/2)]
+                true_rt = true_rt[:int(ll/2)]
+
+            ns = true_seqs
+            nr = true_rt
+            ns2 = true_seqs2
+            nr2 = true_rt2
+
+
+
+
+        else:
+            ns = np.array(ns)
+            nr = np.array(nr)
+            idx = np.abs((rt_diff_tmp) - XRT_shift) <= 3 * XRT_sigma
+            ns = ns[idx]
+            nr = nr[idx]
+
+            rt_diff_tmp2 = nr2_pred - nr2
+            ns2 = np.array(ns2)
+            nr2 = np.array(nr2)
+            idx = np.abs((rt_diff_tmp2) - XRT_shift) <= 3 * XRT_sigma
+            ns2 = ns2[idx]
+            nr2 = nr2[idx]
 
         logger.info('Second-stage peptides used for RT prediction: %d', len(ns))
 
@@ -1124,6 +1402,7 @@ def process_peptides(args):
     e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
     r = 9.0
     e_ind = e_all <= r
+
     resdict = filter_results(resdict, e_ind)
     rt_diff = rt_diff[e_ind]
     rt_pred = rt_pred[e_ind]
@@ -1583,7 +1862,7 @@ def process_peptides(args):
     top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
     top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
     p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
-    logger.info('Stage 2 search: probability of random match for theoretical peptide = %.3f', p)
+    logger.info('Stage 3 search: probability of random match for theoretical peptide = %.3f', p)
 
     prots_spc = dict()
     all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
@@ -1762,10 +2041,72 @@ def process_peptides(args):
     for idx, k in enumerate(names_arr):
         prots_spc[k] = all_pvals[idx]
 
-    sf = args['separate_figures']
+    top_proteins = final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, args['nproc'], out_log, fname)
 
-    final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, args['nproc'], out_log, fname, separate_figures=sf)
+    # pept_prot_limited = dict()
+    # for k, v in pept_prot.items():
+    #     tmp = set(zz for zz in v if zz in top_proteins)
+    #     if len(tmp):
+    #         pept_prot_limited[k] = tmp 
 
+    # resdict3 = get_resdict(pept_prot_limited, acc_l=25, acc_r=25, aa_mass=kwargs['aa_mass'])
+
+    # p1 = set(resdict3['seqs'])
+
+    # if deeplc_path:
+
+    #     pepdict = dict()
+
+    #     seqs_batch = list(p1)
+
+    #     df_for_check = pd.DataFrame({
+    #         'seq': seqs_batch,
+    #         'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in seqs_batch],
+    #     })
+
+    #     df_for_check['pr'] =  dlc.make_preds(seq_df=df_for_check)
+
+    #     pepdict_batch = df_for_check.set_index('seq')['pr'].to_dict()
+
+    #     pepdict.update(pepdict_batch)
+
+
+    # else:
+
+    #     qin = list(p1)
+    #     qout = []
+    #     pepdict = worker_RT(qin, qout, 0, 1, RC, False, False, True)
+
+    # rt_pred = np.array([pepdict[s] for s in resdict3['seqs']])
+    # rt_diff = np.array([rts[iorig] for iorig in resdict3['iorig']]) - rt_pred - XRT_shift
+    # # e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
+    # # r = 9.0
+    # # e_ind = e_all <= r
+    # # resdict = filter_results(resdict, e_ind)
+    # # rt_diff = rt_diff[e_ind]
+    # # rt_pred = rt_pred[e_ind]
+
+
+
+    # with open(base_out_name + '_PFMs_extended.tsv', 'w') as output:
+    #     output.write('sequence\tmass diff\tRT diff\tpeak_id\tIntensity\tIntensitySum\tnScans\tnIsotopes\tproteins\tm/z\tRT\taveragineCorr\tcharge\tion_mobility\n')
+    #     for seq, md, rtd, iorig in zip(resdict3['seqs'], resdict3['md'], rt_diff, resdict3['iorig']):
+    #         peak_id = ids[iorig]
+    #         I = Is[iorig]
+    #         Isum = Isums[iorig]
+    #         nScans = Scans[iorig]
+    #         nIsotopes = Isotopes[iorig]
+    #         mzr = mzraw[iorig]
+    #         rtr = rts[iorig]
+    #         av = avraw[iorig]
+    #         ch = charges[iorig]
+    #         im = imraw[iorig]
+    #         output.write('\t'.join((seq, str(md), str(rtd), str(peak_id), str(I), str(Isum), str(nScans), str(nIsotopes), ';'.join(pept_prot[seq]), str(mzr), str(rtr), str(av), str(ch), str(im))) + '\n')
+
+
+    # print('!!!', len(set(resdict3['seqs'])))
+
+    logger.info('The search for file %s is finished.', base_out_name)
 
 def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2, win_sys=False):
 
