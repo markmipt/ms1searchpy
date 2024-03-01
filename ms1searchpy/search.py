@@ -36,6 +36,7 @@ def run():
     parser.add_argument('-ad', help='add decoy', default=0, type=int)
     parser.add_argument('-ml', help='use machine learning for PFMs', default=1, type=int)
     parser.add_argument('-prefix', help='decoy prefix', default='DECOY_')
+    parser.add_argument('-sf', '--separate-figures', action='store_true', help='save figures as separate files')
     parser.add_argument('-nproc',   help='number of processes', default=4, type=int)
     parser.add_argument('-force_nproc', help='Force using multiprocessing for Windows', action='store_true')
     parser.add_argument('-deeplc', help='use deeplc: 0 - turn off, 1 - turn on', default=0, type=int)
