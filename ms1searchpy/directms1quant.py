@@ -2,15 +2,16 @@ from __future__ import division
 import argparse
 import pandas as pd
 import numpy as np
-from scipy.stats import binom, ttest_ind, scoreatpercentile
+from scipy.stats import binom, ttest_ind
 from scipy.optimize import curve_fit
-from scipy import exp
 import logging
 from pyteomics import fasta
 from collections import Counter, defaultdict
-from copy import copy
 import random
 random.seed(42)
+
+logger = logging.getLogger(__name__)
+
 
 def get_df_final(args, replace_label, allowed_peptides, allowed_prots_all, pep_RT=False, RT_threshold=False):
 
@@ -75,7 +76,7 @@ def calc_sf_all(v, n, p):
     return sf_values
 
 def noisygaus(x, a, x0, sigma, b):
-    return a * exp(-(x - x0) ** 2 / (2 * sigma ** 2)) + b
+    return a * np.exp(-(x - x0) ** 2 / (2 * sigma ** 2)) + b
 
 def calibrate_mass(bwidth, mass_left, mass_right, true_md):
 
@@ -120,9 +121,11 @@ def run():
     args = vars(parser.parse_args())
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
             datefmt='[%H:%M:%S]', level=logging.INFO)
-    logger = logging.getLogger(__name__)
+
+    process_files(args)
 
 
+def process_files(args):
     replace_label = '_proteins_full.tsv'
     decoy_prefix = args['prefix']
 
@@ -150,7 +153,7 @@ def run():
             for z in args[sample_num]:
 
                 cnt_file += 1
-                print(cnt_file)
+                logger.debug('Processing file %d', cnt_file)
 
                 label = sample_num + '_' + z.replace(replace_label, '')
                 all_s_lbls[sample_num].append(label)
@@ -232,7 +235,7 @@ def run():
 
     df_final = df_final[df_final['nonmissing']]
     logger.info('Total number of PFMs passed missing values threshold: %d', len(df_final))
-    
+
 
     df_final['S2_mean'] = df_final[all_s_lbls['S2']].mean(axis=1)
     df_final['S1_mean'] = df_final[all_s_lbls['S1']].mean(axis=1)
@@ -260,7 +263,7 @@ def run():
     df_final['S1_std'] = df_final['S1_std'].fillna(df_final['S2_std'])
     df_final['S2_std'] = df_final['S2_std'].fillna(df_final['S1_std'])
 
-    idx_to_calc_initial_pval = df_final[['nonmissing_S1', 'nonmissing_S2']].min(axis=1) >= 2 
+    idx_to_calc_initial_pval = df_final[['nonmissing_S1', 'nonmissing_S2']].min(axis=1) >= 2
     df_final.loc[idx_to_calc_initial_pval, 'p-value'] = list(ttest_ind(np.log10(df_final.loc[idx_to_calc_initial_pval, all_s_lbls['S1']].values.astype(float)), np.log10(df_final.loc[idx_to_calc_initial_pval, all_s_lbls['S2']].values.astype(float)), axis=1, nan_policy='omit', equal_var=True)[1])
     df_final['p-value'] = df_final['p-value'].astype(float)
 
@@ -352,14 +355,14 @@ def run():
     for group_name, df_group in df1_grouped:
 
         prot_idx = df_group.index
-        
+
         idx = sorted(list(prot_idx))
         idx_len = len(idx)
 
         loc_pos_values = df_final.loc[idx, 'FC_gr_mean'].values
 
         loc_pos_values = np.abs(loc_pos_values)
-        
+
         pos_missing_list = list(df_final.loc[idx, 'iq'].values)
         better_res = np.array([0] * idx_len)
         for _ in range(100):
@@ -371,7 +374,7 @@ def run():
             better_res += loc_pos_values >= list_to_compare_current
         df_final.loc[idx, 'sign'] = better_res > args['bp']
         df_final.loc[idx, 'sign'] = df_final.loc[idx, 'sign'][::-1].cummin()[::-1]
- 
+
     df_final.loc[df_final['p-value'] > p_val_threshold, 'sign'] = False
 
     df_final['up'] = df_final['sign'] * (df_final['FC_corrected'] > 0)
@@ -383,7 +386,7 @@ def run():
     df_final = df_final[cols]
 
     df_final.to_csv(path_or_buf=args['out']+'_quant_peptides.tsv', sep='\t', index=False)
- 
+
     df_final = df_final.sort_values(by=['nummissing', 'intensity_median'], ascending=(True, False))
     df_final = df_final.drop_duplicates(subset=('origseq', 'proteins'))
 
@@ -408,7 +411,7 @@ def run():
                 cur_group += 1
             else:
                 protein_groups[dbname] = pep_groups[pepseq]
-                
+
     del pep_groups
     del prot_to_peps
     del peps_more_than_2
