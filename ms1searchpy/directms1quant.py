@@ -6,12 +6,17 @@ from scipy.stats import binom, ttest_ind
 import logging
 from pyteomics import fasta
 
+
+logger = logging.getLogger(__name__)
+
+
 def calc_sf_all(v, n, p):
     sf_values = -np.log10(binom.sf(v-1, n, p))
     sf_values[v <= 1] = 0
     sf_values[np.isinf(sf_values)] = 20
     sf_values[n == 0] = 0
     return sf_values
+
 
 def run():
     parser = argparse.ArgumentParser(
@@ -40,9 +45,10 @@ def run():
     args = vars(parser.parse_args())
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
             datefmt='[%H:%M:%S]', level=logging.INFO)
-    logger = logging.getLogger(__name__)
+    process_files(args)
 
 
+def process_files(args):
     replace_label = '_proteins_full.tsv'
 
     fold_change = float(args['fold_change'])
@@ -387,6 +393,7 @@ def run():
     for z in total_set_genes:
         f1.write(z + '\n')
     f1.close()
+
 
 if __name__ == '__main__':
     run()
