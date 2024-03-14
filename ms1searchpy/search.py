@@ -48,6 +48,7 @@ def run():
     parser.add_argument('-debug', help='Produce debugging output', action='store_true')
     parser.add_argument('-save_calib', help='Save RT calibration list', action='store_true')
     parser.add_argument('-check_unique', help='Experimental. check_unique', default=1, type=int)
+    parser.add_argument('-es', help='Experimental. Use extra stage for RT calibration', default=0, type=int)
     parser.add_argument('-csd', help='Employ limited (1) or comlete (2) chrge-state distribution model; for complete model path to ThermoRawFileParser 1.4.2+ has to be provided. Default - (0) - don\'t use charge-state distribution' , default=0, type=int)
     parser.add_argument('-trfp', help='Path to ThermoRawFileParser executable', default='')
 
