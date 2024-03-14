@@ -110,7 +110,7 @@ def plot_basic_figures(df, fig, subplot_max_x, subplot_start, idtype):
                         xlabel='%s, RT diff min' % (idtype, ), idtype=idtype)
 
 
-def plot_protein_figures(df, df_f, fig, subplot_max_x, subplot_start):
+def plot_protein_figures(df, df_f, fig, subplot_max_x, subplot_start, prefix):
     plot_hist_descriptor(get_descriptor_array(df, df_f, dname='sq'), fig, subplot_max_x, subplot_start, xlabel='proteins, sequence coverage', ylabel='# of identifications', only_true=True)
     subplot_start += 1
     plot_hist_descriptor(get_descriptor_array(df, df_f, dname='matched peptides'), fig, subplot_max_x, subplot_start, xlabel='proteins, matched peptides', ylabel='# of identifications', only_true=True, bin_size_one=True)
@@ -121,7 +121,7 @@ def plot_protein_figures(df, df_f, fig, subplot_max_x, subplot_start):
     subplot_start += 1
     plot_hist_descriptor(get_descriptor_array(df, df_f, dname='score'), fig, subplot_max_x, subplot_start, xlabel='proteins, score', ylabel='# of identifications', only_true=False)
     subplot_start += 1
-    plot_qvalues(df, fig, subplot_max_x, subplot_start)
+    plot_qvalues(df, fig, subplot_max_x, subplot_start, prefix)
     subplot_start += 1
     return subplot_start
 
@@ -167,14 +167,14 @@ def plot_hist_descriptor(inarrays, fig, subplot_max_x, subplot_i, xlabel, ylabel
         plt.savefig(outpath(fig, xlabel, '.png'))
         plt.close()
 
-def plot_qvalues(df, fig, subplot_max_x, subplot_i):
+def plot_qvalues(df, fig, subplot_max_x, subplot_i, prefix):
     separate_figures = _get_sf(fig)
     df1 = df.copy()
     if separate_figures:
         plt.figure()
     else:
         fig.add_subplot(subplot_max_x, 3, subplot_i)
-    df1['shortname'] = df1['dbname'].apply(lambda x: x.split('|')[1])
+    df1['shortname'] = df1['dbname'].apply(lambda x: x.replace(prefix, ''))
     df1 = df1.sort_values(by='score', ascending=False)
     df1 = df1.drop_duplicates(subset='shortname')
     df1 = df1[df1['score'] > 0]
@@ -336,7 +336,7 @@ def outpath(outfolder, s, ext='.png'):
     return os.path.join(outfolder, normalize_fname(s) + ext)
 
 
-def plot_outfigures(df, df_peptides, df_peptides_f, base_out_name, df_proteins, df_proteins_f, separate_figures=False):
+def plot_outfigures(df, df_peptides, df_peptides_f, base_out_name, df_proteins, df_proteins_f, prefix='DECOY_', separate_figures=False):
     if not separate_figures:
         fig = plt.figure(figsize=(16, 12))
         dpi = fig.get_dpi()
@@ -359,7 +359,7 @@ def plot_outfigures(df, df_peptides, df_peptides_f, base_out_name, df_proteins, 
     df_proteins['corrected sq'] = df_proteins['corrected matched peptides'] / df_proteins['theoretical peptides'] * 100
     df_proteins_f['corrected sq'] = df_proteins_f['corrected matched peptides'] / df_proteins_f['theoretical peptides'] * 100
 
-    subplot_current = plot_protein_figures(df_proteins, df_proteins_f, fig, subplot_max_x, 17)
+    subplot_current = plot_protein_figures(df_proteins, df_proteins_f, fig, subplot_max_x, 17, prefix)
     plot_aa_stats(df_peptides_f, df_peptides, fig, subplot_max_x, subplot_current)
     plt.grid(color='#EEEEEE')
     plt.tight_layout()
