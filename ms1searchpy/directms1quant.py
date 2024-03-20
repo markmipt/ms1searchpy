@@ -57,8 +57,8 @@ def get_df_final(args, replace_label, allowed_peptides, allowed_prots_all, pep_R
                     df_final = df3.reset_index(drop=True)
                 else:
                     df_final = df_final.reset_index(drop=True).merge(df3.reset_index(drop=True), on='peptide', how='outer')
-                    df_final.protein_x.fillna(value=df_final.protein_y, inplace=True)
-                    df_final.origseq_x.fillna(value=df_final.origseq_y, inplace=True)
+                    df_final.protein_x = df_final.protein_x.fillna(value=df_final.protein_y)
+                    df_final.origseq_x = df_final.origseq_x.fillna(value=df_final.origseq_y)
                     df_final['protein'] = df_final['protein_x']
                     df_final['origseq'] = df_final['origseq_x']
 
