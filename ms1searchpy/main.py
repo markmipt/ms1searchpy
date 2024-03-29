@@ -430,29 +430,33 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
             for x in filtered_prots:
                 output.write('\t'.join((x[0], str(x[1]), str(prots_spc_copy[x[0]]), str(protsN[x[0]]), str(isdecoy(x)))) + '\n')
 
-        df0 = pd.read_table(os.path.splitext(fname)[0] + '.tsv')
-        df1_peptides = pd.read_table(os.path.splitext(fname)[0] + '_PFMs.tsv')
-        df1_peptides['decoy'] = df1_peptides['proteins'].apply(lambda x: any(isdecoy_key(z) for z in x.split(';')))
+        if out_log or (fname and identified_proteins > 10):
+            df1_peptides = pd.read_table(base_out_name + '_PFMs.tsv')
+            df1_peptides['decoy'] = df1_peptides['proteins'].apply(lambda x: any(isdecoy_key(z) for z in x.split(';')))
 
-        df1_proteins = pd.read_table(os.path.splitext(fname)[0] + '_proteins_full.tsv')
-        df1_proteins_f = pd.read_table(os.path.splitext(fname)[0] + '_proteins.tsv')
-        top_proteins = set(df1_proteins_f['dbname'])
-        df1_peptides_f = df1_peptides[df1_peptides['proteins'].apply(lambda x: any(z in top_proteins for z in x.split(';')))]
+            df1_proteins = pd.read_table(base_out_name + '_proteins_full.tsv')
+            df1_proteins_f = pd.read_table(base_out_name + '_proteins.tsv')
+            top_proteins = set(df1_proteins_f['dbname'])
+            df1_peptides_f = df1_peptides[df1_peptides['proteins'].apply(lambda x: any(z in top_proteins for z in x.split(';')))]
 
-        if fname and identified_proteins > 10:
+            if fname and identified_proteins > 10:
 
-            plot_outfigures(df0, df1_peptides, df1_peptides_f,
-                base_out_name, df_proteins=df1_proteins,
-                df_proteins_f=df1_proteins_f, prefix=prefix, separate_figures=separate_figures)
+                df0 = pd.read_table(os.path.splitext(fname)[0] + '.tsv')
 
-        if out_log is not False:
-            df1_peptides_f = df1_peptides_f.sort_values(by='Intensity')
-            df1_peptides_f = df1_peptides_f.drop_duplicates(subset='sequence', keep='last')
-            dynamic_range_estimation = np.log10(df1_peptides_f['Intensity'].quantile(0.99)) - np.log10(df1_peptides_f['Intensity'].quantile(0.01))
-            out_log.write('Estimated dynamic range in Log10 scale: %.1f\n' % (dynamic_range_estimation, ))
-            out_log.write('Matched peptides for top-scored proteins: %d\n' % (len(df1_peptides_f), ))
-            out_log.write('Identified proteins: %d\n' % (identified_proteins, ))
-            out_log.close()
+                plot_outfigures(df0, df1_peptides, df1_peptides_f,
+                    base_out_name, df_proteins=df1_proteins,
+                    df_proteins_f=df1_proteins_f, prefix=prefix, separate_figures=separate_figures)
+
+            if out_log is not False:
+                df1_peptides_f = df1_peptides_f.sort_values(by='Intensity')
+                df1_peptides_f = df1_peptides_f.drop_duplicates(subset='sequence', keep='last')
+                dynamic_range_estimation = np.log10(df1_peptides_f['Intensity'].quantile(0.99)) - np.log10(df1_peptides_f['Intensity'].quantile(0.01))
+                out_log.write('Estimated dynamic range in Log10 scale: %.1f\n' % (dynamic_range_estimation, ))
+                out_log.write('Matched peptides for top-scored proteins: %d\n' % (len(df1_peptides_f), ))
+                out_log.write('Identified proteins: %d\n' % (identified_proteins, ))
+                out_log.close()
+
+            return top_proteins
 
     else:
         top_proteins_fullinfo = []
@@ -461,8 +465,6 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
 
 
         return top_proteins_fullinfo
-
-    return top_proteins
 
 def noisygaus(x, a, x0, sigma, b):
     return a * np.exp(-(x - x0) ** 2 / (2 * sigma ** 2)) + b
