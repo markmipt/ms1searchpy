@@ -28,13 +28,15 @@ def run():
     args = vars(parser.parse_args())
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
             datefmt='[%H:%M:%S]', level=logging.INFO)
+    process_files(args)
 
 
+def process_files(args):
     d_tmp = dict()
 
     df1 = None
     for idx, filen in enumerate(args['file']):
-        print('Reading file %s' % (filen, ))
+        logger.info('Reading file %s' % (filen, ))
         df3 = pd.read_csv(filen, sep='\t', usecols=['ids', 'qpreds', 'preds', 'decoy', 'seqs', 'proteins', 'peptide', 'iorig'])
         df3['ids'] = df3['ids'].apply(lambda x: '%d:%s' % (idx, str(x)))
         df3['fidx'] = idx
@@ -111,7 +113,7 @@ def run():
         prots_spc_basic2 = df4.set_index('dbname')['score'].to_dict()
     else:
         prots_spc_basic2 = False
-    
+
     final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, args['nproc'], prots_spc_basic2=prots_spc_basic2)
 
 
