@@ -7,3 +7,4 @@ lightgbm
 pandas
 biosaur2
 matplotlib
+seaborn

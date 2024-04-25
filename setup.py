@@ -30,6 +30,7 @@ setup(
                                                 'ms1groups = ms1searchpy.group_specific:run',
                                                 'ms1combine_proteins = ms1searchpy.combine_proteins:run',
                                                 'directms1quant = ms1searchpy.directms1quant:run',
+                                                'directms1quantmulti = ms1searchpy.directms1quantmulti:run',
                                                 'directms1quantDIA = ms1searchpy.directms1quantDIA:run',
                                                 'directms1quantneg = ms1searchpy.directms1quantneg:run',
                                                 'ms1quant = ms1searchpy.directms1quant:run',
