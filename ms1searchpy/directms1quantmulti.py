@@ -85,7 +85,10 @@ def process_files(args):
             if f_name in f_dict_map:
                 s_files_dict[f_dict_map[f_name]].append(path.join(ms1folder, fn))
 
-    all_conditions = df1[df1['group']!='K'].set_index(['group', 'condition'])['vs'].to_dict()
+    control_label = df1['group'].values[0]
+
+
+    all_conditions = df1[df1['group']!=control_label].set_index(['group', 'condition'])['vs'].to_dict()
 
     outlabel = args['out']
 
@@ -112,9 +115,9 @@ def process_files(args):
         logger.info('Starting Stage 1: Run pairwise DirectMS1Quant runs...')
 
         for i2, i1_val in all_conditions.items():
-            out_name = path.join(ms1folder, '%s_directms1quant_out_%s_vs_K%s.tsv' % (outlabel, ''.join(list(i2)), i1_val))
+            out_name = path.join(ms1folder, '%s_directms1quant_out_%s_vs_%s%s.tsv' % (outlabel, control_label, ''.join(list(i2)), i1_val))
             dquant_params = copy(dquant_params_base)
-            dquant_params['S1'] = s_files_dict[('K', i1_val)]
+            dquant_params['S1'] = s_files_dict[(control_label, i1_val)]
             dquant_params['S2'] = s_files_dict[i2]
             dquant_params['out'] = out_name
             directms1quant.process_files(dquant_params)
@@ -126,7 +129,7 @@ def process_files(args):
     pep_cnt = Counter()
     pep_cnt_up = Counter()
     for i2, i1_val in all_conditions.items():
-        out_name = path.join(ms1folder, '%s_directms1quant_out_%s_vs_K%s.tsv' % (outlabel, ''.join(list(i2)), i1_val))
+        out_name = path.join(ms1folder, '%s_directms1quant_out_%s_vs_%s%s.tsv' % (outlabel, control_label, ''.join(list(i2)), i1_val))
         # if os.path.isfile(out_name):
         df0_full = pd.read_table(out_name.replace('.tsv', '_quant_peptides.tsv'), usecols=['origseq', 'up', 'down', 'proteins'])
             
