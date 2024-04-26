@@ -129,7 +129,7 @@ def process_files(args):
     pep_cnt = Counter()
     pep_cnt_up = Counter()
     for i2, i1_val in all_conditions.items():
-        out_name = path.join(ms1folder, '%s_directms1quant_out_%s_vs_%s%s' % (outlabel, ''.join(list(i2)), control_label, i1_val))
+        out_name = path.join(ms1folder, '%s_directms1quant_out_%s_vs_%s%s.tsv' % (outlabel, ''.join(list(i2)), control_label, i1_val))
         # if os.path.isfile(out_name):
         df0_full = pd.read_table(out_name.replace('.tsv', '_quant_peptides.tsv'), usecols=['origseq', 'up', 'down', 'proteins'])
             
