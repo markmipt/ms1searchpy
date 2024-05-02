@@ -139,7 +139,7 @@ Stage 4 is preparation of LFQ profiling figures for proteins specified in the fi
 
 Example of script usage::
 
-    directms1quantmulti -db ~/fasta_folder/sprot_human_shuffled.fasta -pdir ~/folder_with_ms1searchpy_results/ -samples ~/samples.csv -min_signif_for_pept 2 -out DQmulti_2024 -pep_min_non_missing_samples 0.75 -start_stage 1 -proteins_for_figure ~/custom_list_of_proteins.csv -figdir ~/output_figure_folder/
+    directms1quantmulti -db ~/fasta_folder/sprot_human_shuffled.fasta -pdir ~/folder_with_ms1searchpy_results/ -samples ~/samples.csv -min_signif_for_pept 2 -out DQmulti_2024 -pep_min_non_missing_samples 0.75 -start_stage 1 -proteins_for_figure ~/custom_list_of_proteins.tsv -figdir ~/output_figure_folder/
 
 ## Links
 
