@@ -106,6 +106,41 @@ It produces a filtered table of significantly changed proteins with p-values and
 as well as the full protein table and a separate file simply listing all
 IDs of significantly modified proteins (e.g. for easy copy-paste into a StringDB search window).
 
+
+### Multi-condition protein profiling using directms1quantmulti
+
+You can make a quantitation for complex projects using script directms1quantmulti. The example below is shown for our project of time-series profiling of glioblastoma cell line under interferon treatment.
+
+Script takes a table with details for all project files. An example of a sample file table is available here in the examples folder. It should contain the following columns:
+
+File Name - filename of raw file. For example, “QEHFX_JB_000379”.
+
+group - sample group of file. In our example, there are K (Control group), IFN30 (treatment with 30 units/ml of interferon) and IFN1000 groups. The first group mentioned in the table will be used as control for pairwise directms1quant runs.  
+
+condition - sample subgroup of file. In our example, there are multiple time points after treatment, such as 0h, 30min, 1h, 2h, etc. By default, only the same conditions will be used for pairwise comparisons. For example, IFN30 0h vs K 0h; IFN1000 0h vs K 0h, etc.
+
+vs - column for specific condition comparison. For example, in our case, we did not have control samples at the 30 min time point. Thus, we would like to proceed directms1quant runs for IFN30 30 min vs K 0h; and IFN1000 30 min vs K 0h comparisons. Thus, for the 30 min IFN30 and IFN1000 files we put “0h” in the “vs” column. See example table for details.
+
+replicate - column for replicate number of specific condition and sample group.
+
+BatchMS - column for mass-spectrometry Batch. This parameter is used for extra normalization within a batch.
+
+
+The script consists of four different stages and you can rerun the script without rerunning previous stages (“-start_stage” option).
+
+Stage 1 is a set of pairwise DirectMS1Quant runs for different interferon treatment conditions versus control samples.
+
+Stage 2 is preparation of peptide LFQ table for all files using the results obtained in the previous step.
+
+Stage 3 is preparation of the protein LFQ table. Only the peptides labeled by DirectMS1Quant as significantly different between samples in at least X pairwise comparisons are used for protein quantitation. The X parameter is controlled by “min_signif_for_pept” option.
+
+Stage 4 is preparation of LFQ profiling figures for proteins specified in the file under “proteins_for_figure” option. The file should be a tsv table with column “dbname” containing protein database names in the swiss-prot format. Any default directms1quant output table with differentially expressed proteins can be used here.
+
+
+Example of script usage::
+
+    directms1quantmulti -db ~/fasta_folder/sprot_human_shuffled.fasta -pdir ~/folder_with_ms1searchpy_results/ -samples ~/samples.csv -min_signif_for_pept 2 -out DQmulti_2024 -pep_min_non_missing_samples 0.75 -start_stage 1 -proteins_for_figure ~/custom_list_of_proteins.csv -figdir ~/output_figure_folder/
+
 ## Links
 
 - GitHub repo & issue tracker: https://github.com/markmipt/ms1searchpy
