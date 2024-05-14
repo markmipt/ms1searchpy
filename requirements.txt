@@ -8,3 +8,4 @@ pandas
 biosaur2
 matplotlib
 seaborn
+ete3

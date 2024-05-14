@@ -4,6 +4,9 @@ import pandas as pd
 from collections import defaultdict, Counter
 import argparse
 import logging
+import ete3
+from ete3 import NCBITaxa
+ncbi = NCBITaxa()
 
 logger = logging.getLogger(__name__)
 
@@ -21,40 +24,71 @@ def run():
 
     parser.add_argument('file', nargs='+', help='input tsv PFMs_ML files for union')
     parser.add_argument('-d', '-db', help='path to protein fasta file', required=True)
-    parser.add_argument('-out', help='prefix output file names', default='groups_statistics.tsv')
+    parser.add_argument('-out', help='prefix output file names', default='group_specific_statistics_by_')
     parser.add_argument('-prots_full', help='path to any of *_proteins_full.tsv file. By default this file will be searched in the folder with PFMs_ML files', default='')
     parser.add_argument('-fdr', help='protein fdr filter in %%', default=1.0, type=float)
     parser.add_argument('-prefix', help='decoy prefix', default='DECOY_')
     parser.add_argument('-nproc', help='number of processes', default=1, type=int)
-    parser.add_argument('-groups', help='1(Default): To use taxonomy in protein name. 2: Use OX= from fasta file', default=1, type=int)
+    parser.add_argument('-groups', help="dbname: To use taxonomy in protein name. OX: Use OX= from fasta file. Or can be 'species', 'genus', 'family', 'order', 'class', 'phylum', 'kingdom', 'domain'", default='dbname')
     parser.add_argument('-pp', help='protein priority table for keeping protein groups when merge results by scoring', default='')
     args = vars(parser.parse_args())
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
             datefmt='[%H:%M:%S]', level=logging.INFO)
 
+    group_to_use = args['groups']
+    allowed_groups = [
+        'dbname', 'OX', 'species', 'genus', 'family', 'order', 'class', 'phylum', 'kingdom', 'domain'
+    ]
+    if group_to_use not in allowed_groups:
+        logging.critical('group is not correct! Must be: %s', ','.join(allowed_groups))
+        return -1
+
     dbname_map = dict()
-    cnt = Counter()
+    ox_map = dict()
     for dbinfo, dbseq in prot_gen(args):
         dbname = dbinfo.split(' ')[0]
 
-        if args['groups'] == 2:
+        if group_to_use != 'dbname':
             try:
                 ox = dbinfo.split('OX=')[-1].split(' ')[0]
             except:
                 ox = 'Unknown'
-        elif args['groups'] == 1:
+        else:
             try:
                 ox = dbinfo.split(' ')[0].split('|')[-1].split('_')[-1]
             except:
                 ox = 'Unknown'
-
-        else:
-            logger.error('groups must be 1 or 2')
-            break
         dbname_map[dbname] = ox
-        cnt[ox] += 1
+
+    cnt = Counter(dbname_map.values())
+
+    if group_to_use not in ['dbname', 'OX']:
+        for ox in cnt.keys():
+
+            line = ncbi.get_lineage(ox)
+            ranks = ncbi.get_rank(line)
+            if group_to_use not in ranks.values():
+                logger.warning('%s does not have %s', str(ox), group_to_use)
+                group_custom = 'OX:' + ox
+                # print('{} does not have {}'.format(i, group_to_use))
+                # continue
+
+            else:
+                ranks_rev = {k[1]:k[0] for k in ranks.items()}
+                # print(ranks_rev)
+                group_custom = ranks_rev[group_to_use]
+
+            ox_map[ox] = group_custom
+
+
+        for dbname in list(dbname_map.keys()):
+            dbname_map[dbname] = ox_map[dbname_map[dbname]]
+
+        cnt = Counter(dbname_map.values())
 
     print(cnt.most_common())
+
+    # return -1
 
     d_tmp = dict()
 
@@ -117,7 +151,7 @@ def run():
 
     # all_proteins = []
 
-    base_out_name = args['out']
+    base_out_name = args['out'] + group_to_use + '.tsv'
 
     out_dict = dict()
 
