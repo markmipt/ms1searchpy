@@ -90,7 +90,7 @@ def calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_re
     names_arr = np.array(list(prots_spc.keys()))
     v_arr = np.array(list(prots_spc.values()))
     n_arr = np.array([protsN[k] for k in prots_spc])
-    
+
     if p is False:
         top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
         top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
@@ -2045,13 +2045,13 @@ def process_peptides(args):
 
     sf = args['separate_figures']
 
-    top_proteins = final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, args['nproc'], out_log, fname)
+    top_proteins = final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, args['nproc'], out_log, fname, separate_figures=sf)
 
     # pept_prot_limited = dict()
     # for k, v in pept_prot.items():
     #     tmp = set(zz for zz in v if zz in top_proteins)
     #     if len(tmp):
-    #         pept_prot_limited[k] = tmp 
+    #         pept_prot_limited[k] = tmp
 
     # resdict3 = get_resdict(pept_prot_limited, acc_l=25, acc_r=25, aa_mass=kwargs['aa_mass'])
 
