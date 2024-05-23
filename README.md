@@ -111,7 +111,7 @@ IDs of significantly modified proteins (e.g. for easy copy-paste into a StringDB
 
 You can make a quantitation for complex projects using script directms1quantmulti. The example below is shown for our project of time-series profiling of glioblastoma cell line under interferon treatment.
 
-Script takes a table with details for all project files. An example of a sample file table is available here in the examples folder. It should contain the following columns:
+Script takes a tab-separated table (.tsv) with details for all project files. An example of a sample file table is available here in the examples folder. It should contain the following columns:
 
 File Name - filename of raw file. For example, “QEHFX_JB_000379”.
 
