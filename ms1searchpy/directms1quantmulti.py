@@ -54,7 +54,7 @@ def process_files(args):
     ms1folder = args['pdir']
     path_to_fasta = args['d']
 
-    df1 = pd.read_table(args['samples'])
+    df1 = pd.read_table(args['samples'], dtype={'group': str, 'condition': str})
     df1['sample'] = df1['group']
     if 'condition' not in df1.columns:
         df1['condition'] = ''
@@ -119,7 +119,9 @@ def process_files(args):
             dquant_params = copy(dquant_params_base)
             dquant_params['S1'] = s_files_dict[(control_label, i1_val)]
             dquant_params['S2'] = s_files_dict[i2]
+
             dquant_params['out'] = out_name
+
             directms1quant.process_files(dquant_params)
 
     else:
