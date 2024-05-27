@@ -11,7 +11,7 @@ import random
 random.seed(42)
 
 from . import directms1quant
-from os import path, listdir
+from os import path, listdir, makedirs
 from copy import copy
 import matplotlib.pyplot as plt
 import seaborn as sb
@@ -427,6 +427,8 @@ def process_files(args):
                         plt.tight_layout()
                         if args['figdir']:
                             out_figdir = args['figdir']
+                            if not path.isdir(out_figdir):
+                                makedirs(out_figdir)
                         else:
                             out_figdir = infolder
                         plt.savefig(path.join(out_figdir, '%s_%s.png' % (args['out'], gname, )))
