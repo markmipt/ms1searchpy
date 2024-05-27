@@ -54,7 +54,7 @@ def process_files(args):
     ms1folder = args['pdir']
     path_to_fasta = args['d']
 
-    df1 = pd.read_table(args['samples'], dtype={'group': str, 'condition': str})
+    df1 = pd.read_table(args['samples'], dtype={'group': str, 'condition': str, 'vs': str})
     df1['sample'] = df1['group']
     if 'condition' not in df1.columns:
         df1['condition'] = ''
