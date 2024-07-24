@@ -35,6 +35,7 @@ def run():
     parser.add_argument('-d', '-db', help='path to uniprot fasta file used for ms1searchpy', required=True)
     parser.add_argument('-samples', help='tsv table with sample details', required=True)
     parser.add_argument('-out', help='name of DirectMS1quant output files', default='DQmulti')
+    parser.add_argument('-norm', help='LFQ normalization: (1) using median of CONTROL group, default; (2) using median of all groups', default=1, type=int)
     parser.add_argument('-proteins_for_figure', help='path to proteins for figure plotting', default='', type=str)
     parser.add_argument('-figdir', help='path to output folder for figures', default='')
     parser.add_argument('-pep_min_non_missing_samples', help='minimum fraction of files with non missing values for peptide', default=0.5, type=float)
@@ -146,23 +147,22 @@ def process_files(args):
 
 
         df0_full = df0_full.sort_values(by='up', ascending=False)
-        df0_full = df0_full.drop_duplicates(subset='origseq')
-        for pep, up_v in df0_full[['origseq', 'up']].values:
+        df0_full = df0_full.drop_duplicates(subset=['origseq', 'proteins'])
+        for pep, up_v, prot_for_pep in df0_full[['origseq', 'up', 'proteins']].values:
             if up_v:
-                pep_cnt_up[pep] += 1
-            pep_cnt[pep] += 1
+                pep_cnt_up[(pep, prot_for_pep)] += 1
+            pep_cnt[(pep, prot_for_pep)] += 1
             
 
-    allowed_peptides_base = set(k for k, v in pep_cnt.items() if v >= args['min_signif_for_pept'])
+    allowed_peptides_base = set(k for k, v in pep_cnt.items())
     logger.info('Total number of quantified peptides: %d', len(allowed_peptides_base))
+    allowed_peptides_base_only_sequences = set(k[0] for k in allowed_peptides_base)
 
     allowed_peptides_up = set(k for k, v in pep_cnt_up.items() if v >= args['min_signif_for_pept'])
     logger.info('Total number of significant quantified peptides: %d', len(allowed_peptides_up))
 
     replace_label = '_proteins_full.tsv'
     decoy_prefix = args['prefix']
-
-
 
     names_map = {}
 
@@ -280,6 +280,9 @@ def process_files(args):
 
 
         all_lbls_by_batch = defaultdict(list)
+        all_filenames_control = set(df1[df1['group'] == control_label]['File Name'])
+        all_lbls_control = set()
+
         bdict = df1.set_index('File Name')['BatchMS'].to_dict()
 
         for cc in all_lbls:
@@ -288,6 +291,8 @@ def process_files(args):
             except:
                 origfn = cc.split('_', 1)[-1] + replace_label
             all_lbls_by_batch[bdict[origfn]].append(cc)
+            if origfn in all_filenames_control:
+                all_lbls_control.add(cc)
             
 
         for lbl_name, small_lbls in all_lbls_by_batch.items():
@@ -300,7 +305,7 @@ def process_files(args):
 
 
 
-        idx_to_keep = df_final['origseq'].apply(lambda x: x in allowed_peptides_base)
+        idx_to_keep = df_final['origseq'].apply(lambda x: x in allowed_peptides_base_only_sequences)
         df_final = df_final[idx_to_keep]
 
         
@@ -310,7 +315,17 @@ def process_files(args):
                 df_final.loc[:, col] = df_final.loc[:, col].fillna(m)
                 
         for lbl_key, small_lbls in all_lbls_by_batch.items():
-            m = df_final[small_lbls].median(axis=1)
+
+            if args['norm'] == 2:
+                m = df_final[small_lbls].median(axis=1)
+            elif args['norm'] == 1:
+                small_lbls_control = [z for z in small_lbls if z in all_lbls_control]
+                m = df_final[small_lbls_control].median(axis=1)
+            else:
+                logger.error('norm option must be 1 or 2!')
+                return -1
+            
+            
             for col in df_final[small_lbls]:
                 df_final.loc[:, col] = np.log2(df_final.loc[:, col] / m)
                 
@@ -325,10 +340,13 @@ def process_files(args):
         cols.insert(0, 'proteins')
         df_final = df_final[cols]
 
+        idx_to_keep = df_final.apply(lambda x: (x['origseq'], x['proteins']) in allowed_peptides_base, axis=1)
+        df_final = df_final[idx_to_keep].copy()
 
 
 
-        idx_to_keep = df_final['origseq'].apply(lambda x: x in allowed_peptides_up)
+        # idx_to_keep = df_final['origseq'].apply(lambda x: x in allowed_peptides_up)
+        idx_to_keep = df_final.apply(lambda x: (x['origseq'], x['proteins']) in allowed_peptides_up, axis=1)
         df_final_accurate = df_final[idx_to_keep].copy()
         df_final_accurate = df_final_accurate[df_final_accurate.groupby('proteins')['origseq'].transform('count') > 1]
         accurate_proteins = set(df_final_accurate['proteins'])
@@ -337,8 +355,6 @@ def process_files(args):
 
         df_final['S1_mean'] = df_final[all_lbls].median(axis=1)
         df_final['intensity_median'] = df_final['S1_mean']
-
-        
 
         df_final = df_final.sort_values(by=['nummissing', 'intensity_median'], ascending=(True, False))
         df_final = df_final.drop_duplicates(subset=('origseq', 'proteins'))
@@ -353,16 +369,22 @@ def process_files(args):
             origfnames.append(origfn)
             
         dft = pd.DataFrame.from_dict([df_final.groupby('proteins')[cc].median().to_dict() for cc in all_lbls])
+        dft2 = pd.DataFrame.from_dict([df_final.groupby('origseq')[cc].median().to_dict() for cc in all_lbls])
 
         dft['File Name'] = origfnames
+        dft2['File Name'] = origfnames
 
+        df1x = pd.merge(df1, dft2, on='File Name', how='left')
         df1 = pd.merge(df1, dft, on='File Name', how='left')
 
         df1['sample+condition'] = df1['sample'].apply(lambda x: x + ' ') + df1['condition']
+        df1x['sample+condition'] = df1x['sample'].apply(lambda x: x + ' ') + df1x['condition']
 
 
         out_name = path.join(ms1folder, '%s_proteins_LFQ.tsv' % (outlabel, ))
+        out_namex = path.join(ms1folder, '%s_peptide_LFQ_processed.tsv' % (outlabel, ))
         df1.to_csv(out_name, sep='\t', index=False)
+        df1x.to_csv(out_namex, sep='\t', index=False)
 
     else:
 
