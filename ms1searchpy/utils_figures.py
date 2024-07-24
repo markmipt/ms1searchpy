@@ -178,7 +178,10 @@ def plot_qvalues(df, fig, subplot_max_x, subplot_i, prefix):
     df1 = df1.sort_values(by='score', ascending=False)
     df1 = df1.drop_duplicates(subset='shortname')
     df1 = df1[df1['score'] > 0]
-    qar = aux.qvalues(df1, key='score', is_decoy='decoy', reverse=True, remove_decoy=True)['q']
+    qar = aux.qvalues(df1, key='score', is_decoy='decoy', reverse=True, remove_decoy=True, correction=1)['q']
+    if sum(qar<=0.01) == 0:
+        qar = aux.qvalues(df1, key='score', is_decoy='decoy', reverse=True, remove_decoy=True, correction=0)['q']
+
     plt.plot(qar*100, np.arange(1, len(qar)+1, 1))
     plt.ylabel('# identified proteins')
     plt.xlabel('FDR, %')
