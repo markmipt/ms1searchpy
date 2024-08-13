@@ -490,11 +490,11 @@ def process_files(args):
                 try:
                     prot_name = prot.split('|')[1]
                 except:
-                    prot_name = prot
+                    prot_name = prot.split(' ')[0]
                 try:
                     gene_name = prot.split('GN=')[1].split(' ')[0]
                 except:
-                    gene_name = prot
+                    gene_name = prot.split(' ')[0]
                 genes_map[prot_name] = gene_name
 
         df_out['gene'] = df_out['protname'].apply(lambda x: genes_map[x])
