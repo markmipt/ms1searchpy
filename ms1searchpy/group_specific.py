@@ -17,7 +17,7 @@ def run():
 
     Example usage
     -------------
-    $ ms1combine.py file1_PFMs_ML.tsv ... filen_PFMs_ML.tsv
+    $ ms1groups file1_PFMs_ML.tsv -d uniprot_shuffled.fasta -out group_statistics_by -fdr 5.0 -nproc 8 -groups genus
     -------------
     ''',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -29,7 +29,7 @@ def run():
     parser.add_argument('-fdr', help='protein fdr filter in %%', default=1.0, type=float)
     parser.add_argument('-prefix', help='decoy prefix', default='DECOY_')
     parser.add_argument('-nproc', help='number of processes', default=1, type=int)
-    parser.add_argument('-groups', help="dbname: To use taxonomy in protein name. OX: Use OX= from fasta file. Or can be 'species', 'genus', 'family', 'order', 'class', 'phylum', 'kingdom', 'domain'", default='dbname')
+    parser.add_argument('-groups', help="dbname: To use taxonomy in swiss-prot protein name (_HUMAN, _YEAST, etc.). OX: Use OX= from fasta file. Or can be 'species', 'genus', 'family', 'order', 'class', 'phylum', 'kingdom', 'domain'", default='dbname')
     parser.add_argument('-pp', help='protein priority table for keeping protein groups when merge results by scoring', default='')
     args = vars(parser.parse_args())
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',

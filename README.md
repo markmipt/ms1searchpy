@@ -96,6 +96,14 @@ You can combine the results from several replicate runs with `ms1combine` by fee
 
 After obtaining the protein identification results, you can proceed to compare your samples using LFQ.
 
+### Using Group-specific FDR for metaproteomics
+
+Group-specific FDR for metaproteomics should be used for accurate estimation of protein identified among the different groups. The command ms1groups should be used for that:
+
+     ms1groups F04.features_PFMs_ML.tsv -d F04_top15_shuffled.fasta -out group_statistics_by -fdr 5.0 -groups genus
+
+It produces a table with the number of identified proteins for each group using group-specific FDR. This is basically multiple DirectMS1 searches with small protein databases containing only a single group and combining results all together. However, using the mentioned “ms1groups” script and preliminary DirectMS1 search, two problems are solved: small statistics for all mass/RT/Machine Learning calibration procedures within DirectMS1 workflow for low-populated groups and computational time. Currently supported groups are 'species', 'genus', 'family', 'order', 'class', 'phylum', 'kingdom', 'domain'. The groups are automatically extracted using ete3 Python module and NCBI Taxonomic database. Also, the script supports groups dbname and OX: the the former is a taxonomy in swiss-prot protein name (_HUMAN, _YEAST, etc.) and the latter is the taxonomy provided by 'OX=' from protein description in the fasta file.
+
 ### Using directms1quant
 
 New LFQ method designed specifically for DirectMS1 is invoked like this:
