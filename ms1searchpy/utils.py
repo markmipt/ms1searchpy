@@ -89,6 +89,7 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans, nproc, check
             'nm': 0,
             'o': '',
             'hvf': 1.3,
+            'ivf': 5,
             'minlh': 2,
             'pasefminlh': 1,
             'nprocs': nproc,
@@ -155,6 +156,9 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans, nproc, check
     return df_features
 
 def peptide_gen(args):
+
+
+    
     prefix = args['prefix']
     enzyme = get_enzyme(args['e'])
     mc = args['mc']
@@ -292,6 +296,7 @@ seen_target = set()
 seen_decoy = set()
 def prot_peptides(prot_seq, enzyme, mc, minlen, maxlen, is_decoy, dont_use_seen_peptides=False):
 
+
     dont_use_fast_valid = parser.fast_valid(prot_seq)
     peptides = parser.cleave(prot_seq, enzyme, mc)
     for pep in peptides:
@@ -330,6 +335,8 @@ def get_prot_pept_map(args):
     decoy_prot_count = 0
     target_peps = set()
     decoy_peps = set()
+
+
 
     for desc, prot in prot_gen(args):
         dbinfo = desc.split(' ')[0]
