@@ -637,6 +637,7 @@ def process_peptides(args):
         base_out_name = os.path.splitext(os.path.join(outpath, os.path.basename(fname)))[0]
     else:
         base_out_name = os.path.splitext(fname)[0]
+    base_out_name = os.path.join(args['o'], base_out_name)
 
     out_log = open(base_out_name + '_log.txt', 'w')
     out_log.close()

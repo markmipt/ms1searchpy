@@ -17,6 +17,7 @@ def run():
 
     parser.add_argument('files', help='input mzML or .tsv files with peptide features', nargs='+')
     parser.add_argument('-d', '-db', help='path to protein fasta file', required=True)
+    parser.add_argument('-o', help='path to output folder', default='')
     parser.add_argument('-ptol', help='precursor mass tolerance in ppm', default=10.0, type=float)
     parser.add_argument('-fdr', help='protein fdr filter in %%', default=1.0, type=float)
     parser.add_argument('-i', help='minimum number of isotopes', default=2, type=int)
