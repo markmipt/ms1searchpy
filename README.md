@@ -28,11 +28,7 @@ Using pip:
 
     pip install ms1searchpy
 
-It is recommended to additionally install [DeepLC](https://github.com/compomics/DeepLC) version either 1.1.2 (official) or 1.1.2.2 (unofficial fork with small changes) . Newer version has some issues right now.
-
-    pip install deeplc==1.1.2
-
-Or
+It is recommended to additionally install [DeepLC](https://github.com/compomics/DeepLC) version 1.1.2.2 (unofficial fork with small changes). Newer version has some issues right now.
 
     pip install https://github.com/markmipt/DeepLC/archive/refs/heads/alternative_best_model.zip
 
