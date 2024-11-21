@@ -95,13 +95,14 @@ def process_files(args):
 
 
     dquant_params_base = {
-        'min_samples': 0,
+        'min_samples': 1,
         'fold_change': 2.0,
         'bp': 80,
         'minl': 7,
         'qval': 0.05,
         'intensity_norm': 2,
         'allowed_peptides': '',
+        'protein_shifts': '',
         'allowed_proteins': '',
         'all_proteins': '',
         'all_pfms': '',

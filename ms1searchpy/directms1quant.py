@@ -23,6 +23,7 @@ def get_df_final(args, replace_label, allowed_peptides, allowed_prots_all, pep_R
                 label = sample_num + '_' + z.replace(replace_label, '')
                 df3 = pd.read_table(z.replace(replace_label, '_PFMs.tsv'), usecols=['sequence', 'proteins', 'charge', 'ion_mobility', 'Intensity', 'RT'])
 
+
                 if not args['allowed_peptides']:
                     df3['tmpseq'] = df3['sequence']
                     df3 = df3[df3['tmpseq'].apply(lambda x: x in allowed_peptides)]
@@ -116,6 +117,7 @@ def run():
     parser.add_argument('-all_pfms', help='use all PFMs instead of ML controlled', action='store_true')
     parser.add_argument('-allowed_peptides', help='path to allowed peptides')
     parser.add_argument('-allowed_proteins', help='path to allowed proteins')
+    parser.add_argument('-protein_shifts', help='Experimental. path to protein shifts')
     parser.add_argument('-d', '-db', help='path to uniprot fasta file for gene annotation')
     parser.add_argument('-prefix', help='Decoy prefix. Default DECOY_', default='DECOY_', type=str)
     args = vars(parser.parse_args())
@@ -322,7 +324,17 @@ def process_files(args):
     df_final = df_final.sort_values(by=['nummissing', 'intensity_median'], ascending=(True, False))
     df_final = df_final.drop_duplicates(subset=('origseq', 'proteins'))
 
+
     df_final['FC_corrected'] = df_final['FC'] - FC_mean
+
+    if args['protein_shifts']:
+        df_shifts = pd.read_table(args['protein_shifts'])
+        shifts_map = df_shifts.set_index('dbname')['FC shift'].to_dict()
+        df_final['FC_corrected'] = df_final.apply(lambda x: x['FC_corrected'] - shifts_map.get(x['proteins'], 0), axis=1)
+
+
+
+
     df_final['FC_abs'] = df_final['FC_corrected'].abs()
     df_final = df_final.sort_values(by='FC_abs').reset_index(drop=True)
     df_final['FC_abs'] = df_final['FC_corrected']
