@@ -1,16 +1,17 @@
 # ms1searchpy - a DirectMS1 proteomics search engine for LC-MS1 spectra
 
-`ms1searchpy` consumes LC-MS data (**mzML**) or peptide features (**tsv**) and performs protein identification and quantitation.
+`ms1searchpy` consumes LC-MS data (**mzML**) or peptide features (**tsv**) and performs protein identification and quantitation. It is recommended to run the peptide cluster detection (biosaur2) separately so that the user can control the cluster search parameters. In addition, this will eliminate unnecessary calculations when reprocessing files.
 
 ## Basic usage
 
 Basic command for protein identification:
 
-    ms1searchpy *.mzML -d path_to.FASTA
-
+    biosaur2 *.mzML
+    ms1searchpy *features.tsv -d path_to.FASTA
+    
 or
 
-    ms1searchpy *_peptideFeatures.tsv -d path_to.FASTA
+    ms1searchpy *.mzML -d path_to.FASTA
 
 Read further for detailed info, including quantitative analysis.
 
@@ -61,15 +62,12 @@ but you can also use built-in additive model (default).
 
 ### Examples
 
-    ms1searchpy test.mzML -d sprot_human.fasta -deeplc 1 -ad 1
+    biosaur2 test.mzML -minlh 3
+    ms1searchpy test.features.tsv -d sprot_human.fasta -deeplc 1 -ad 1
 
-This command will run `ms1searchpy` with DeepLC RT predictor available as `deeplc` (should work if you install DeepLC
+The first command will run `biosaur2` to detect all peptide isotopic clusters which are visible in at least 3 consecutive MS1 scans. The second command will run `ms1searchpy` with DeepLC RT predictor available as `deeplc` (should work if you install DeepLC
 alongside `ms1searchpy`. `-ad 1` creates a shuffled decoy database for FDR estimation.
 You should use it only once and just use the created database for other searches.
-
-    ms1searchpy test.features.tsv -d sprot_human_shuffled.fasta -deeplc 1
-
-Here, instead of mzML file, a file with peptide features is used.
 
 ### Output files
 
