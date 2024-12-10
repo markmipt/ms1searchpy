@@ -10,6 +10,7 @@ try:
     from pyteomics import cmass
 except ImportError:
     cmass = mass
+import traceback
 import subprocess
 import tempfile
 import pandas as pd
@@ -87,7 +88,7 @@ def get_best_calibration_thresholds(args, resdict2, Isotopes, Scans, pept_prot, 
 
             e_ind = np.array([Scans[iorig] for iorig in resdict3['iorig']]) >= cur_scans_calibration
             resdict3 = filter_results(resdict3, e_ind)
-    
+
             p1 = set(resdict3['seqs'])
 
             if len(p1):
@@ -412,7 +413,7 @@ def final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN, base_out_nam
                 rtt_range = [mass_koef, ]
             else:
                 rtt_range = list(range(10))
-            
+
             for rtt_koef in rtt_range:
                 qin.append((mass_koef, rtt_koef))
         qout = worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_key, isdecoy, fdr, prots_spc_basic2, True, qdict)
@@ -583,6 +584,7 @@ def process_file(args):
             process_peptides(deepcopy(args))
         except Exception as e:
             logger.error(e)
+            logger.debug('Exception trace:\n%s', traceback.print_exception(e))
             logger.error('Search is failed for file: %s', filename)
     return 1
 
@@ -803,7 +805,7 @@ def process_peptides(args):
 
     best_isotopes_calibration, best_scans_calibration = get_best_calibration_thresholds(args, resdict2, Isotopes, Scans, pept_prot, protsN, isdecoy_key, prefix, escore, isdecoy)
 
-    
+
 
     e_ind = np.array([Isotopes[iorig] for iorig in resdict2['iorig']]) >= best_isotopes_calibration
     resdict3 = filter_results(resdict2, e_ind)
@@ -982,7 +984,7 @@ def process_peptides(args):
             resdict2 = filter_results(resdict2, e_ind)
 
         # best_isotopes_calibration, best_scans_calibration = get_best_calibration_thresholds(args, resdict2, Isotopes, Scans, pept_prot, protsN, isdecoy_key, prefix, escore, isdecoy)
-        
+
         e_ind = np.array([Isotopes[iorig] for iorig in resdict2['iorig']]) >= best_isotopes_calibration
         resdict3 = filter_results(resdict2, e_ind)
 
@@ -1007,7 +1009,7 @@ def process_peptides(args):
         filtered_prots = aux.filter(prots_spc.items(), fdr=0.05, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
                                     full_output=True)
         identified_proteins = 0
-        
+
 
         for x in filtered_prots:
             identified_proteins += 1
@@ -2091,7 +2093,7 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
         e_ind = mass_diff <= mass_koef
         resdict2 = filter_results(resdict, e_ind)
 
-        if qdict is False:       
+        if qdict is False:
             pept_prot_local = copy(pept_prot)
             protsN_local = copy(protsN)
         else:
@@ -2112,7 +2114,7 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
             e_ind = np.in1d(resdict2['seqs'], true_seqs)
             resdict2 = filter_results(resdict2, e_ind)
 
-            
+
 
 
 
