@@ -85,6 +85,7 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans, nproc, check
             'pasefmini': 100,
             'htol': 8,
             'itol': 8,
+            'ignore_iso_calib': False,
             'paseftol': 0.05,
             'nm': 0,
             'o': '',
@@ -424,6 +425,9 @@ def keywithmaxval(d):
 def calc_sf_all(v, n, p, prev_best_score=False):
     sf_values = -np.log10(binom.sf(v-1, n, p))
     sf_values[np.isnan(sf_values)] = 0
-    sf_values[np.isinf(sf_values)] = (prev_best_score if prev_best_score is not False else max(sf_values[~np.isinf(sf_values)]) * 2)
+    try:
+        sf_values[np.isinf(sf_values)] = (prev_best_score if prev_best_score is not False else max(sf_values[~np.isinf(sf_values)]) * 2)
+    except:
+        sf_values[np.isinf(sf_values)] = 999
     return sf_values
 

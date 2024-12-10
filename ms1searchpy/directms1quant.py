@@ -109,6 +109,7 @@ def run():
     parser.add_argument('-min_samples', help='minimum number of samples for peptide usage. 0 means 50%% of input files', default=0)
     parser.add_argument('-fold_change', help='FC threshold standard deviations', default=2.0, type=float)
     parser.add_argument('-fold_change_abs', help='Use absolute log2 scale FC threshold instead of standard deviations', action='store_true')
+    parser.add_argument('-fold_change_no_correction', help='fold_change_no_correction', action='store_true')
     parser.add_argument('-bp', help='Experimental. Better percentage', default=80, type=int)
     parser.add_argument('-minl', help='Min peptide length for quantitation', default=7, type=int)
     parser.add_argument('-qval', help='qvalue threshold', default=0.05, type=float)
@@ -313,6 +314,9 @@ def process_files(args):
 
     if not args['fold_change_abs']:
         fold_change = FC_std * fold_change
+
+    if args['fold_change_no_correction']:
+        FC_mean = 0
     logger.info('Absolute FC threshold = %.2f +- %.2f', FC_mean, fold_change)
 
     df_final['decoy'] = df_final['protein'].apply(lambda x: all(z.startswith(decoy_prefix) for z in x.split(';')))
@@ -323,7 +327,6 @@ def process_files(args):
 
     df_final = df_final.sort_values(by=['nummissing', 'intensity_median'], ascending=(True, False))
     df_final = df_final.drop_duplicates(subset=('origseq', 'proteins'))
-
 
     df_final['FC_corrected'] = df_final['FC'] - FC_mean
 
