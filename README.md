@@ -25,13 +25,13 @@ Ivanov et al. DirectMS1: MS/MS-free identification of 1000 proteins of cellular 
 
 ## Installation
 
-Using pip:
-
-    pip install ms1searchpy
-
 It is recommended to additionally install [DeepLC](https://github.com/compomics/DeepLC) version 1.1.2.2 (unofficial fork with small changes). Newer version has some issues right now.
 
     pip install https://github.com/markmipt/DeepLC/archive/refs/heads/alternative_best_model.zip
+
+After that, install ms1searchpy:
+
+    pip install ms1searchpy
 
 This should work on recent versions of Python (3.8-3.10).
 
