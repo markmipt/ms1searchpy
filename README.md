@@ -25,7 +25,7 @@ Ivanov et al. DirectMS1: MS/MS-free identification of 1000 proteins of cellular 
 
 ## Installation
 
-It is recommended to additionally install [DeepLC](https://github.com/compomics/DeepLC) version 1.1.2.2 (unofficial fork with small changes). Newer version has some issues right now.
+It is recommended to additionally install [DeepLC](https://github.com/compomics/DeepLC) version 1.1.2.2 (unofficial fork with small changes). Newer version has some issues right now. It is highly important to install DeepLC before ms1searchpy for outdated packages compatibility!
 
     pip install https://github.com/markmipt/DeepLC/archive/refs/heads/alternative_best_model.zip
 
