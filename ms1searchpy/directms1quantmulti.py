@@ -38,8 +38,9 @@ def run():
     parser.add_argument('-norm', help='LFQ normalization: (1) using median of CONTROL group, default; (2) using median of all groups', default=1, type=int)
     parser.add_argument('-proteins_for_figure', help='path to proteins for figure plotting', default='', type=str)
     parser.add_argument('-figdir', help='path to output folder for figures', default='')
+    parser.add_argument('-min_samples', help='minimum number of non-missing peptide intensities for DirectMS1Quant pairwise comparisons. 0 means 50%% of input files', default=1)
     parser.add_argument('-pep_min_non_missing_samples', help='minimum fraction of files with non missing values for peptide', default=0.5, type=float)
-    parser.add_argument('-min_signif_for_pept', help='minimum number of pairwise DE results where peptide should be significant', default=1, type=int)
+    # parser.add_argument('-min_signif_for_pept', help='minimum number of pairwise DE results where peptide should be significant', default=999, type=int)
     parser.add_argument('-prefix', help='Decoy prefix. Default DECOY_', default='DECOY_', type=str)
     parser.add_argument('-start_stage', help='Can be 1, 2 or 3 to skip any stage which were already done', default=1, type=int)
     args = vars(parser.parse_args())
@@ -95,7 +96,7 @@ def process_files(args):
 
 
     dquant_params_base = {
-        'min_samples': 1,
+        'min_samples': args['min_samples'],
         'fold_change': 2.0,
         'bp': 80,
         'minl': 7,
@@ -109,6 +110,7 @@ def process_files(args):
         'fold_change_abs': '',
         'prefix': args['prefix'],
         'd': args['d'],
+        'fold_change_no_correction': '',
     }
 
 
@@ -159,8 +161,8 @@ def process_files(args):
     logger.info('Total number of quantified peptides: %d', len(allowed_peptides_base))
     allowed_peptides_base_only_sequences = set(k[0] for k in allowed_peptides_base)
 
-    allowed_peptides_up = set(k for k, v in pep_cnt_up.items() if v >= args['min_signif_for_pept'])
-    logger.info('Total number of significant quantified peptides: %d', len(allowed_peptides_up))
+    # allowed_peptides_up = set(k for k, v in pep_cnt_up.items() if v >= args['min_signif_for_pept'])
+    # logger.info('Total number of significant quantified peptides: %d', len(allowed_peptides_up))
 
     replace_label = '_proteins_full.tsv'
     decoy_prefix = args['prefix']
@@ -298,7 +300,7 @@ def process_files(args):
 
         for lbl_name, small_lbls in all_lbls_by_batch.items():
             lbl_len = len(small_lbls)
-            idx_to_keep = df_final[small_lbls].isna().sum(axis=1) <= args['pep_min_non_missing_samples'] * lbl_len
+            idx_to_keep = df_final[small_lbls].isna().sum(axis=1) <= (1 - args['pep_min_non_missing_samples']) * lbl_len
             df_final = df_final[idx_to_keep]
 
         for cc in all_lbls:
@@ -347,11 +349,11 @@ def process_files(args):
 
 
         # idx_to_keep = df_final['origseq'].apply(lambda x: x in allowed_peptides_up)
-        idx_to_keep = df_final.apply(lambda x: (x['origseq'], x['proteins']) in allowed_peptides_up, axis=1)
-        df_final_accurate = df_final[idx_to_keep].copy()
-        df_final_accurate = df_final_accurate[df_final_accurate.groupby('proteins')['origseq'].transform('count') > 1]
-        accurate_proteins = set(df_final_accurate['proteins'])
-        df_final = pd.concat([df_final[df_final['proteins'].apply(lambda x: x not in accurate_proteins)], df_final_accurate])
+        # idx_to_keep = df_final.apply(lambda x: (x['origseq'], x['proteins']) in allowed_peptides_up, axis=1)
+        # df_final_accurate = df_final[idx_to_keep].copy()
+        # df_final_accurate = df_final_accurate[df_final_accurate.groupby('proteins')['origseq'].transform('count') > 1]
+        # accurate_proteins = set(df_final_accurate['proteins'])
+        # df_final = pd.concat([df_final[df_final['proteins'].apply(lambda x: x not in accurate_proteins)], df_final_accurate])
 
 
         df_final['S1_mean'] = df_final[all_lbls].median(axis=1)
