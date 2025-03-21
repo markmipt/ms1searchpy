@@ -1542,7 +1542,7 @@ def process_peptides(args):
         for i in range(max_evals):
 
             # Choose random hyperparameters
-            random_params = {k: np.random.RandomState(seed=SEED).choice(v, 1)[0] for k, v in param_grid.items()}
+            random_params = {k: np.random.RandomState().choice(v, 1)[0] for k, v in param_grid.items()}
 
             # Evaluate randomly selected hyperparameters
             eval_results = objective_pfms(df, random_params, i, threshold)
