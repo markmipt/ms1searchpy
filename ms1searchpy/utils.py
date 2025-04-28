@@ -31,6 +31,8 @@ def get_aa_mass_with_fixed_mods(fmods, fmods_legend):
             psiname, m = mod.split('@')
             mods_custom_dict[psiname] = float(m)
 
+        print(mods_custom_dict)
+
     aa_mass = deepcopy(mass.std_aa_mass)
     aa_to_psi = dict()
 
@@ -75,7 +77,7 @@ def recalc_spc(banned_dict, unstable_prots, prots_spc2):
         tmp[k] = sum(banned_dict.get(l, 1) > 0 for l in prots_spc2[k])
     return tmp
 
-def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans, nproc, check_unique=True):
+def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans, nproc, check_unique=True, systematic_mass_shift=0):
     if os.path.splitext(fname)[-1].lower() == '.mzml':
         args = {
             'file': fname,
@@ -152,6 +154,10 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans, nproc, check
 
     # Remove features using min and max charges
     df_features = df_features[df_features['charge'].apply(lambda x: min_ch <= x <= max_ch)]
+
+    if systematic_mass_shift:
+        df_features['massCalib'] = df_features['massCalib'].apply(lambda x: x * (1 - 1e-6 * systematic_mass_shift))
+        df_features['mz'] = df_features['mz'].apply(lambda x: x * (1 - 1e-6 * systematic_mass_shift))
 
     return df_features
 
@@ -421,7 +427,11 @@ def keywithmaxval(d):
      k=list(d.keys())
      return k[v.index(max(v))]
 
-def calc_sf_all(v, n, p, prev_best_score=False):
+def calc_sf_all(v, n, p, prev_best_score=False, p_array=False):
+    if p_array:
+        p = p.clip(min=0.0001)
+    else:
+        p = max(0.0001, p)
     sf_values = -np.log10(binom.sf(v-1, n, p))
     sf_values[np.isnan(sf_values)] = 0
     sf_values[np.isinf(sf_values)] = (prev_best_score if prev_best_score is not False else max(sf_values[~np.isinf(sf_values)]) * 2)

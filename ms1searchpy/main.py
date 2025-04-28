@@ -36,6 +36,120 @@ import pandas
 from sklearn import metrics
 import csv
 import ast
+from math import factorial
+
+from scipy.spatial import cKDTree
+def RNHS3(spectrum, theoretical, acc, acc_ppm=False, position=False):
+    if 'norm' not in spectrum:
+        spectrum['norm'] = spectrum['Isum']
+    mz_array = spectrum['m/z array']
+    score = 0
+    mult = []
+    match = {}
+    match2 = {}
+    total_matched = 0
+    sumI = 0
+    if '__KDTree' not in spectrum:
+        spectrum['__KDTree'] = cKDTree(mz_array.reshape((mz_array.size, 1)))
+
+    ind_dict = {}
+
+    i_max = 0
+    dist_all = []
+    for ion, fragments in theoretical.items():
+        dist, ind = spectrum['__KDTree'].query(fragments, distance_upper_bound=acc)
+        mask1 = (dist != np.inf)
+
+        ind_dict[ion] = ind
+
+        if acc_ppm:
+            ind = ind.clip(max=mz_array.size-1)
+            nacc = np.where(dist / mz_array[ind] * 1e6 > acc_ppm)[0]
+            mask2 = mask1.copy()
+            mask2[nacc] = False
+        else:
+            mask2 = mask1
+        nmatched = mask2.sum()
+        if nmatched:
+            total_matched += nmatched
+            mult.append(factorial(nmatched))
+            sumi = spectrum['intensity array'][ind[mask2]].sum()
+            i_max = max(i_max, spectrum['intensity array'][ind[mask2]].max())
+            sumI += sumi
+            score += sumi# / spectrum['norm']
+            dist_all.extend(dist[mask2])
+        match[ion] = mask2
+        match2[ion] = mask2
+
+    norm_chimeric = sum(spectrum['intensity array'][spectrum['intensity array'] <= i_max])
+    if i_max != 0:
+        score = score / norm_chimeric
+    else:
+        score = 0
+    # score = score / spectrum['norm']
+
+    if not total_matched:
+        return {'i_matched': [], 'score': 0, 'match': None, 'sumI': 0, 'dist': [], 'total_matched': 0, 'score_std': 0, 'IPGF': 0, 'IPGF2': 0, 'RNHS': 0}
+
+
+    for m in mult:
+        score *= m
+
+    sumI = np.log10(sumI)
+
+    outscore = score
+
+    i_matched = []
+    # i_array = np.append(spectrum['intensity array'], 0)
+    # for ion in [('b', 1), ('y', 1)]:
+    #     ind = ind_dict[ion]
+    #     i_matched.extend(i_array[ind][::-1])
+
+    # i_matched = np.array(i_matched)
+    # i_matched = np.log2(i_matched/i_matched.sum() + 0.001)
+
+    return {'i_matched': i_matched, 'score': outscore, 'match': match, 'sumI': sumI, 'dist': dist_all, 'total_matched': total_matched, 'score_std': 0, 'RNHS': score}
+
+
+
+def get_fragment_mass_tol(spectrum, theor, acc):
+    """A function for obtaining optimal fragment mass tolerance, dynamic range"""
+    acc = acc
+
+    maxfrag_charge = 1
+
+    if '__KDTree' not in spectrum:
+        spectrum['__KDTree'] = cKDTree(spectrum['m/z array'].reshape((spectrum['m/z array'].size, 1)))
+
+    dist_total = np.array([])
+    dist_total_tmp = np.array([])
+    match2 = {}
+    for ion, fragments in theor.items():
+        n = fragments.size
+        dist, ind = spectrum['__KDTree'].query(fragments, distance_upper_bound=acc)
+        mask = (dist != np.inf)
+
+        dist_total = np.append(dist_total, dist[mask] / spectrum['m/z array'][ind[mask]] * 1e6)
+        dist_total_tmp  = np.append(dist_total_tmp, dist[mask])
+        match2[ion] = mask
+
+    yions = match2[('y', 1)]
+    bions = match2[('b', 1)]
+    new_params = {}
+    if dist_total.size:
+        new_params['fmt'] = dist_total
+        new_params['fmt_neutral'] = dist_total_tmp
+        new_params['bions'] = bions
+        new_params['yions'] = yions
+    else:
+        new_params['fmt'] = []
+        new_params['fmt_neutral'] = []
+        new_params['bions'] = []
+        new_params['yions'] = []
+    return new_params
+
+
+
 
 
 logger = logging.getLogger(__name__)
@@ -56,8 +170,71 @@ def worker_RT(qin, qout, shift, step, RC=False, ns=False, nr=False, win_sys=Fals
 
 
 
+def get_best_calibration_thresholds(args, resdict2, Isotopes, Scans, pept_prot, protsN, isdecoy_key, prefix, escore, isdecoy):
 
-def calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=False, p=False):
+    best_isotopes_calibration = args['ci']
+    best_scans_calibration = args['csc']
+    best_ids = 0
+
+    if best_isotopes_calibration == 0:
+        iso_range_check = list(range(2, 5))
+    else:
+        iso_range_check = [best_isotopes_calibration, ]
+
+    if best_scans_calibration == 0:
+        # scans_range_check = list(range(2, 51, 2))
+        scans_range_check = [1,2,3,5,10,20,40]
+    else:
+        scans_range_check = [best_scans_calibration, ]
+
+    for cur_isotopes_calibration in iso_range_check:
+
+        # if best_isotopes_calibration and cur_isotopes_calibration - best_isotopes_calibration >= 3:
+        #     break
+
+        e_ind = np.array([Isotopes[iorig] for iorig in resdict2['iorig']]) >= cur_isotopes_calibration
+        resdict3 = filter_results(resdict2, e_ind)
+
+        for cur_scans_calibration in scans_range_check:
+
+
+            # if best_scans_calibration and cur_scans_calibration - best_scans_calibration >= 10:
+            #     break
+
+            e_ind = np.array([Scans[iorig] for iorig in resdict3['iorig']]) >= cur_scans_calibration
+            resdict3 = filter_results(resdict3, e_ind)
+
+            p1 = set(resdict3['seqs'])
+
+            if len(p1):
+
+                # Calculate basic protein scores including homologues
+                prots_spc, p = calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=False, p=False, hide_output=True)
+
+                filtered_prots000 = aux.filter(prots_spc.items(), fdr=0.05, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
+                                            full_output=True)
+
+                # # Calculate basic protein scores excluding homologues
+                # prots_spc, p = calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=prots_spc, p=p)
+
+
+                # filtered_prots = aux.filter(prots_spc.items(), fdr=0.05, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
+                #                             full_output=True)
+
+                # identified_proteins = len(filtered_prots)
+
+                identified_proteins000 = len(filtered_prots000)
+                identified_proteins = len(filtered_prots000)
+                # print('!', cur_isotopes_calibration, cur_scans_calibration, identified_proteins, identified_proteins000)
+
+                if identified_proteins >= best_ids:
+                    best_ids = identified_proteins
+                    best_isotopes_calibration = cur_isotopes_calibration
+                    best_scans_calibration = cur_scans_calibration
+    return best_isotopes_calibration, best_scans_calibration
+
+
+def calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=False, p=False, hide_output=False):
 
     if best_base_results is not False:
 
@@ -95,7 +272,9 @@ def calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_re
         top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
         top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
         p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
-        logger.info('Probability of random match for theoretical peptide = %.3f', (np.mean(top100decoy_score) / np.mean(top100decoy_N)))
+        # logger.info('Probability of random match for theoretical peptide = %.3f', (np.mean(top100decoy_score) / np.mean(top100decoy_N)))
+        if not hide_output:
+            logger.info('Probability of random match for theoretical peptide = %.3f', (np.mean(top100decoy_score) / np.mean(top100decoy_N)))
 
 
     prots_spc = dict()
@@ -506,12 +685,15 @@ def process_file(args):
         if '-OH' in mass.std_aa_mass:
             del mass.std_aa_mass['-OH']
 
-        try:
+        # try:
+        if 1:
             args['file'] = filename
             process_peptides(deepcopy(args))
-        except Exception as e:
-            logger.error(e)
-            logger.error('Search is failed for file: %s', filename)
+        else:
+            pass
+        # except Exception as e:
+        #     logger.error(e)
+        #     logger.error('Search is failed for file: %s', filename)
     return 1
 
 
@@ -537,7 +719,7 @@ def prepare_peptide_processor(fname, args):
 
     logger.info('Reading file %s', fname)
 
-    df_features = utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans, args['nproc'], args['check_unique'])
+    df_features = utils.iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans, args['nproc'], args['check_unique'], args['systematic_mass_shift'])
 
     # Sort by neutral mass
     df_features = df_features.sort_values(by='massCalib')
@@ -625,8 +807,8 @@ def process_peptides(args):
         fname = fname_orig
 
     fdr = args['fdr'] / 100
-    min_isotopes_calibration = args['ci']
-    min_scans_calibration = args['csc']
+    # min_isotopes_calibration = args['ci']
+    # min_scans_calibration = args['csc']
     try:
         outpath = args['o']
     except:
@@ -705,20 +887,38 @@ def process_peptides(args):
 
 
 
-    e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
+    # e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
+    # resdict2 = filter_results(resdict, e_ind)
+
+    # e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= min_scans_calibration
+    # resdict2 = filter_results(resdict2, e_ind)
+
+    # e_ind = resdict2['mods'] == 0
+    # resdict2 = filter_results(resdict2, e_ind)
+
+    e_ind = resdict['mods'] == 0
     resdict2 = filter_results(resdict, e_ind)
-
-    e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= min_scans_calibration
-    resdict2 = filter_results(resdict2, e_ind)
-
-    e_ind = resdict2['mods'] == 0
-    resdict2 = filter_results(resdict2, e_ind)
 
     if args['mc'] > 0:
         e_ind = resdict2['mc'] == 0
         resdict2 = filter_results(resdict2, e_ind)
 
-    p1 = set(resdict2['seqs'])
+    best_isotopes_calibration, best_scans_calibration = get_best_calibration_thresholds(args, resdict2, Isotopes, Scans, pept_prot, protsN, isdecoy_key, prefix, escore, isdecoy)
+
+
+    e_ind = np.array([Isotopes[iorig] for iorig in resdict2['iorig']]) >= best_isotopes_calibration
+    resdict3 = filter_results(resdict2, e_ind)
+
+    e_ind = np.array([Scans[iorig] for iorig in resdict3['iorig']]) >= best_scans_calibration
+    resdict3 = filter_results(resdict3, e_ind)
+
+    logger.info('isotopes and scans thresholds selected for mass and RT calibration = %d and %d', best_isotopes_calibration, best_scans_calibration)
+
+    p1 = set(resdict3['seqs'])
+
+
+
+    # p1 = set(resdict2['seqs'])
 
     if len(p1):
 
@@ -857,6 +1057,8 @@ def process_peptides(args):
         df1['nIsotopes'] = [Isotopes[iorig] for iorig in df1['iorig'].values]
         df1['nScans'] = [Scans[iorig] for iorig in df1['iorig'].values]
 
+
+
         # df1['orig_md'] = true_md
 
 
@@ -866,7 +1068,12 @@ def process_peptides(args):
             if any(protein in true_prots for protein in proteins):
                 true_seqs.add(pep)
 
-        df1['top_peps'] = (df1['mc'] == 0) & (df1['seqs'].apply(lambda x: x in true_seqs) & (df1['nIsotopes'] >= min_isotopes_calibration) & (df1['nScans'] >= min_scans_calibration))
+        df1['Is'] = [Is[iorig] for iorig in df1['iorig'].values]
+
+        # df1['top_peps'] = (df1['mc'] == 0) & (df1['seqs'].apply(lambda x: x in true_seqs) & (df1['nIsotopes'] >= min_isotopes_calibration) & (df1['nScans'] >= min_scans_calibration))
+        df1['top_peps'] = (df1['mc'] == 0) & (df1['seqs'].apply(lambda x: x in true_seqs) & (df1['nIsotopes'] >= best_isotopes_calibration) & (df1['nScans'] >= best_scans_calibration))
+        # df1['top_peps'] = (df1['Is'] >= scoreatpercentile(df1['Is'], 90))
+    
 
         mass_calib_arg = args['mcalib']
 
@@ -918,13 +1125,27 @@ def process_peptides(args):
 
             df1['mass diff q median'] = df1['qpreds'].apply(lambda x: cor_dict[x])
             df1['mass diff corrected'] = df1['mass diff'] - df1['mass diff q median']
+            median_tmp_shift = 0
 
         else:
+            median_tmp_shift = 0
             df1['qpreds'] = 0
             df1['mass diff q median'] = 0
-            df1['mass diff corrected'] = df1['mass diff']
+            df1['mass diff corrected'] = df1['mass diff'] - median_tmp_shift
 
 
+
+        if args['md_correction'] == 'Orbi':
+            logger.info('Using Orbi mass error correction. All errors are normalized to 600 m/z value...')
+            df1['mzraw'] = mzraw[df1['iorig'].values]
+            df1['mass diff corrected'] = df1['mass diff corrected'] / np.sqrt(df1['mzraw']) * np.sqrt(600)
+        
+        elif args['md_correction'] == 'Icr':
+            logger.info('Using Icr mass error correction. All errors are normalized to 600 m/z value...')
+            df1['mzraw'] = mzraw[df1['iorig'].values]
+            df1['mass diff corrected'] = df1['mass diff corrected'] / df1['mzraw'] * 600
+        else:
+            pass
 
 
         mass_left = args['ptol']
@@ -948,6 +1169,8 @@ def process_peptides(args):
         logger.info('Estimated mass shift: %.3f ppm', mass_shift_cor)
         logger.info('Estimated mass sigma: %.3f ppm', mass_sigma_cor)
 
+        mass_shift_cor = mass_shift_cor + median_tmp_shift
+
         out_log.write('Estimated mass shift: %.3f ppm\n' % (mass_shift_cor, ))
         out_log.write('Estimated mass sigma: %.3f ppm\n' % (mass_sigma_cor, ))
 
@@ -962,32 +1185,49 @@ def process_peptides(args):
         resdict = filter_results(resdict, e_ind)
 
 
-        e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
+        # e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
+        # resdict2 = filter_results(resdict, e_ind)
+
+
+        # e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= min_scans_calibration
+        # resdict2 = filter_results(resdict2, e_ind)
+
+        # e_ind = resdict2['mods'] == 0
+        # resdict2 = filter_results(resdict2, e_ind)
+
+
+        # if args['mc'] > 0:
+        #     e_ind = resdict2['mc'] == 0
+        #     resdict2 = filter_results(resdict2, e_ind)
+
+        # p1 = set(resdict2['seqs'])
+
+
+
+        e_ind = resdict['mods'] == 0
         resdict2 = filter_results(resdict, e_ind)
-
-
-        e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= min_scans_calibration
-        resdict2 = filter_results(resdict2, e_ind)
-
-        e_ind = resdict2['mods'] == 0
-        resdict2 = filter_results(resdict2, e_ind)
-
 
         if args['mc'] > 0:
             e_ind = resdict2['mc'] == 0
             resdict2 = filter_results(resdict2, e_ind)
 
-        p1 = set(resdict2['seqs'])
+        best_isotopes_calibration, best_scans_calibration = get_best_calibration_thresholds(args, resdict2, Isotopes, Scans, pept_prot, protsN, isdecoy_key, prefix, escore, isdecoy)
+
+        e_ind = np.array([Isotopes[iorig] for iorig in resdict2['iorig']]) >= best_isotopes_calibration
+        resdict3 = filter_results(resdict2, e_ind)
+
+        e_ind = np.array([Scans[iorig] for iorig in resdict3['iorig']]) >= best_scans_calibration
+        resdict3 = filter_results(resdict3, e_ind)
+
+        logger.info('isotopes and scans thresholds selected for RT calibration = %d and %d', best_isotopes_calibration, best_scans_calibration)
+
+        p1 = set(resdict3['seqs'])
 
 
         # Calculate basic protein scores including homologues
         prots_spc, p = calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=False, p=False)
         # Calculate basic protein scores excluding homologues
         prots_spc, p = calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=prots_spc, p=p)
-
-
-
-
 
         filtered_prots = aux.filter(prots_spc.items(), fdr=0.05, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
                                     full_output=True)
@@ -1006,15 +1246,31 @@ def process_peptides(args):
         logger.info('Running RT prediction...')
 
 
-        e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= 1
-        resdict2 = filter_results(resdict, e_ind)
+        # e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= 1
+        # resdict2 = filter_results(resdict, e_ind)
 
-        e_ind = resdict2['mods'] == 0
-        resdict2 = filter_results(resdict2, e_ind)
+        # e_ind = resdict2['mods'] == 0
+        # resdict2 = filter_results(resdict2, e_ind)
+
+        # if args['mc'] > 0:
+        #     e_ind = resdict2['mc'] == 0
+        #     resdict2 = filter_results(resdict2, e_ind)
+
+
+        e_ind = resdict['mods'] == 0
+        resdict2 = filter_results(resdict, e_ind)
 
         if args['mc'] > 0:
             e_ind = resdict2['mc'] == 0
             resdict2 = filter_results(resdict2, e_ind)
+
+
+        e_ind = np.array([Isotopes[iorig] for iorig in resdict2['iorig']]) >= best_isotopes_calibration
+        resdict2 = filter_results(resdict2, e_ind)
+
+        e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= best_scans_calibration
+        resdict2 = filter_results(resdict2, e_ind)
+
 
 
         true_seqs = []
@@ -1043,8 +1299,25 @@ def process_peptides(args):
         true_seqs = true_seqs[e_ind]
         true_rt = true_rt[e_ind]
 
-        true_seqs = true_seqs[:2500]
-        true_rt = true_rt[:2500]
+
+        true_seqs_unique = []
+        true_rt_unique = []
+        added_peps = set()
+        added_cnt = 0
+        for pepseq, peprt in zip(true_seqs, true_rt):
+            if pepseq not in added_peps:
+                true_seqs_unique.append(pepseq)
+                true_rt_unique.append(peprt)
+                added_peps.add(pepseq)
+                added_cnt += 1
+            if added_cnt >= 2500:
+                break
+        true_seqs = np.array(true_seqs_unique)
+        true_rt = np.array(true_rt_unique)
+
+
+        # true_seqs = true_seqs[:2500]
+        # true_rt = true_rt[:2500]
 
         per_ind = np.random.RandomState(seed=SEED).permutation(len(true_seqs))
         true_seqs = true_seqs[per_ind]
@@ -1337,6 +1610,28 @@ def process_peptides(args):
 
             rt_diff_tmp = df_for_check['pr'] - df_for_check['tr']
 
+
+            if args['rd_correction'] == 1:
+                df_for_check['rt_diff_tmp'] = df_for_check['pr'] - df_for_check['tr']
+                df_for_check['plen'] = df_for_check['seq'].apply(lambda x: len(x))
+                print(df_for_check.groupby('plen')['rt_diff_tmp'].median())
+                rt_cor_dict = df_for_check.groupby('plen')['rt_diff_tmp'].median().to_dict()
+
+                min_key_cor = min(list(rt_cor_dict.keys()))
+                max_key_cor = max(list(rt_cor_dict.keys()))
+
+                for plen in range(args['lmin'], args['lmax']+1):
+                    if plen not in rt_cor_dict:
+                        if plen < min_key_cor:
+                            rt_cor_dict[plen] = rt_cor_dict[min_key_cor]
+                        elif plen > max_key_cor:
+                            rt_cor_dict[plen] = rt_cor_dict[max_key_cor]
+                        else:
+                            print('???')
+
+                rt_diff_tmp = df_for_check.apply(lambda x: x['rt_diff_tmp'] - rt_cor_dict[x['plen']], axis=1)
+
+
             XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
 
         else:
@@ -1386,7 +1681,15 @@ def process_peptides(args):
 
         df_for_check['pr'] =  dlc.make_preds(seq_df=df_for_check)
 
+
+        if args['rd_correction'] == 1:
+            df_for_check['plen'] = df_for_check['seq'].apply(lambda x: len(x))
+            df_for_check['pr'] = df_for_check.apply(lambda x: x['pr'] - rt_cor_dict[x['plen']], axis=1)
+
+
         pepdict_batch = df_for_check.set_index('seq')['pr'].to_dict()
+
+
 
         pepdict.update(pepdict_batch)
 
@@ -1413,6 +1716,34 @@ def process_peptides(args):
     logger.info('RT prediction was finished')
 
 
+
+    rt_diff = (np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred - XRT_shift) / RT_sigma
+
+    # e_ind = resdict['mods'] == 0
+    # resdict2 = filter_results(resdict, e_ind)
+
+    # if args['mc'] > 0:
+    #     e_ind = resdict2['mc'] == 0
+    #     resdict2 = filter_results(resdict2, e_ind)
+
+    # best_isotopes_calibration, best_scans_calibration = get_best_calibration_thresholds(args, resdict2, Isotopes, Scans, pept_prot, protsN, isdecoy_key, prefix, escore, isdecoy)
+
+    # e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= best_isotopes_calibration
+    # resdict = filter_results(resdict, e_ind)
+    # rt_diff = rt_diff[e_ind]
+
+    # e_ind = np.array([Scans[iorig] for iorig in resdict['iorig']]) >= best_scans_calibration
+    # resdict = filter_results(resdict, e_ind)
+    # rt_diff = rt_diff[e_ind]
+
+    # logger.info('isotopes and scans thresholds selected for RT calibration = %d and %d', best_isotopes_calibration, best_scans_calibration)
+
+
+
+
+
+
+
     with open(base_out_name + '_protsN.tsv', 'w') as output:
         output.write('dbname\ttheor peptides\n')
         for k, v in protsN.items():
@@ -1435,7 +1766,7 @@ def process_peptides(args):
 
     mass_diff = (resdict['md'] - mass_shift) / (mass_sigma)
 
-    rt_diff = (np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred - XRT_shift) / RT_sigma
+    # rt_diff = (np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred - XRT_shift) / RT_sigma
 
     ## Will it override the settings provided in args? :k
     prefix = 'DECOY_'
@@ -1484,6 +1815,7 @@ def process_peptides(args):
             'decoy1',
             'decoy2',
             'top_25_targets',
+            'i_matched_out',
             'G',
         }
 
@@ -1595,6 +1927,7 @@ def process_peptides(args):
     df1['Scans'] = Scans[df1['iorig'].values]
     df1['Isotopes'] = Isotopes[df1['iorig'].values]
     df1['mzraw'] = mzraw[df1['iorig'].values]
+    df1['nmasses'] = nmasses[df1['iorig'].values]
     df1['rt'] = rts[df1['iorig'].values]
     df1['av'] = avraw[df1['iorig'].values]
     df1['ch'] = charges[df1['iorig'].values]
@@ -1640,6 +1973,419 @@ def process_peptides(args):
     df1['mass_diff_abs_pnorm'] = df1['mass_diff_abs'] / (df1.groupby('ids')['mass_diff_abs'].transform('sum') + 1e-2)
 
     df1['id_count'] = df1.groupby('ids')['mass_diff'].transform('count')
+
+
+
+    # Use MS2 information
+    if args['ms2mzml']:
+        from pyteomics import mzml, mgf
+        from identipy import utils as ms2utils
+        from identipy.cutils import RNHS_fast_basic as score_fast_basic
+        from identipy.scoring import RNHS
+        from ms1searchpy import utils as ms1utils
+
+        options_for_ms2 = {
+            'maxpeaks': 500000,
+            'minpeaks': 2,
+            'dynrange': 1000,
+            'acc': args['acc_frag'],
+            'acc_frag': args['acc_frag'],
+            'tags': None,
+            'deisotope': None,
+            'min_mz': 100,
+            'maxcharge': None,
+            'mincharge': None,
+            'min_ucharge': 1,
+            'max_ucharge': 1,
+            'nterm_mass': 1.007825,
+            'cterm_mass': 17.002735,
+            'min_matched': 4,
+            'acc_frag_ppm': False,
+        }
+
+
+
+
+
+
+
+        # all_msms_int = defaultdict(list)
+        # mzml_flag = True
+        # if args['ms2mzml'].lower().endswith('.mzml'):
+        #     a = mzml.read(args['ms2mzml'], use_index=False)
+        # else:
+        #     a = mgf.read(args['ms2mzml'], read_charges=False, use_index=False)
+        #     mzml_flag = False
+        # for z in a:
+        #     if not mzml_flag or z['ms level'] == 2:
+
+        #         if args['systematic_mass_shift']:
+        #             z['m/z array'] = z['m/z array'] * (1 - 1e-6 * args['systematic_mass_shift'])
+
+        #             if mzml_flag:
+        #                 z['precursorList']['precursor'][0]['selectedIonList']['selectedIon'][0]['selected ion m/z'] = z['precursorList']['precursor'][0]['selectedIonList']['selectedIon'][0]['selected ion m/z'] * (1 - 1e-6 * args['systematic_mass_shift'])
+        #                 z['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z'] = z['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z'] * (1 - 1e-6 * args['systematic_mass_shift'])
+        #             else:
+        #                 z['params']['pepmass'][0] = z['params']['pepmass'][0] * (1 - 1e-6 * args['systematic_mass_shift'])
+
+
+
+        #         spectrum = ms2utils.preprocess_spectrum(z, options_for_ms2)
+        #         if spectrum is not None:
+        #             if mzml_flag:
+        #                 RT = float(z['scanList']['scan'][0]['scan start time'])
+        #             else:
+        #                 RT = float(z['params']['rtinseconds']) / 60
+        #             all_msms_int[RT].append(spectrum)
+
+        # msms_rt_sorted = np.array(sorted(all_msms_int.keys()))
+
+        # shift = args['rt_shift']
+
+        # if not args['isowidth']:
+        #     iso_up = False
+        #     iso_down = False
+        # else:
+        #     iso_up = args['isowidth']
+        #     iso_down = args['isowidth']
+
+        # hyperscore_out = []
+        # spec_best_out = []
+        # rt_shift_out = []
+
+        # theor_dict = dict()
+        # hyper_res = dict()
+
+        # print('HERE00')
+        # theor_spec_count = 0
+        # theor_spec_count2 = 0
+
+        # for seqm, m, mz, rt, ch in zip(df1['peptide'].values, df1['nmasses'].values, df1['mzraw'].values, df1['rt'].values, df1['ch'].values):
+
+        #     pep_count_msms = 0
+        #     hf_best = 0
+        #     hf3_best = 0
+        #     rt_shift_current = -100
+        #     match_best = dict()
+        #     i_matched_best = []
+        #     reshaped = False
+        #     start = msms_rt_sorted.searchsorted(rt - shift)
+        #     end = msms_rt_sorted.searchsorted(rt + shift, side='right')
+        #     for RT in msms_rt_sorted[start:end]:
+        #         for s in all_msms_int[RT]:
+
+        #             if iso_up is False:
+        #                 iso_up = float(s['precursorList']['precursor'][0]['isolationWindow']['isolation window upper offset'])
+        #                 iso_down = float(s['precursorList']['precursor'][0]['isolationWindow']['isolation window lower offset'])
+
+        #             if mzml_flag:
+        #                 nm_ms2 = s['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z']
+        #             else:
+        #                 nm_ms2 = s['params']['pepmass'][0]
+
+        #             if nm_ms2 - iso_down - 1 <= mz <= nm_ms2 + iso_up:
+
+        #                 pep_count_msms += 1
+
+        #                 stored = 0
+        #                 s_id = s['index']
+        #                 if (seqm, s_id) in hyper_res:
+
+        #                     hf_base, score, score3 = hyper_res[(seqm, s_id)]
+        #                     if score is not False:
+        #                         stored = 2
+        #                     else:
+        #                         stored = 1
+
+        #                 if stored == 0:
+
+        #                     if seqm not in theor_dict:
+        #                         theor_spec_count += 1
+        #                         theor, theoretical_set = ms2utils.theor_spectrum(seqm, maxcharge=1, aa_mass=kwargs['aa_mass'], reshape=False,
+        #                                                                         acc_frag=options_for_ms2['acc_frag'], nterm_mass = options_for_ms2['nterm_mass'],
+        #                                                                         cterm_mass = options_for_ms2['cterm_mass'], nm=m)
+        #                         theor_dict[seqm] = (theor, theoretical_set, reshaped)
+        #                     else:
+        #                         theor, theoretical_set, reshaped = theor_dict[seqm]
+
+        #                     hf_base = score_fast_basic(s['fastset'], s['idict'], theoretical_set, 5)
+        #                     hyper_res[(seqm, s_id)] = [hf_base, False, False]
+
+        #                 if hf_base[0]:
+        #                     if hf_base[1] >= hf_best:
+
+        #                         hf_best = hf_base[1]
+        #                         spec_best = (s, theor)
+        #                         rt_shift_current = rt - RT
+
+        #     if hf_best:
+        #         hyperscore_out.append(hf_best)
+        #         rt_shift_out.append(rt_shift_current)
+        #         spec_best_out.append(spec_best)
+
+        # fragmassdif = []
+
+        # for hs, res in sorted(list(zip(hyperscore_out, spec_best_out)), key=lambda x: -x[0])[:1000]:
+        #     theor = ms2utils.reshape_theor_spectrum(res[1])
+        #     tres = get_fragment_mass_tol(res[0], theor, acc=options_for_ms2['acc_frag'])
+        #     # fragmassdif.extend(tres['fmt'])
+        #     fragmassdif.append(np.median(tres['fmt']) * 2)
+
+        # fragmassdif = np.array(fragmassdif)
+
+        # # best_frag_mt = scoreatpercentile(fragmassdif, 68) * 4
+        # best_frag_mt = np.median(fragmassdif) * 2
+
+        # logger.info('NEW FRAGMENT MASS TOLERANCE ppm = %s', best_frag_mt)
+        # options_for_ms2['acc_frag_ppm'] = best_frag_mt
+
+        # MS1MS2RT_shift, MS1MS2RT_sigma, MS1MS2RT_covvalue = calibrate_RT_gaus_full(rt_shift_out)
+        # print(MS1MS2RT_shift, MS1MS2RT_sigma)
+        # shift_l = max(MS1MS2RT_shift - 3 * MS1MS2RT_sigma, -shift)
+        # shift_r = min(MS1MS2RT_shift + 3 * MS1MS2RT_sigma, shift)
+        # logger.info('NEW RT shift left = %s', shift_l)
+        # logger.info('NEW RT shift right = %s', shift_r)
+
+
+
+
+
+        shift = args['rt_shift']
+
+        all_msms_int = defaultdict(list)
+        mzml_flag = True
+        if args['ms2mzml'].lower().endswith('.mzml'):
+            a = mzml.read(args['ms2mzml'], use_index=False)
+        else:
+            a = mgf.read(args['ms2mzml'], read_charges=False, use_index=False)
+            mzml_flag = False
+        for z in a:
+            if not mzml_flag or z['ms level'] == 2:
+
+                if args['systematic_mass_shift']:
+                    z['m/z array'] = z['m/z array'] * (1 - 1e-6 * args['systematic_mass_shift'])
+
+                    if mzml_flag:
+                        z['precursorList']['precursor'][0]['selectedIonList']['selectedIon'][0]['selected ion m/z'] = z['precursorList']['precursor'][0]['selectedIonList']['selectedIon'][0]['selected ion m/z'] * (1 - 1e-6 * args['systematic_mass_shift'])
+                        z['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z'] = z['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z'] * (1 - 1e-6 * args['systematic_mass_shift'])
+                    else:
+                        z['params']['pepmass'][0] = z['params']['pepmass'][0] * (1 - 1e-6 * args['systematic_mass_shift'])
+
+
+
+                spectrum = ms2utils.preprocess_spectrum(z, options_for_ms2)
+                if spectrum is not None:
+                    if mzml_flag:
+                        RT = float(z['scanList']['scan'][0]['scan start time'])
+                    else:
+                        RT = float(z['params']['rtinseconds']) / 60
+                    all_msms_int[RT].append(spectrum)
+
+        msms_rt_sorted = np.array(sorted(all_msms_int.keys()))
+
+        if not args['isowidth']:
+            iso_up = False
+            iso_down = False
+        else:
+            iso_up = args['isowidth']
+            iso_down = args['isowidth']
+
+        hyperscore_out = []
+        hyperscore3_out = []
+        rt_shift_out = []
+        pep_count_msms_out = []
+        match_out = []
+        i_matched_out = []
+        spec_best_out = []
+
+        theor_dict = dict()
+        hyper_res = dict()
+
+        print('HERE0')
+        theor_spec_count = 0
+        theor_spec_count2 = 0
+
+        for seqm, m, mz, rt, ch in zip(df1['peptide'].values, df1['nmasses'].values, df1['mzraw'].values, df1['rt'].values, df1['ch'].values):
+
+            pep_count_msms = 0
+            hf_best = 0
+            hf3_best = 0
+            spec_best = False
+            rt_shift_current = -100
+            match_best = dict()
+            i_matched_best = []
+            reshaped = False
+            # start = msms_rt_sorted.searchsorted(rt + shift_l)
+            # end = msms_rt_sorted.searchsorted(rt + shift_r, side='right')
+            start = msms_rt_sorted.searchsorted(rt - shift)
+            end = msms_rt_sorted.searchsorted(rt + shift, side='right')
+            for RT in msms_rt_sorted[start:end]:
+                for s in all_msms_int[RT]:
+
+                    if iso_up is False:
+                        iso_up = float(s['precursorList']['precursor'][0]['isolationWindow']['isolation window upper offset'])
+                        iso_down = float(s['precursorList']['precursor'][0]['isolationWindow']['isolation window lower offset'])
+
+                    if mzml_flag:
+                        nm_ms2 = s['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z']
+                    else:
+                        nm_ms2 = s['params']['pepmass'][0]
+
+                    if nm_ms2 - iso_down - 1 <= mz <= nm_ms2 + iso_up:
+
+                        pep_count_msms += 1
+
+                        stored = 0
+                        s_id = s['index']
+                        if (seqm, s_id) in hyper_res:
+
+                            hf_base, score, score3 = hyper_res[(seqm, s_id)]
+                            if score is not False:
+                                stored = 2
+                            else:
+                                stored = 1
+
+                        if stored == 0:
+
+                            if seqm not in theor_dict:
+                                theor_spec_count += 1
+                                theor, theoretical_set = ms2utils.theor_spectrum(seqm, maxcharge=1, aa_mass=kwargs['aa_mass'], reshape=False,
+                                                                                acc_frag=options_for_ms2['acc_frag'], nterm_mass = options_for_ms2['nterm_mass'],
+                                                                                cterm_mass = options_for_ms2['cterm_mass'], nm=m)
+                                theor_dict[seqm] = (theor, theoretical_set, reshaped)
+                            else:
+                                theor, theoretical_set, reshaped = theor_dict[seqm]
+
+                            hf_base = score_fast_basic(s['fastset'], s['idict'], theoretical_set, options_for_ms2['min_matched'])
+                            hyper_res[(seqm, s_id)] = [hf_base, False, False]
+
+                        if hf_base[0]:
+                            if hf_base[1] >= hf_best:
+
+                                if stored != 2:
+
+                                    if not reshaped:
+                                        theor = ms2utils.reshape_theor_spectrum(theor)
+                                        reshaped = True
+                                        theor_dict[seqm] = (theor, theoretical_set, reshaped)
+                                        theor_spec_count2 += 1
+
+                                    score = RNHS(s, theor, options_for_ms2['acc_frag'], options_for_ms2['acc_frag_ppm'])
+                                    score3 = RNHS3(s, theor, options_for_ms2['acc_frag'], options_for_ms2['acc_frag_ppm'])
+                                    hyper_res[(seqm, s_id)] = [hf_base, score, score3]
+
+                                if score['score'] > hf_best:
+                                    hf_best = score['score']
+                                    hf3_best = score3['score']
+                                    match_best = score['match']
+                                    rt_shift_current = rt - RT
+                                    i_matched_best = score3['i_matched']
+                                    spec_best = (s, theor)
+            hyperscore_out.append(hf_best)
+            hyperscore3_out.append(hf3_best)
+            rt_shift_out.append(rt_shift_current)
+            pep_count_msms_out.append(pep_count_msms)
+            match_out.append(match_best)
+            i_matched_out.append(i_matched_best)
+            spec_best_out.append(spec_best)
+
+
+        print(match_out[0])
+
+        df1['hyperscore'] = hyperscore_out
+        df1['hyperscore3'] = hyperscore3_out
+        df1['rt_shift_out'] = rt_shift_out
+        df1['pep_count_msms_out'] = pep_count_msms_out
+        df1['i_matched_out'] = i_matched_out
+        df1['b_count'] = [(sum(z.get(('b', 1), {})) if z is not None else 0) for z in match_out]
+        df1['y_count'] = [(sum(z.get(('y', 1), {})) if z is not None else 0) for z in match_out]
+
+        # import ms2pip
+        # dfx = df1[(df1['hyperscore'] > 0)].copy()
+        # dfx = dfx.drop_duplicates(subset=['seqs', 'ch'])
+        # dfx['spec_id'] = range(1, len(dfx)+1)
+        # dfx['spec_id'] = dfx['spec_id'].astype(str)
+        # dfx['modifications'] = [utils.mods_for_deepLC(seq, aa_to_psi) for seq in dfx['seqs'].values]
+        # dfx['charge'] = dfx['ch']
+        # dfx['peptide'] = dfx['seqs']
+        # dfx[['spec_id', 'modifications', 'peptide', 'charge']].to_csv('/home/mark/msallsearchpy2/test_ms2pip.peprec', index=False, sep='\t')
+        # out_fragments = ms2pip.predict_batch('/home/mark/msallsearchpy2/test_ms2pip.peprec')
+        # pred_i_dict = {}
+        # for pepseq, pepch, pr in zip(dfx['seqs'].values, dfx['ch'].values, out_fragments):
+        #     i_predicted = np.append(pr.predicted_intensity['b'], pr.predicted_intensity['y'])
+        #     pred_i_dict[(pepseq, pepch)] = i_predicted
+
+        # def get_correlation_with_preds(x, pred_i_dict):
+        #     i_matched = x['i_matched_out']
+        #     if len(i_matched):
+        #         if (x['seqs'], x['ch']) in pred_i_dict:
+        #             i_predicted = pred_i_dict[(x['seqs'], x['ch'])]
+        #             return np.corrcoef(i_matched, i_predicted)[0][1]
+        #         else:
+        #             return 0
+        #     else:
+        #          return 0
+
+        # df1['MS2PIP_corr'] = df1.apply(get_correlation_with_preds, pred_i_dict=pred_i_dict, axis=1)
+
+
+        kdict = dict()
+        ndict = dict()
+        kdict[('b', 1)] = dict()
+        kdict[('y', 1)] = dict()
+        ndict[('b', 1)] = dict()
+        ndict[('y', 1)] = dict()
+        for plen, match_best, dec_lbl in zip(df1['plen'].values, match_out, df1['decoy'].values):
+            if dec_lbl:
+                if plen not in kdict[('b', 1)]:
+                    kdict[('b', 1)][plen] = match_best.get(('b', 1), np.array([0] * (plen-1))).astype(int)
+                    ndict[('b', 1)][plen] = np.array([1] * (plen-1))
+                    kdict[('y', 1)][plen] = match_best.get(('y', 1), np.array([0] * (plen-1))).astype(int)
+                    ndict[('y', 1)][plen] = np.array([1] * (plen-1))
+                else:
+                    kdict[('b', 1)][plen] += match_best.get(('b', 1), np.array([0] * (plen-1))).astype(int)
+                    ndict[('b', 1)][plen] += 1
+                    kdict[('y', 1)][plen] += match_best.get(('y', 1), np.array([0] * (plen-1))).astype(int)
+                    ndict[('y', 1)][plen] += 1
+
+        pdict = dict()
+        pdict[('b', 1)] = dict()
+        pdict[('y', 1)] = dict()
+        for plen in range(args['lmin'], args['lmax']+1, 1):
+            if plen not in kdict[('b', 1)]:
+                pdict[('b', 1)][plen] = np.array([0.0001] * (plen-1))
+                pdict[('y', 1)][plen] = np.array([0.0001] * (plen-1))
+            else:
+                pdict[('b', 1)][plen] = (kdict[('b', 1)][plen] / ndict[('b', 1)][plen]).clip(min=0.0001)
+                pdict[('y', 1)][plen] = (kdict[('y', 1)][plen] / ndict[('y', 1)][plen]).clip(min=0.0001)
+
+
+        print(theor_spec_count, theor_spec_count2)
+
+        print(kdict[('b', 1)][10])
+        print(ndict[('b', 1)][10])
+        print(kdict[('y', 1)][10])
+        print(ndict[('y', 1)][10])
+        print(pdict[('b', 1)][10])
+        print(pdict[('y', 1)][10])
+
+        v_arr = []
+        n_arr = []
+        p_arr = []
+
+        for plen, match_best in zip(df1['plen'].values, match_out):
+
+            b_tmp = match_best.get(('b', 1), np.array([False] * (plen-1)))
+            y_tmp = match_best.get(('y', 1), np.array([False] * (plen-1)))
+            p_arr.append((np.mean(pdict[('b', 1)][plen][b_tmp]) + np.mean(pdict[('y', 1)][plen][y_tmp])) / 2)
+            v_arr.append(sum(b_tmp) + sum(y_tmp))
+            n_arr.append(2*(plen-1))
+
+        p_arr = np.array(p_arr)
+        v_arr = np.array(v_arr)
+        n_arr = np.array(n_arr)
+
+        df1['sf'] = utils.calc_sf_all(v_arr, n_arr, p_arr, p_array=True)
 
     #limited CSD information
     if args['csd'] == 1:
