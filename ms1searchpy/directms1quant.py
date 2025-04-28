@@ -109,7 +109,7 @@ def run():
     parser.add_argument('-min_samples', help='minimum number of samples for peptide usage. 0 means 50%% of input files', default=0)
     parser.add_argument('-fold_change', help='FC threshold standard deviations', default=2.0, type=float)
     parser.add_argument('-fold_change_abs', help='Use absolute log2 scale FC threshold instead of standard deviations', action='store_true')
-    parser.add_argument('-bp', help='Experimental. Better percentage', default=80, type=int)
+    # parser.add_argument('-bp', help='Experimental. Better percentage', default=80, type=int)
     parser.add_argument('-minl', help='Min peptide length for quantitation', default=7, type=int)
     parser.add_argument('-qval', help='qvalue threshold', default=0.05, type=float)
     parser.add_argument('-intensity_norm', help='Intensity normalization: 0-none, 1-median, 2-sum 1000 most intense peptides (default)', default=2, type=int)
@@ -356,13 +356,14 @@ def process_files(args):
     FC_pools = dict()
     FC_pools['common'] = dict()
 
-    df1_decoy_grouped_common = df_final.groupby('iq')
+    df1_decoy_grouped_common = df_final[df_final['decoy']].groupby('iq')
     for group_name, df_group in df1_decoy_grouped_common:
-        FC_pools['common'][group_name] = list(df_group['FC_abs'].values)
+        FC_pools['common'][group_name] = list(df_group[['FC_abs', 'p-value']].values)
 
     df_final['sign'] = False
 
     df1_grouped = df_final.groupby('proteins')
+  
 
     for group_name, df_group in df1_grouped:
 
@@ -371,23 +372,26 @@ def process_files(args):
         idx = sorted(list(prot_idx))
         idx_len = len(idx)
 
-        loc_pos_values = df_final.loc[idx, 'FC_gr_mean'].values
+        loc_pos_pvalues = df_final.loc[idx, 'p-value'].values
 
+        loc_pos_values = df_final.loc[idx, 'FC_gr_mean'].values
         loc_pos_values = np.abs(loc_pos_values)
 
         pos_missing_list = list(df_final.loc[idx, 'iq'].values)
         better_res = np.array([0] * idx_len)
         for _ in range(100):
-            random_list = [random.choice(FC_pools['common'][nm]) for nm in pos_missing_list]
-            list_to_compare_current = np.cumsum(random_list) / np.arange(1, idx_len+1, 1)
+            random_list_tmp = [random.choice(FC_pools['common'][nm]) for nm in pos_missing_list]
+            random_list = [z[0] for z in random_list_tmp]
+            random_list_pvalues = np.array([z[1] for z in random_list_tmp])
 
+            list_to_compare_current = np.cumsum(random_list) / np.arange(1, idx_len+1, 1)
             list_to_compare_current = np.abs(list_to_compare_current)
 
-            better_res += loc_pos_values >= list_to_compare_current
-        df_final.loc[idx, 'sign'] = better_res > args['bp']
-        df_final.loc[idx, 'sign'] = df_final.loc[idx, 'sign'][::-1].cummin()[::-1]
+            better_res += (loc_pos_values >= list_to_compare_current) * (loc_pos_pvalues <= random_list_pvalues)
+        df_final.loc[idx, 'bp'] = better_res
 
-    df_final.loc[df_final['p-value'] > p_val_threshold, 'sign'] = False
+        # Equivalent of 5% probability to be Random
+        df_final.loc[idx, 'sign'] = df_final.loc[idx, 'bp'] >= 58
 
     df_final['up'] = df_final['sign'] * (df_final['FC_corrected'] > 0)
     df_final['down'] = df_final['sign'] * (df_final['FC_corrected'] < 0)
