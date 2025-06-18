@@ -38,8 +38,9 @@ def run():
     parser.add_argument('-norm', help='LFQ normalization: (1) using median of CONTROL group, default; (2) using median of all groups', default=1, type=int)
     parser.add_argument('-proteins_for_figure', help='path to proteins for figure plotting', default='', type=str)
     parser.add_argument('-figdir', help='path to output folder for figures', default='')
-    parser.add_argument('-min_samples', help='minimum number of non-missing peptide intensities for DirectMS1Quant pairwise comparisons. 0 means 50%% of input files', default=1)
-    parser.add_argument('-pep_min_non_missing_samples', help='minimum fraction of files with non missing values for peptide', default=0.5, type=float)
+    # parser.add_argument('-min_samples', help='minimum number of non-missing peptide intensities for DirectMS1Quant pairwise comparisons. 0 means 50%% of input files', default=1)
+    # parser.add_argument('-pep_min_non_missing_samples', help='minimum fraction of files with non missing values for peptide', default=0.5, type=float)
+    parser.add_argument('-max_missing', help='maximum fraction of missing values. default = 0.5', default=0.5, type=float)
     # parser.add_argument('-min_signif_for_pept', help='minimum number of pairwise DE results where peptide should be significant', default=999, type=int)
     parser.add_argument('-prefix', help='Decoy prefix. Default DECOY_', default='DECOY_', type=str)
     parser.add_argument('-start_stage', help='Can be 1, 2 or 3 to skip any stage which were already done', default=1, type=int)
@@ -95,71 +96,71 @@ def process_files(args):
     outlabel = args['out']
 
 
-    dquant_params_base = {
-        'min_samples': args['min_samples'],
-        'fold_change': 2.0,
-        'bp': 80,
-        'minl': 7,
-        'qval': 0.05,
-        'intensity_norm': 2,
-        'allowed_peptides': '',
-        'protein_shifts': '',
-        'allowed_proteins': '',
-        'all_proteins': '',
-        'all_pfms': '',
-        'fold_change_abs': '',
-        'prefix': args['prefix'],
-        'd': args['d'],
-        'fold_change_no_correction': '',
-    }
+    # dquant_params_base = {
+    #     'min_samples': args['min_samples'],
+    #     'fold_change': 2.0,
+    #     'bp': 80,
+    #     'minl': 7,
+    #     'qval': 0.05,
+    #     'intensity_norm': 2,
+    #     'allowed_peptides': '',
+    #     'protein_shifts': '',
+    #     'allowed_proteins': '',
+    #     'all_proteins': '',
+    #     'all_pfms': '',
+    #     'fold_change_abs': '',
+    #     'prefix': args['prefix'],
+    #     'd': args['d'],
+    #     'fold_change_no_correction': '',
+    # }
 
 
-    if args['start_stage'] <= 1:
+    # if args['start_stage'] <= 1:
 
-        logger.info('Starting Stage 1: Run pairwise DirectMS1Quant runs...')
+    #     logger.info('Starting Stage 1: Run pairwise DirectMS1Quant runs...')
 
-        for i2, i1_val in all_conditions.items():
-            out_name = path.join(ms1folder, '%s_directms1quant_out_%s_vs_%s%s' % (outlabel, ''.join(list(i2)), control_label, i1_val))
-            dquant_params = copy(dquant_params_base)
-            dquant_params['S1'] = s_files_dict[(control_label, i1_val)]
-            dquant_params['S2'] = s_files_dict[i2]
+    #     for i2, i1_val in all_conditions.items():
+    #         out_name = path.join(ms1folder, '%s_directms1quant_out_%s_vs_%s%s' % (outlabel, ''.join(list(i2)), control_label, i1_val))
+    #         dquant_params = copy(dquant_params_base)
+    #         dquant_params['S1'] = s_files_dict[(control_label, i1_val)]
+    #         dquant_params['S2'] = s_files_dict[i2]
 
-            dquant_params['out'] = out_name
+    #         dquant_params['out'] = out_name
 
-            directms1quant.process_files(dquant_params)
+    #         directms1quant.process_files(dquant_params)
 
-    else:
-        logger.info('Skipping Stage 1: Run pairwise DirectMS1Quant runs...')
+    # else:
+    #     logger.info('Skipping Stage 1: Run pairwise DirectMS1Quant runs...')
 
 
-    pep_cnt = Counter()
-    pep_cnt_up = Counter()
-    for i2, i1_val in all_conditions.items():
-        out_name = path.join(ms1folder, '%s_directms1quant_out_%s_vs_%s%s.tsv' % (outlabel, ''.join(list(i2)), control_label, i1_val))
-        # if os.path.isfile(out_name):
-        df0_full = pd.read_table(out_name.replace('.tsv', '_quant_peptides.tsv'), usecols=['origseq', 'up', 'down', 'proteins'])
+    # pep_cnt = Counter()
+    # pep_cnt_up = Counter()
+    # for i2, i1_val in all_conditions.items():
+    #     out_name = path.join(ms1folder, '%s_directms1quant_out_%s_vs_%s%s.tsv' % (outlabel, ''.join(list(i2)), control_label, i1_val))
+    #     # if os.path.isfile(out_name):
+    #     df0_full = pd.read_table(out_name.replace('.tsv', '_quant_peptides.tsv'), usecols=['origseq', 'up', 'down', 'proteins'])
             
         
 
 
-        up_dict = df0_full.groupby('proteins')['up'].sum().to_dict()
-        down_dict = df0_full.groupby('proteins')['down'].sum().to_dict()
+    #     up_dict = df0_full.groupby('proteins')['up'].sum().to_dict()
+    #     down_dict = df0_full.groupby('proteins')['down'].sum().to_dict()
 
-        ####### !!!!!!! #######
-        df0_full['up'] = df0_full.apply(lambda x: x['up'] if up_dict.get(x['proteins'], 0) >= down_dict.get(x['proteins'], 0) else x['down'], axis=1)
+    #     ####### !!!!!!! #######
+    #     df0_full['up'] = df0_full.apply(lambda x: x['up'] if up_dict.get(x['proteins'], 0) >= down_dict.get(x['proteins'], 0) else x['down'], axis=1)
 
 
-        df0_full = df0_full.sort_values(by='up', ascending=False)
-        df0_full = df0_full.drop_duplicates(subset=['origseq', 'proteins'])
-        for pep, up_v, prot_for_pep in df0_full[['origseq', 'up', 'proteins']].values:
-            if up_v:
-                pep_cnt_up[(pep, prot_for_pep)] += 1
-            pep_cnt[(pep, prot_for_pep)] += 1
+    #     df0_full = df0_full.sort_values(by='up', ascending=False)
+    #     df0_full = df0_full.drop_duplicates(subset=['origseq', 'proteins'])
+    #     for pep, up_v, prot_for_pep in df0_full[['origseq', 'up', 'proteins']].values:
+    #         if up_v:
+    #             pep_cnt_up[(pep, prot_for_pep)] += 1
+    #         pep_cnt[(pep, prot_for_pep)] += 1
             
 
-    allowed_peptides_base = set(k for k, v in pep_cnt.items())
-    logger.info('Total number of quantified peptides: %d', len(allowed_peptides_base))
-    allowed_peptides_base_only_sequences = set(k[0] for k in allowed_peptides_base)
+    # allowed_peptides_base = set(k for k, v in pep_cnt.items())
+    # logger.info('Total number of quantified peptides: %d', len(allowed_peptides_base))
+    # allowed_peptides_base_only_sequences = set(k[0] for k in allowed_peptides_base)
 
     # allowed_peptides_up = set(k for k, v in pep_cnt_up.items() if v >= args['min_signif_for_pept'])
     # logger.info('Total number of significant quantified peptides: %d', len(allowed_peptides_up))
@@ -300,7 +301,7 @@ def process_files(args):
 
         for lbl_name, small_lbls in all_lbls_by_batch.items():
             lbl_len = len(small_lbls)
-            idx_to_keep = df_final[small_lbls].isna().sum(axis=1) <= (1 - args['pep_min_non_missing_samples']) * lbl_len
+            idx_to_keep = df_final[small_lbls].isna().sum(axis=1) <= args['max_missing'] * lbl_len
             df_final = df_final[idx_to_keep]
 
         for cc in all_lbls:
@@ -308,8 +309,8 @@ def process_files(args):
 
 
 
-        idx_to_keep = df_final['origseq'].apply(lambda x: x in allowed_peptides_base_only_sequences)
-        df_final = df_final[idx_to_keep]
+        # idx_to_keep = df_final['origseq'].apply(lambda x: x in allowed_peptides_base_only_sequences)
+        # df_final = df_final[idx_to_keep]
 
         
         for small_lbls in all_lbls_by_batch.values():
@@ -343,8 +344,8 @@ def process_files(args):
         cols.insert(0, 'proteins')
         df_final = df_final[cols]
 
-        idx_to_keep = df_final.apply(lambda x: (x['origseq'], x['proteins']) in allowed_peptides_base, axis=1)
-        df_final = df_final[idx_to_keep].copy()
+        # idx_to_keep = df_final.apply(lambda x: (x['origseq'], x['proteins']) in allowed_peptides_base, axis=1)
+        # df_final = df_final[idx_to_keep].copy()
 
 
 
