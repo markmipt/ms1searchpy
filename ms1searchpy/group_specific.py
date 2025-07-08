@@ -193,7 +193,12 @@ def run():
 
     
         top_proteins = final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN_tmp, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, args['nproc'], prots_spc_basic2=prots_spc_basic2, output_all=False)
-        all_proteins.extend(top_proteins)
+        tax_level, taxonomy_id = group_name.split(':')
+        ext_top_proteins = []
+        for el in top_proteins :
+            tmp_lst = [elem for elem in el] + [taxonomy_id, tax_level]
+            ext_top_proteins.append(tmp_lst)
+        all_proteins.extend(ext_top_proteins)
         out_dict[group_name] = len(top_proteins)
         # print(top_proteins)
         print('\n')
@@ -205,7 +210,7 @@ def run():
             output.write('\t'.join(map(str, k.split(':')+[v])) + '\n')
 
     with open(proteins_out_name, 'w') as output:
-        output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\tdecoy\n')
+        output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\tdecoy\ttaxid\ttax_level\n')
         for x in all_proteins:
             output.write('\t'.join(x) + '\n')    
 
