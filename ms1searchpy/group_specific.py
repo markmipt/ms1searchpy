@@ -152,6 +152,7 @@ def run():
     # all_proteins = []
 
     base_out_name = args['out'] + group_to_use + '.tsv'
+    proteins_out_name = args['out'] + 'proteins_' + group_to_use + '.tsv'
 
     out_dict = dict()
 
@@ -203,7 +204,14 @@ def run():
         for k, v in out_dict.items():
             output.write('\t'.join(map(str, k.split(':')+[v])) + '\n')
 
-    
+    with open(proteins_out_name, 'w') as output:
+        output.write('group\ttaxid\tproteins\n')
+        for k, v in out_dict.items():
+            output.write('\t'.join(map(str, k.split(':')+[v])) + '\n')
+    with open(proteins_out_name, 'w') as output:
+        output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\tdecoy\n')
+        for x in top_proteins:
+            output.write('\t'.join(x) + '\n')    
 
 if __name__ == '__main__':
     run()
