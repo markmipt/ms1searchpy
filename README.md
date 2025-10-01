@@ -26,8 +26,11 @@ Ivanov et al. DirectMS1: MS/MS-free identification of 1000 proteins of cellular 
 ## Installation
 
 The most tested and stable version of Python is 3.10.11. We strongly recommend creating a virtualenv for your installation using this version of Python. This can be done using the following commands:
+
     pyenv install 3.10.11
+
     pyenv virtualenv 3.10.11 virt_ms1searchpy
+ 
     pyenv activate virt_ms1searchpy
 
 Also, it is recommended to install [DeepLC](https://github.com/compomics/DeepLC) version 1.1.2.5 (unofficial fork with small changes). Newer version has some issues right now. It is highly important to install DeepLC before ms1searchpy for outdated packages compatibility!
