@@ -8,6 +8,7 @@ import itertools
 from biosaur2 import main as bio_main
 import logging
 from copy import deepcopy
+from collections import defaultdict, Counter
 
 logger = logging.getLogger(__name__)
 
@@ -374,6 +375,48 @@ def get_prot_pept_map(args):
     return protsN, pept_prot, ml_correction
 
 
+
+def get_prot_pept_map_semi(args, pept_prot):
+
+
+    prefix = args['prefix']
+    minlen = args['lmin']
+    maxlen = args['lmax']
+
+    pept_prot2 = dict()
+    pept_prot3 = defaultdict(set)
+    protsN2 = dict()
+    protsN3 = dict()
+
+    # split_aa = {'F', 'Y', 'W', 'M'}
+
+    for pep, prots in pept_prot.items():
+        # for idx, pa in enumerate(pep):
+        for idx in range(len(pep)-1):
+            # if pa in split_aa:
+            if 1:
+                pl = pep[:idx+1]
+                pr = pep[idx+1:]
+                if minlen <= len(pl) <= maxlen:
+                    pept_prot2.setdefault(pl, set()).add(pep)
+                    pept_prot3[pl].update(prots)
+                    protsN2.setdefault(pep, set()).add(pl)
+                    for prot in prots:
+                        protsN3.setdefault(prot, set()).add(pl)
+
+                if minlen <= len(pr) <= maxlen:
+                    pept_prot2.setdefault(pr, set()).add(pep)
+                    pept_prot3[pr].update(prots)
+                    protsN2.setdefault(pep, set()).add(pr)
+                    for prot in prots:
+                        protsN3.setdefault(prot, set()).add(pr)
+    for k, v in protsN3.items():
+        protsN3[k] = len(v)
+
+
+    return protsN2, pept_prot2, pept_prot3, protsN3
+
+
 def convert_tandem_cleave_rule_to_regexp(cleavage_rule):
 
     def get_sense(c_term_rule, n_term_rule):
@@ -436,4 +479,5 @@ def calc_sf_all(v, n, p, prev_best_score=False, p_array=False):
     sf_values[np.isnan(sf_values)] = 0
     sf_values[np.isinf(sf_values)] = (prev_best_score if prev_best_score is not False else max(sf_values[~np.isinf(sf_values)]) * 2)
     return sf_values
+
 
