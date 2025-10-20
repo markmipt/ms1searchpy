@@ -879,17 +879,6 @@ def process_peptides(args):
     isdecoy_key = lambda x: x.startswith(prefix)
     escore = lambda x: -x[1]
 
-
-
-    # e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
-    # resdict2 = filter_results(resdict, e_ind)
-
-    # e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= min_scans_calibration
-    # resdict2 = filter_results(resdict2, e_ind)
-
-    # e_ind = resdict2['mods'] == 0
-    # resdict2 = filter_results(resdict2, e_ind)
-
     e_ind = resdict['mods'] == 0
     resdict2 = filter_results(resdict, e_ind)
 
@@ -905,19 +894,9 @@ def process_peptides(args):
     e_ind = np.array([Is[iorig] for iorig in resdict2['iorig']]) >= best_isotopes_calibration
     resdict3 = filter_results(resdict2, e_ind)
 
-    # e_ind = np.array([Isotopes[iorig] for iorig in resdict2['iorig']]) >= best_isotopes_calibration
-    # resdict3 = filter_results(resdict2, e_ind)
-
-    # e_ind = np.array([Scans[iorig] for iorig in resdict3['iorig']]) >= best_scans_calibration
-    # resdict3 = filter_results(resdict3, e_ind)
-
     logger.info('Intensity threshold selected for mass and RT calibration = %d', best_isotopes_calibration)
 
     p1 = set(resdict3['seqs'])
-
-
-
-    # p1 = set(resdict2['seqs'])
 
     if len(p1):
 
@@ -925,109 +904,6 @@ def process_peptides(args):
         prots_spc, p = calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=False, p=False)
         # Calculate basic protein scores excluding homologues
         prots_spc, p = calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=prots_spc, p=p)
-
-
-
-
-        # prots_spc2 = defaultdict(set)
-        # for pep, proteins in pept_prot.items():
-        #     if pep in p1:
-        #         for protein in proteins:
-        #             prots_spc2[protein].add(pep)
-
-        # for k in protsN:
-        #     if k not in prots_spc2:
-        #         prots_spc2[k] = set([])
-        # prots_spc = dict((k, len(v)) for k, v in prots_spc2.items())
-
-        # names_arr = np.array(list(prots_spc.keys()))
-        # v_arr = np.array(list(prots_spc.values()))
-        # n_arr = np.array([protsN[k] for k in prots_spc])
-
-        # top100decoy_score = [prots_spc.get(dprot, 0) for dprot in protsN if isdecoy_key(dprot)]
-        # top100decoy_N = [val for key, val in protsN.items() if isdecoy_key(key)]
-        # p = np.mean(top100decoy_score) / np.mean(top100decoy_N)
-        # logger.info('Stage 0 search: probability of random match for theoretical peptide = %.3f', (np.mean(top100decoy_score) / np.mean(top100decoy_N)))
-
-        # prots_spc = dict()
-        # all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
-        # for idx, k in enumerate(names_arr):
-        #     prots_spc[k] = all_pvals[idx]
-
-        # # checked = set()
-        # # for k, v in list(prots_spc.items()):
-        # #     if k not in checked:
-        # #         if isdecoy_key(k):
-        # #             if prots_spc.get(k.replace(prefix, ''), -1e6) > v:
-        # #                 del prots_spc[k]
-        # #                 checked.add(k.replace(prefix, ''))
-        # #         else:
-        # #             if prots_spc.get(prefix + k, -1e6) > v:
-        # #                 del prots_spc[k]
-        # #                 checked.add(prefix + k)
-
-
-
-
-
-        # for k in protsN:
-        #     if k not in prots_spc:
-        #         prots_spc[k] = 0
-
-        # sorted_proteins_names = sorted(prots_spc.items(), key=lambda x: -x[1])
-        # sorted_proteins_names_dict = {}
-        # for idx, k in enumerate(sorted_proteins_names):
-        #     sorted_proteins_names_dict[k[0]] = idx
-
-        # prots_spc2 = defaultdict(set)
-        # for pep, proteins in pept_prot.items():
-        #     if pep in p1:
-        #         best_pos = min(sorted_proteins_names_dict[k] for k in proteins)
-        #         for protein in proteins:
-        #             if sorted_proteins_names_dict[protein] == best_pos:
-        #                 prots_spc2[protein].add(pep)
-
-        # for k in protsN:
-        #     if k not in prots_spc2:
-        #         prots_spc2[k] = set([])
-        # prots_spc = dict((k, len(v)) for k, v in prots_spc2.items())
-
-        # names_arr = np.array(list(prots_spc.keys()))
-        # v_arr = np.array(list(prots_spc.values()))
-        # n_arr = np.array([protsN[k] for k in prots_spc])
-
-        # prots_spc = dict()
-        # all_pvals = utils.calc_sf_all(v_arr, n_arr, p)
-        # for idx, k in enumerate(names_arr):
-        #     prots_spc[k] = all_pvals[idx]
-
-        # checked = set()
-        # for k, v in list(prots_spc.items()):
-        #     if k not in checked:
-        #         if isdecoy_key(k):
-        #             if prots_spc.get(k.replace(prefix, ''), -1e6) > v:
-        #                 del prots_spc[k]
-        #                 checked.add(k.replace(prefix, ''))
-        #         else:
-        #             if prots_spc.get(prefix + k, -1e6) > v:
-        #                 del prots_spc[k]
-        #                 checked.add(prefix + k)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1056,11 +932,6 @@ def process_peptides(args):
         df1['nIsotopes'] = [Isotopes[iorig] for iorig in df1['iorig'].values]
         df1['nScans'] = [Scans[iorig] for iorig in df1['iorig'].values]
 
-
-
-        # df1['orig_md'] = true_md
-
-
         true_seqs = set()
         true_prots = set(x[0] for x in filtered_prots)
         for pep, proteins in pept_prot.items():
@@ -1069,11 +940,7 @@ def process_peptides(args):
 
         df1['Is'] = [Is[iorig] for iorig in df1['iorig'].values]
 
-        # df1['top_peps'] = (df1['mc'] == 0) & (df1['seqs'].apply(lambda x: x in true_seqs) & (df1['nIsotopes'] >= min_isotopes_calibration) & (df1['nScans'] >= min_scans_calibration))
-        # df1['top_peps'] = (df1['mc'] == 0) & (df1['seqs'].apply(lambda x: x in true_seqs) & (df1['nIsotopes'] >= best_isotopes_calibration) & (df1['nScans'] >= best_scans_calibration))
-        df1['top_peps'] = (df1['mc'] == 0) & (df1['seqs'].apply(lambda x: x in true_seqs) & (df1['Is'] >= best_isotopes_calibration))
-        # df1['top_peps'] = (df1['Is'] >= scoreatpercentile(df1['Is'], 90))
-    
+        df1['top_peps'] = (df1['mc'] == 0) & (df1['seqs'].apply(lambda x: x in true_seqs) & (df1['Is'] >= best_isotopes_calibration))  
 
         mass_calib_arg = args['mcalib']
 
@@ -1082,20 +949,7 @@ def process_peptides(args):
         if mass_calib_arg:
 
 
-
-
-
-
-
-            # df1['RT'] = rts[df1['iorig'].values]#df1['iorig'].apply(lambda x: rts[x])
             df1['RT'] = mzraw[df1['iorig'].values]
-
-
-
-
-
-
-
 
 
             if mass_calib_arg == 2:
@@ -1198,40 +1052,12 @@ def process_peptides(args):
         e_all = abs(resdict['md'] - mass_shift) / (mass_sigma)
 
 
-
-
-
-        # r = 15.0
-
-
-
-
-
         if args['m_off']:
             pass
         else:
             r = 3.0
             e_ind = e_all <= r
             resdict = filter_results(resdict, e_ind)
-
-
-        # e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
-        # resdict2 = filter_results(resdict, e_ind)
-
-
-        # e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= min_scans_calibration
-        # resdict2 = filter_results(resdict2, e_ind)
-
-        # e_ind = resdict2['mods'] == 0
-        # resdict2 = filter_results(resdict2, e_ind)
-
-
-        # if args['mc'] > 0:
-        #     e_ind = resdict2['mc'] == 0
-        #     resdict2 = filter_results(resdict2, e_ind)
-
-        # p1 = set(resdict2['seqs'])
-
 
 
         e_ind = resdict['mods'] == 0
@@ -1256,12 +1082,6 @@ def process_peptides(args):
 
         e_ind = np.array([Is[iorig] for iorig in resdict2['iorig']]) >= best_isotopes_calibration
         resdict3 = filter_results(resdict2, e_ind)
-
-        # e_ind = np.array([Isotopes[iorig] for iorig in resdict2['iorig']]) >= best_isotopes_calibration
-        # resdict3 = filter_results(resdict2, e_ind)
-
-        # e_ind = np.array([Scans[iorig] for iorig in resdict3['iorig']]) >= best_scans_calibration
-        # resdict3 = filter_results(resdict3, e_ind)
 
         logger.info('Intensity threshold selected for RT calibration = %d', best_isotopes_calibration)
 
@@ -1290,17 +1110,6 @@ def process_peptides(args):
         logger.info('Running RT prediction...')
 
 
-        # e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= 1
-        # resdict2 = filter_results(resdict, e_ind)
-
-        # e_ind = resdict2['mods'] == 0
-        # resdict2 = filter_results(resdict2, e_ind)
-
-        # if args['mc'] > 0:
-        #     e_ind = resdict2['mc'] == 0
-        #     resdict2 = filter_results(resdict2, e_ind)
-
-
         e_ind = resdict['mods'] == 0
         resdict2 = filter_results(resdict, e_ind)
 
@@ -1310,13 +1119,6 @@ def process_peptides(args):
 
         e_ind = np.array([Is[iorig] for iorig in resdict2['iorig']]) >= best_isotopes_calibration
         resdict2 = filter_results(resdict2, e_ind)
-
-        # e_ind = np.array([Isotopes[iorig] for iorig in resdict2['iorig']]) >= best_isotopes_calibration
-        # resdict2 = filter_results(resdict2, e_ind)
-
-        # e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= best_scans_calibration
-        # resdict2 = filter_results(resdict2, e_ind)
-
 
 
         pep_RT = set(resdict2['seqs'])
@@ -1333,28 +1135,10 @@ def process_peptides(args):
         e_ind = true_md <= 2
         resdict2_RT = filter_results(resdict2_RT, e_ind)
 
-        # true_seqs = resdict2_RT['seqs']
         true_seqs = np.array(resdict2_RT['seqs'])
         true_rt = np.array([rts[iorig] for iorig in resdict2_RT['iorig']])
-        # true_isotopes = np.array([Isotopes[iorig] for iorig in resdict2_RT['iorig']])
-        # true_md = abs(resdict2_RT['md'] - mass_shift) / (mass_sigma)
         true_I = np.array([Is[iorig] for iorig in resdict2_RT['iorig']])
 
-        # final_e_ind = False
-        # base_perc = 100 - min(1, 2500 / len(true_seqs)) * 100
-        # for sc_perc_threshold in list(range(int(base_perc)+1, -5, -5)):
-        #     e_ind = (true_I >= scoreatpercentile(true_I, sc_perc_threshold)) *\
-        #             (true_md <= scoreatpercentile(true_md, 100-sc_perc_threshold))
-        #     if final_e_ind is False:
-        #         final_e_ind = e_ind
-        #     if len(set(true_seqs[e_ind])) >= 2500:
-        #         final_e_ind = e_ind
-        #     else:
-        #         break
-
-        # true_seqs = true_seqs[final_e_ind]
-        # true_rt = true_rt[final_e_ind]
-        # true_I = true_I[final_e_ind]
 
         e_ind = np.argsort(-true_I)
         true_seqs = true_seqs[e_ind]
@@ -1378,54 +1162,6 @@ def process_peptides(args):
                 break
         true_seqs = np.array(true_seqs_unique)
         true_rt = np.array(true_rt_unique)
-
-        # true_seqs = []
-        # true_rt = []
-        # true_isotopes = []
-        # true_prots = set(x[0] for x in filtered_prots)
-        # for pep, proteins in pept_prot.items():
-        #     if any(protein in true_prots for protein in proteins):
-        #         true_seqs.append(pep)
-        # e_ind = np.in1d(resdict2['seqs'], true_seqs)
-
-        
-
-
-        # true_seqs = resdict2['seqs'][e_ind]
-
-        # true_rt.extend(np.array([rts[iorig] for iorig in resdict2['iorig']])[e_ind])
-        # true_rt = np.array(true_rt)
-        # true_isotopes.extend(np.array([Isotopes[iorig] for iorig in resdict2['iorig']])[e_ind])
-        # true_isotopes = np.array(true_isotopes)
-
-        # e_all = abs(resdict2['md'][e_ind] - mass_shift) / (mass_sigma)
-        # zs_all_tmp = e_all ** 2
-
-        # zs_all_tmp += (true_isotopes.max() - true_isotopes) * 100
-
-        # e_ind = np.argsort(zs_all_tmp)
-        # true_seqs = true_seqs[e_ind]
-        # true_rt = true_rt[e_ind]
-
-
-        # true_seqs_unique = []
-        # true_rt_unique = []
-        # added_peps = set()
-        # added_cnt = 0
-        # for pepseq, peprt in zip(true_seqs, true_rt):
-        #     if pepseq not in added_peps:
-        #         true_seqs_unique.append(pepseq)
-        #         true_rt_unique.append(peprt)
-        #         added_peps.add(pepseq)
-        #         added_cnt += 1
-        #     if added_cnt >= 2500:
-        #         break
-        # true_seqs = np.array(true_seqs_unique)
-        # true_rt = np.array(true_rt_unique)
-
-
-        # true_seqs = true_seqs[:2500]
-        # true_rt = true_rt[:2500]
 
         per_ind = np.random.RandomState(seed=SEED).permutation(len(true_seqs))
         true_seqs = true_seqs[per_ind]
@@ -1470,37 +1206,6 @@ def process_peptides(args):
 
         logger.info('First-stage peptides used for RT prediction: %d', len(true_seqs))
 
-        # if args['ts'] != 2 and deeplc_path:
-
-        #     dlc = DeepLC(verbose=False, batch_num=args['deeplc_batch_num'], path_model=path_model, write_library=write_library, use_library=path_to_lib, pygam_calibration=False)
-
-
-        #     df_for_calib = pd.DataFrame({
-        #         'seq': ns2,
-        #         'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in ns2],
-        #         'tr': nr2,
-        #     })
-
-        #     df_for_check = pd.DataFrame({
-        #         'seq': ns,
-        #         'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in ns],
-        #         'tr': nr,
-        #     })
-
-        #     try:
-        #         dlc.calibrate_preds(seq_df=df_for_calib, check_df=df_for_check)
-        #     except:
-        #         dlc.calibrate_preds(seq_df=df_for_calib)
-
-        #     df_for_check['pr'] =  dlc.make_preds(seq_df=df_for_check)
-        #     df_for_calib['pr'] =  dlc.make_preds(seq_df=df_for_calib)
-        #     nr2_pred = df_for_calib['pr']
-
-        #     rt_diff_tmp = df_for_check['pr'] - df_for_check['tr']
-
-        #     XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
-
-        # else:
         RC = achrom.get_RCs_vary_lcp(ns2, nr2, metric='mae')
         nr2_pred = np.array([achrom.calculate_RT(s, RC) for s in ns2])
         nr_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
@@ -1824,30 +1529,6 @@ def process_peptides(args):
 
     rt_diff = (rt_pred - np.array([rts[iorig] for iorig in resdict['iorig']]) - XRT_shift) / RT_sigma
 
-    # e_ind = resdict['mods'] == 0
-    # resdict2 = filter_results(resdict, e_ind)
-
-    # if args['mc'] > 0:
-    #     e_ind = resdict2['mc'] == 0
-    #     resdict2 = filter_results(resdict2, e_ind)
-
-    # best_isotopes_calibration, best_scans_calibration = get_best_calibration_thresholds(args, resdict2, Isotopes, Scans, pept_prot, protsN, isdecoy_key, prefix, escore, isdecoy)
-
-    # e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= best_isotopes_calibration
-    # resdict = filter_results(resdict, e_ind)
-    # rt_diff = rt_diff[e_ind]
-
-    # e_ind = np.array([Scans[iorig] for iorig in resdict['iorig']]) >= best_scans_calibration
-    # resdict = filter_results(resdict, e_ind)
-    # rt_diff = rt_diff[e_ind]
-
-    # logger.info('isotopes and scans thresholds selected for RT calibration = %d and %d', best_isotopes_calibration, best_scans_calibration)
-
-
-
-
-
-
 
     with open(base_out_name + '_protsN.tsv', 'w') as output:
         output.write('dbname\ttheor peptides\n')
@@ -1871,10 +1552,8 @@ def process_peptides(args):
 
     mass_diff = (resdict['md'] - mass_shift) / (mass_sigma)
 
-    # rt_diff = (np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred - XRT_shift) / RT_sigma
-
     ## Will it override the settings provided in args? :k
-    prefix = 'DECOY_'
+    prefix = args['prefix']#'DECOY_'
     isdecoy = lambda x: x[0].startswith(prefix)
     isdecoy_key = lambda x: x.startswith(prefix)
     escore = lambda x: -x[1]
@@ -2157,14 +1836,6 @@ def process_peptides(args):
 
                 qout = worker_for_msms(qin, qout, msms_rt_sorted, all_msms_int, iso_down_int, iso_up_int, iso_down, iso_up, shift, True)
 
-                # for df_index, hf_best, hf3_best, rt_shift_current, pep_count_msms, match_best, i_matched_best in qout:
-                #     index_out.append(df_index)
-                #     hyperscore_out.append(hf_best)
-                #     hyperscore3_out.append(hf3_best)
-                #     rt_shift_out.append(rt_shift_current)
-                #     pep_count_msms_out.append(pep_count_msms)
-                #     match_out.append(match_best)
-                #     i_matched_out.append(i_matched_best)
                 for index_out_local, hyperscore_out_local, hyperscore3_out_local, rt_shift_out_local, pep_count_msms_out_local, match_out_local, i_matched_out_local, fragments_ppm_out_local, iar_out_local in qout:
                     index_out.extend(index_out_local)
                     hyperscore_out.extend(hyperscore_out_local)
@@ -2215,14 +1886,9 @@ def process_peptides(args):
             rt_shift_out = np.array(rt_shift_out)
             pep_count_msms_out = np.array(pep_count_msms_out)
             match_out = np.array(match_out)
-            # i_matched_out = np.array(i_matched_out)
             i_matched_out = np.asarray(i_matched_out, dtype="object")
 
             idx_sort = np.argsort(index_out)
-
-            # if calibrate_fragments:
-            #     fragments_ppm_out = np.array(fragments_ppm_out)
-            #     fragments_ppm_out = list(fragments_ppm_out[idx_sort])
 
             hyperscore_out = list(hyperscore_out[idx_sort])
             hyperscore3_out = list(hyperscore3_out[idx_sort])
@@ -2255,7 +1921,6 @@ def process_peptides(args):
 
             for item in (iter(qin.get, None) if not win_sys else qin):
                 df_index, seqm, m_theor, mz, rt = item
-            # for seqm, m_theor, mz, rt in zip(df1_small['peptide'].values, df1_small['m_theor'].values, df1_small['mzraw'].values, df1_small['rt'].values):
 
                 mz_int = int(mz)
                 iso_range = list(range(mz_int - iso_down_int - 2, mz_int + iso_up_int + 2, 1))
@@ -2343,14 +2008,6 @@ def process_peptides(args):
                 if win_sys:
                     fragments_ppm_out_local.append(fragments_ppm_best)
                     iar_out_local.append(iar_best)
-                # spec_best_out.append(spec_best)
-
-                # if not win_sys:
-                #     # qout.put((prots_spc_final, item2))
-                #     qout.put((df_index, hf_best, hf3_best, rt_shift_current, pep_count_msms, match_best, i_matched_best))
-                # else:
-                #     qout.append((df_index, hf_best, hf3_best, rt_shift_current, pep_count_msms, match_best, i_matched_best))
-
             if not win_sys:
                 qout.put((index_out_local, hyperscore_out_local, hyperscore3_out_local, rt_shift_out_local, pep_count_msms_out_local, match_out_local, i_matched_out_local))
             else:
@@ -2399,7 +2056,6 @@ def process_peptides(args):
                 iso_up = args['isowidth']
                 iso_down = args['isowidth']
 
-            # all_msms_int = defaultdict(list)
             all_msms_int = defaultdict(dict)
             mzml_flag = True
             if args['ms2mzml'].lower().endswith('.mzml'):
@@ -2938,49 +2594,12 @@ def process_peptides(args):
 
     df1u['qpreds'] = pd.qcut(df1u['preds'], 10, labels=range(10))
 
-
-
-
-
-
-
-
-
-
-    # for preds_val in df1u.groupby('qpreds'):
     qdict = dict()
     for v in df1u.groupby('qpreds'):
         qdict[v[0]] = v[1]['preds'].max()
     df1['qpreds'] = 11
     for qv, pv in sorted(qdict.items(), key=lambda x: -x[0]):
         df1.loc[df1['preds'] <= pv, 'qpreds'] = qv
-
-
-
-
-    # qdict = df1u.set_index('seqs').to_dict()['qpreds']
-
-    # df1['qpreds'] = df1['seqs'].apply(lambda x: qdict.get(x, 11))
-
-
-
-
-
-
-
-
-
-
-
-    # df1un = df1u[df1u['qpreds'] <= qval_ok].copy()
-    # df1un['qpreds'] = pd.qcut(df1un['preds'], 10, labels=range(10))
-
-    # qdict = df1un.set_index('seqs').to_dict()['qpreds']
-
-
-    # df1['qpreds'] = df1['seqs'].apply(lambda x: qdict.get(x, 11))
-
-    # # df1['qz'] = df1['seqs'].apply(lambda x: qval_dict.get(qdict.get(x, 11), 1.0))
 
 # #to here
 
@@ -3036,20 +2655,12 @@ def process_peptides(args):
     if args['semi']:
         protsN_semi, pept_prot3, pept_prot_semi, protsN3 = utils.get_prot_pept_map_semi(args, pept_prot)
 
-        # pept_prot_limited = dict()
-        # for k, v in pept_prot_semi.items():
-        #     tmp = set(zz for zz in v if zz in top_proteins)
-        #     if len(tmp):
-        #         pept_prot_limited[k] = tmp
-
         protsN_semi_backpep = dict()
         for origpep, peps in protsN_semi.items():
             for pep in peps:
                 if pep != origpep:
                     protsN_semi_backpep[pep] = origpep
 
-
-        # resdict_semi = get_resdict(pept_prot_limited, **kwargs)
         resdict_semi = get_resdict(pept_prot_semi, **kwargs)
 
         # Add mass correction
@@ -3203,20 +2814,11 @@ def worker(qin, qout, mass_diff, rt_diff, resdict, protsN, pept_prot, isdecoy_ke
                 if not prots_spc_copy:
                     prots_spc_copy = deepcopy(prots_spc)
 
-                # for idx, v in enumerate(decoy_set):
-                #     if v in unstable_prots:
-                #         top100decoy_score_tmp_sum -= top100decoy_score_tmp[idx]
-                #         top100decoy_score_tmp[idx] = prots_spc.get(v, 0)
-                #         top100decoy_score_tmp_sum += top100decoy_score_tmp[idx]
-
-
                 for v in decoy_set.intersection(unstable_prots):
                     top100decoy_score_tmp_sum -= top100decoy_score_tmp[v]
                     top100decoy_score_tmp[v] = prots_spc.get(v, 0)
                     top100decoy_score_tmp_sum += top100decoy_score_tmp[v]
 
-
-                # p = float(sum(top100decoy_score_tmp)) / top100decoy_N
                 p = top100decoy_score_tmp_sum / top100decoy_N
                 if not p0:
                     p0 = float(p)
