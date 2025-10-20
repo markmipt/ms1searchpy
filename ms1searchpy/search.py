@@ -37,6 +37,7 @@ def run():
     parser.add_argument('-fmods_legend', help='PSI Names for extra fixed modifications. Oxidation, Carbamidomethyl and TMT6plex are stored by default in source code. in psiname1@monomass1,psiname2@monomass2 format', default='')
     parser.add_argument('-ad', help='add decoy', default=0, type=int)
     parser.add_argument('-ml', help='use machine learning for PFMs', default=1, type=int)
+    parser.add_argument('-use_rt', help='use RT prediction: 0 - ignore RT', default=1, type=int)
     parser.add_argument('-prefix', help='decoy prefix', default='DECOY_')
     parser.add_argument('-sf', '--separate-figures', action='store_true', help='save figures as separate files')
     parser.add_argument('-nproc',   help='number of processes', default=4, type=int)

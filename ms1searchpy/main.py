@@ -1107,9 +1107,6 @@ def process_peptides(args):
 
 
 
-        logger.info('Running RT prediction...')
-
-
         e_ind = resdict['mods'] == 0
         resdict2 = filter_results(resdict, e_ind)
 
@@ -1119,6 +1116,7 @@ def process_peptides(args):
 
         e_ind = np.array([Is[iorig] for iorig in resdict2['iorig']]) >= best_isotopes_calibration
         resdict2 = filter_results(resdict2, e_ind)
+
 
 
         pep_RT = set(resdict2['seqs'])
@@ -1148,194 +1146,24 @@ def process_peptides(args):
         true_seqs_full_for_calibration = set(true_seqs)
 
 
-        true_seqs_unique = []
-        true_rt_unique = []
-        added_peps = set()
-        added_cnt = 0
-        for pepseq, peprt in zip(true_seqs, true_rt):
-            if pepseq not in added_peps:
-                true_seqs_unique.append(pepseq)
-                true_rt_unique.append(peprt)
-                added_peps.add(pepseq)
-                added_cnt += 1
-            if added_cnt >= 2500:
-                break
-        true_seqs = np.array(true_seqs_unique)
-        true_rt = np.array(true_rt_unique)
-
-        per_ind = np.random.RandomState(seed=SEED).permutation(len(true_seqs))
-        true_seqs = true_seqs[per_ind]
-        true_rt = true_rt[per_ind]
-
-        best_seq = defaultdict(list)
-        newseqs = []
-        newRTs = []
-        for seq, RT in zip(true_seqs, true_rt):
-            best_seq[seq].append(RT)
-        for k, v in best_seq.items():
-            newseqs.append(k)
-            newRTs.append(np.median(v))
-        true_seqs = np.array(newseqs)
-        true_rt = np.array(newRTs)
-
-        if calib_path:
-            df1 = pd.read_csv(calib_path, sep='\t')
-            true_seqs = df1['peptide'].values
-            true_rt = df1['RT exp'].values
-
-            ll = len(true_seqs)
-            true_seqs2 = true_seqs[int(ll/2):]
-            true_rt2 = true_rt[int(ll/2):]
-            true_seqs = true_seqs[:int(ll/2)]
-            true_rt = true_rt[:int(ll/2)]
-
-        else:
-
-            ll = len(true_seqs)
-
-            true_seqs2 = true_seqs[int(ll/2):]
-            true_rt2 = true_rt[int(ll/2):]
-            true_seqs = true_seqs[:int(ll/2)]
-            true_rt = true_rt[:int(ll/2)]
-
-        ns = true_seqs
-        nr = true_rt
-        ns2 = true_seqs2
-        nr2 = true_rt2
+        if args['use_rt']:
+            logger.info('Running RT prediction...')
 
 
-        logger.info('First-stage peptides used for RT prediction: %d', len(true_seqs))
-
-        RC = achrom.get_RCs_vary_lcp(ns2, nr2, metric='mae')
-        nr2_pred = np.array([achrom.calculate_RT(s, RC) for s in ns2])
-        nr_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
-
-        rt_diff_tmp = nr_pred - nr
-
-        XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
-
-
-        logger.info('First-stage calibrated RT shift: %.3f min', XRT_shift)
-        logger.info('First-stage calibrated RT sigma: %.3f min', XRT_sigma)
-
-        RT_sigma = XRT_sigma
-
-    else:
-        logger.info('No matches found')
-
-
-
-
-
-    if args['ts']:
-
-
-        if args['es']:
-            logger.info('Use extra Stage 2 search...')
-
-            qin = list(set(resdict['seqs']))
-            qout = []
-            pepdict = worker_RT(qin, qout, 0, 1, RC, False, False, True)
-
-            rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
-            rt_diff = np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred - XRT_shift
-            e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
-            r = 9.0
-            e_ind = e_all <= r
-            resdict = filter_results(resdict, e_ind)
-
-
-
-
-            e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
-            resdict2 = filter_results(resdict, e_ind)
-
-
-            e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= min_scans_calibration
-            resdict2 = filter_results(resdict2, e_ind)
-
-            e_ind = resdict2['mods'] == 0
-            resdict2 = filter_results(resdict2, e_ind)
-
-
-            if args['mc'] > 0:
-                e_ind = resdict2['mc'] == 0
-                resdict2 = filter_results(resdict2, e_ind)
-
-            p1 = set(resdict2['seqs'])
-
-
-            # Calculate basic protein scores including homologues
-            prots_spc, p = calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=False, p=False)
-            # Calculate basic protein scores excluding homologues
-            prots_spc, p = calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=prots_spc, p=p)
-
-
-
-
-
-            filtered_prots = aux.filter(prots_spc.items(), fdr=0.05, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
-                                        full_output=True)
-
-            identified_proteins = 0
-
-            for x in filtered_prots:
-                identified_proteins += 1
-            logger.info('Stage 2 search: identified proteins = %d', identified_proteins)
-            if identified_proteins <= 25:
-                logger.info('Low number of identified proteins, using first 25 top scored proteins for calibration...')
-                filtered_prots = sorted(prots_spc.items(), key=lambda x: -x[1])[:25]
-
-
-
-
-
-
-
-            e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= 1
-            resdict2 = filter_results(resdict, e_ind)
-
-            e_ind = resdict2['mods'] == 0
-            resdict2 = filter_results(resdict2, e_ind)
-
-            if args['mc'] > 0:
-                e_ind = resdict2['mc'] == 0
-                resdict2 = filter_results(resdict2, e_ind)
-
-
-            true_seqs = []
-            true_rt = []
-            true_isotopes = []
-            true_prots = set(x[0] for x in filtered_prots)
-            for pep, proteins in pept_prot.items():
-                if any(protein in true_prots for protein in proteins):
-                    true_seqs.append(pep)
-            e_ind = np.in1d(resdict2['seqs'], true_seqs)
-
-
-            true_seqs = resdict2['seqs'][e_ind]
-
-            true_rt.extend(np.array([rts[iorig] for iorig in resdict2['iorig']])[e_ind])
-            true_rt = np.array(true_rt)
-            true_isotopes.extend(np.array([Isotopes[iorig] for iorig in resdict2['iorig']])[e_ind])
-            true_isotopes = np.array(true_isotopes)
-
-            e_all = abs(resdict2['md'][e_ind] - mass_shift) / (mass_sigma)
-            zs_all_tmp = e_all ** 2
-
-            zs_all_tmp += (true_isotopes.max() - true_isotopes) * 100
-
-            e_ind = np.argsort(zs_all_tmp)
-            true_seqs = true_seqs[e_ind]
-            true_rt = true_rt[e_ind]
-
-            idx_limit = len(true_seqs)
-            cnt_pep = len(set(true_seqs))
-            while cnt_pep > 2500:
-                idx_limit -= 1
-                cnt_pep = len(set(true_seqs[:idx_limit]))
-            true_seqs = true_seqs[:idx_limit]
-            true_rt = true_rt[:idx_limit]
+            true_seqs_unique = []
+            true_rt_unique = []
+            added_peps = set()
+            added_cnt = 0
+            for pepseq, peprt in zip(true_seqs, true_rt):
+                if pepseq not in added_peps:
+                    true_seqs_unique.append(pepseq)
+                    true_rt_unique.append(peprt)
+                    added_peps.add(pepseq)
+                    added_cnt += 1
+                if added_cnt >= 2500:
+                    break
+            true_seqs = np.array(true_seqs_unique)
+            true_rt = np.array(true_rt_unique)
 
             per_ind = np.random.RandomState(seed=SEED).permutation(len(true_seqs))
             true_seqs = true_seqs[per_ind]
@@ -1378,156 +1206,339 @@ def process_peptides(args):
             nr2 = true_rt2
 
 
+            logger.info('First-stage peptides used for RT prediction: %d', len(true_seqs))
+
+            RC = achrom.get_RCs_vary_lcp(ns2, nr2, metric='mae')
+            nr2_pred = np.array([achrom.calculate_RT(s, RC) for s in ns2])
+            nr_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
+
+            rt_diff_tmp = nr_pred - nr
+
+            XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
 
 
-        else:
-            ns = np.array(ns)
-            nr = np.array(nr)
-            idx = np.abs((rt_diff_tmp) - XRT_shift) <= 3 * XRT_sigma
-            ns = ns[idx]
-            nr = nr[idx]
+            logger.info('First-stage calibrated RT shift: %.3f min', XRT_shift)
+            logger.info('First-stage calibrated RT sigma: %.3f min', XRT_sigma)
 
-            rt_diff_tmp2 = nr2_pred - nr2
-            ns2 = np.array(ns2)
-            nr2 = np.array(nr2)
-            idx = np.abs((rt_diff_tmp2) - XRT_shift) <= 3 * XRT_sigma
-            ns2 = ns2[idx]
-            nr2 = nr2[idx]
+            RT_sigma = XRT_sigma
 
-        logger.info('Second-stage peptides used for RT prediction: %d', len(ns))
+    else:
+        logger.info('No matches found')
+
+
+
+
+
+    if args['use_rt']:
+        if args['ts']:
+
+
+            if args['es']:
+                logger.info('Use extra Stage 2 search...')
+
+                qin = list(set(resdict['seqs']))
+                qout = []
+                pepdict = worker_RT(qin, qout, 0, 1, RC, False, False, True)
+
+                rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
+                rt_diff = np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred - XRT_shift
+                e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
+                r = 9.0
+                e_ind = e_all <= r
+                resdict = filter_results(resdict, e_ind)
+
+
+
+
+                e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= min_isotopes_calibration
+                resdict2 = filter_results(resdict, e_ind)
+
+
+                e_ind = np.array([Scans[iorig] for iorig in resdict2['iorig']]) >= min_scans_calibration
+                resdict2 = filter_results(resdict2, e_ind)
+
+                e_ind = resdict2['mods'] == 0
+                resdict2 = filter_results(resdict2, e_ind)
+
+
+                if args['mc'] > 0:
+                    e_ind = resdict2['mc'] == 0
+                    resdict2 = filter_results(resdict2, e_ind)
+
+                p1 = set(resdict2['seqs'])
+
+
+                # Calculate basic protein scores including homologues
+                prots_spc, p = calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=False, p=False)
+                # Calculate basic protein scores excluding homologues
+                prots_spc, p = calc_protein_scores(p1, pept_prot, protsN, isdecoy_key, prefix, best_base_results=prots_spc, p=p)
+
+
+
+
+
+                filtered_prots = aux.filter(prots_spc.items(), fdr=0.05, key=escore, is_decoy=isdecoy, remove_decoy=True, formula=1,
+                                            full_output=True)
+
+                identified_proteins = 0
+
+                for x in filtered_prots:
+                    identified_proteins += 1
+                logger.info('Stage 2 search: identified proteins = %d', identified_proteins)
+                if identified_proteins <= 25:
+                    logger.info('Low number of identified proteins, using first 25 top scored proteins for calibration...')
+                    filtered_prots = sorted(prots_spc.items(), key=lambda x: -x[1])[:25]
+
+
+
+
+
+
+
+                e_ind = np.array([Isotopes[iorig] for iorig in resdict['iorig']]) >= 1
+                resdict2 = filter_results(resdict, e_ind)
+
+                e_ind = resdict2['mods'] == 0
+                resdict2 = filter_results(resdict2, e_ind)
+
+                if args['mc'] > 0:
+                    e_ind = resdict2['mc'] == 0
+                    resdict2 = filter_results(resdict2, e_ind)
+
+
+                true_seqs = []
+                true_rt = []
+                true_isotopes = []
+                true_prots = set(x[0] for x in filtered_prots)
+                for pep, proteins in pept_prot.items():
+                    if any(protein in true_prots for protein in proteins):
+                        true_seqs.append(pep)
+                e_ind = np.in1d(resdict2['seqs'], true_seqs)
+
+
+                true_seqs = resdict2['seqs'][e_ind]
+
+                true_rt.extend(np.array([rts[iorig] for iorig in resdict2['iorig']])[e_ind])
+                true_rt = np.array(true_rt)
+                true_isotopes.extend(np.array([Isotopes[iorig] for iorig in resdict2['iorig']])[e_ind])
+                true_isotopes = np.array(true_isotopes)
+
+                e_all = abs(resdict2['md'][e_ind] - mass_shift) / (mass_sigma)
+                zs_all_tmp = e_all ** 2
+
+                zs_all_tmp += (true_isotopes.max() - true_isotopes) * 100
+
+                e_ind = np.argsort(zs_all_tmp)
+                true_seqs = true_seqs[e_ind]
+                true_rt = true_rt[e_ind]
+
+                idx_limit = len(true_seqs)
+                cnt_pep = len(set(true_seqs))
+                while cnt_pep > 2500:
+                    idx_limit -= 1
+                    cnt_pep = len(set(true_seqs[:idx_limit]))
+                true_seqs = true_seqs[:idx_limit]
+                true_rt = true_rt[:idx_limit]
+
+                per_ind = np.random.RandomState(seed=SEED).permutation(len(true_seqs))
+                true_seqs = true_seqs[per_ind]
+                true_rt = true_rt[per_ind]
+
+                best_seq = defaultdict(list)
+                newseqs = []
+                newRTs = []
+                for seq, RT in zip(true_seqs, true_rt):
+                    best_seq[seq].append(RT)
+                for k, v in best_seq.items():
+                    newseqs.append(k)
+                    newRTs.append(np.median(v))
+                true_seqs = np.array(newseqs)
+                true_rt = np.array(newRTs)
+
+                if calib_path:
+                    df1 = pd.read_csv(calib_path, sep='\t')
+                    true_seqs = df1['peptide'].values
+                    true_rt = df1['RT exp'].values
+
+                    ll = len(true_seqs)
+                    true_seqs2 = true_seqs[int(ll/2):]
+                    true_rt2 = true_rt[int(ll/2):]
+                    true_seqs = true_seqs[:int(ll/2)]
+                    true_rt = true_rt[:int(ll/2)]
+
+                else:
+
+                    ll = len(true_seqs)
+
+                    true_seqs2 = true_seqs[int(ll/2):]
+                    true_rt2 = true_rt[int(ll/2):]
+                    true_seqs = true_seqs[:int(ll/2)]
+                    true_rt = true_rt[:int(ll/2)]
+
+                ns = true_seqs
+                nr = true_rt
+                ns2 = true_seqs2
+                nr2 = true_rt2
+
+
+
+
+            else:
+                ns = np.array(ns)
+                nr = np.array(nr)
+                idx = np.abs((rt_diff_tmp) - XRT_shift) <= 3 * XRT_sigma
+                ns = ns[idx]
+                nr = nr[idx]
+
+                rt_diff_tmp2 = nr2_pred - nr2
+                ns2 = np.array(ns2)
+                nr2 = np.array(nr2)
+                idx = np.abs((rt_diff_tmp2) - XRT_shift) <= 3 * XRT_sigma
+                ns2 = ns2[idx]
+                nr2 = nr2[idx]
+
+            logger.info('Second-stage peptides used for RT prediction: %d', len(ns))
+
+            if deeplc_path:
+
+                dlc = DeepLC(verbose=False, batch_num=args['deeplc_batch_num'], path_model=path_model, write_library=write_library, use_library=path_to_lib, pygam_calibration=False)
+
+
+                df_for_calib = pd.DataFrame({
+                    'seq': ns2,
+                    'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in ns2],
+                    'tr': nr2,
+                })
+
+                df_for_check = pd.DataFrame({
+                    'seq': ns,
+                    'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in ns],
+                    'tr': nr,
+                })
+
+
+                try:
+                    dlc.calibrate_preds(seq_df=df_for_calib, check_df=df_for_check)
+                except:
+                    dlc.calibrate_preds(seq_df=df_for_calib)
+
+                df_for_check['pr'] =  dlc.make_preds(seq_df=df_for_check)
+
+                rt_diff_tmp = df_for_check['pr'] - df_for_check['tr']
+
+
+                if args['rd_correction'] == 1:
+                    df_for_check['rt_diff_tmp'] = df_for_check['pr'] - df_for_check['tr']
+                    df_for_check['plen'] = df_for_check['seq'].apply(lambda x: len(x))
+                    rt_cor_dict = df_for_check.groupby('plen')['rt_diff_tmp'].median().to_dict()
+
+                    min_key_cor = min(list(rt_cor_dict.keys()))
+                    max_key_cor = max(list(rt_cor_dict.keys()))
+
+                    for plen in range(args['lmin'], args['lmax']+1):
+                        if plen not in rt_cor_dict:
+                            if plen < min_key_cor:
+                                rt_cor_dict[plen] = rt_cor_dict[min_key_cor]
+                            elif plen > max_key_cor:
+                                rt_cor_dict[plen] = rt_cor_dict[max_key_cor]
+                            else:
+                                logger.info('???')
+
+                    rt_diff_tmp = df_for_check.apply(lambda x: x['rt_diff_tmp'] - rt_cor_dict[x['plen']], axis=1)
+
+
+                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
+
+            else:
+
+                RC = achrom.get_RCs_vary_lcp(ns, nr, metric='mae')
+                RT_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
+
+                rt_diff_tmp = RT_pred - nr
+
+                XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
+
+            RT_sigma = XRT_sigma
+
+        logger.info('Second-stage calibrated RT shift: %.3f min', XRT_shift)
+        logger.info('Second-stage calibrated RT sigma: %.3f min', XRT_sigma)
+
+        out_log.write('Calibrated RT shift: %.3f min\n' % (XRT_shift, ))
+        out_log.write('Calibrated RT sigma: %.3f min\n' % (XRT_sigma, ))
+
+        p1 = set(resdict['seqs'])
+
+        n = args['nproc']
+
+
+
+        if args['save_calib']:
+            with open(base_out_name + '_calib.tsv', 'w') as output:
+                output.write('peptide\tRT exp\n')
+                for seq, RT in zip(ns, nr):
+                    output.write('%s\t%s\n' % (seq, str(RT)))
+                for seq, RT in zip(ns2, nr2):
+                    output.write('%s\t%s\n' % (seq, str(RT)))
+
 
         if deeplc_path:
 
-            dlc = DeepLC(verbose=False, batch_num=args['deeplc_batch_num'], path_model=path_model, write_library=write_library, use_library=path_to_lib, pygam_calibration=False)
+            pepdict = dict()
 
 
-            df_for_calib = pd.DataFrame({
-                'seq': ns2,
-                'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in ns2],
-                'tr': nr2,
-            })
+            seqs_batch = list(p1)
 
             df_for_check = pd.DataFrame({
-                'seq': ns,
-                'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in ns],
-                'tr': nr,
+                'seq': seqs_batch,
+                'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in seqs_batch],
             })
-
-
-            try:
-                dlc.calibrate_preds(seq_df=df_for_calib, check_df=df_for_check)
-            except:
-                dlc.calibrate_preds(seq_df=df_for_calib)
 
             df_for_check['pr'] =  dlc.make_preds(seq_df=df_for_check)
 
-            rt_diff_tmp = df_for_check['pr'] - df_for_check['tr']
-
 
             if args['rd_correction'] == 1:
-                df_for_check['rt_diff_tmp'] = df_for_check['pr'] - df_for_check['tr']
                 df_for_check['plen'] = df_for_check['seq'].apply(lambda x: len(x))
-                rt_cor_dict = df_for_check.groupby('plen')['rt_diff_tmp'].median().to_dict()
-
-                min_key_cor = min(list(rt_cor_dict.keys()))
-                max_key_cor = max(list(rt_cor_dict.keys()))
-
-                for plen in range(args['lmin'], args['lmax']+1):
-                    if plen not in rt_cor_dict:
-                        if plen < min_key_cor:
-                            rt_cor_dict[plen] = rt_cor_dict[min_key_cor]
-                        elif plen > max_key_cor:
-                            rt_cor_dict[plen] = rt_cor_dict[max_key_cor]
-                        else:
-                            logger.info('???')
-
-                rt_diff_tmp = df_for_check.apply(lambda x: x['rt_diff_tmp'] - rt_cor_dict[x['plen']], axis=1)
+                df_for_check['pr'] = df_for_check.apply(lambda x: x['pr'] - rt_cor_dict[x['plen']], axis=1)
 
 
-            XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
+            pepdict_batch = df_for_check.set_index('seq')['pr'].to_dict()
+
+
+
+            pepdict.update(pepdict_batch)
+
 
         else:
 
-            RC = achrom.get_RCs_vary_lcp(ns, nr, metric='mae')
-            RT_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
+            qin = list(p1)
+            qout = []
+            pepdict = worker_RT(qin, qout, 0, 1, RC, False, False, True)
 
-            rt_diff_tmp = RT_pred - nr
+        rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
+        # rt_diff = np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred
+        rt_diff = rt_pred - np.array([rts[iorig] for iorig in resdict['iorig']]) - XRT_shift
+        # rt_diff = resdict['rt'] - rt_pred
+        e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
+        r = 9.0
+        e_ind = e_all <= r
 
-            XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
-
-        RT_sigma = XRT_sigma
-
-    logger.info('Second-stage calibrated RT shift: %.3f min', XRT_shift)
-    logger.info('Second-stage calibrated RT sigma: %.3f min', XRT_sigma)
-
-    out_log.write('Calibrated RT shift: %.3f min\n' % (XRT_shift, ))
-    out_log.write('Calibrated RT sigma: %.3f min\n' % (XRT_sigma, ))
-
-    p1 = set(resdict['seqs'])
-
-    n = args['nproc']
+        resdict = filter_results(resdict, e_ind)
+        rt_diff = rt_diff[e_ind]
+        rt_pred = rt_pred[e_ind]
 
 
 
-    if args['save_calib']:
-        with open(base_out_name + '_calib.tsv', 'w') as output:
-            output.write('peptide\tRT exp\n')
-            for seq, RT in zip(ns, nr):
-                output.write('%s\t%s\n' % (seq, str(RT)))
-            for seq, RT in zip(ns2, nr2):
-                output.write('%s\t%s\n' % (seq, str(RT)))
+        rt_diff = (rt_pred - np.array([rts[iorig] for iorig in resdict['iorig']]) - XRT_shift) / RT_sigma
 
 
-    if deeplc_path:
-
-        pepdict = dict()
-
-
-        seqs_batch = list(p1)
-
-        df_for_check = pd.DataFrame({
-            'seq': seqs_batch,
-            'modifications': [utils.mods_for_deepLC(seq, aa_to_psi) for seq in seqs_batch],
-        })
-
-        df_for_check['pr'] =  dlc.make_preds(seq_df=df_for_check)
-
-
-        if args['rd_correction'] == 1:
-            df_for_check['plen'] = df_for_check['seq'].apply(lambda x: len(x))
-            df_for_check['pr'] = df_for_check.apply(lambda x: x['pr'] - rt_cor_dict[x['plen']], axis=1)
-
-
-        pepdict_batch = df_for_check.set_index('seq')['pr'].to_dict()
+        logger.info('RT prediction was finished')
 
 
 
-        pepdict.update(pepdict_batch)
 
 
     else:
-
-        qin = list(p1)
-        qout = []
-        pepdict = worker_RT(qin, qout, 0, 1, RC, False, False, True)
-
-    rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
-    # rt_diff = np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred
-    rt_diff = rt_pred - np.array([rts[iorig] for iorig in resdict['iorig']]) - XRT_shift
-    # rt_diff = resdict['rt'] - rt_pred
-    e_all = (rt_diff) ** 2 / (RT_sigma ** 2)
-    r = 9.0
-    e_ind = e_all <= r
-
-    resdict = filter_results(resdict, e_ind)
-    rt_diff = rt_diff[e_ind]
-    rt_pred = rt_pred[e_ind]
-
-
-    logger.info('RT prediction was finished')
-
-
-    rt_diff = (rt_pred - np.array([rts[iorig] for iorig in resdict['iorig']]) - XRT_shift) / RT_sigma
+        rt_diff = np.zeros(len(resdict['iorig']))
 
 
     with open(base_out_name + '_protsN.tsv', 'w') as output:
