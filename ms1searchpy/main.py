@@ -2616,6 +2616,16 @@ def process_peptides(args):
 
     df1.to_csv(base_out_name + '_PFMs_ML.tsv', sep='\t', index=False)
 
+
+    if args['write_pepxml']:
+
+
+        # from identipy import utils as ms2utils
+        # settings_like_ms2 = utils.get_settings_like_ms2(args)
+
+
+        utils.write_pepxml(fname.replace('.features.tsv', '.mzML'), args, df1, pept_prot)
+
     df1 = df1[df1['qpreds'] <= 10]
 
     resdict = {}
