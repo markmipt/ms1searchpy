@@ -65,6 +65,7 @@ def run():
     # parser.add_argument('-ms2pip', help='EXPERIMENTAL. Use MS2PIP for theoretical spectra generation', default=0, type=int)
     parser.add_argument('-semi', help='EXPERIMENTAL. add semi-tryptic peptides', default=0, type=int)
     parser.add_argument('-m_off', help='EXPERIMENTAL. Turn off accurate mass filter', default=0, type=int)
+    parser.add_argument('-write_pepxml', help='EXPERIMENTAL. Write pepxml output file', default=0, type=int)
 
     args = vars(parser.parse_args())
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
