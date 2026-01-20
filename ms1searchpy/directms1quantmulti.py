@@ -35,6 +35,7 @@ def run():
     parser.add_argument('-d', '-db', help='path to uniprot fasta file used for ms1searchpy', required=True)
     parser.add_argument('-samples', help='tsv table with sample details', required=True)
     parser.add_argument('-out', help='name of DirectMS1quant output files', default='DQmulti')
+    parser.add_argument('-out_folder', help='folder to store DirectMS1quant output files, default: folder of input files', default='')
     parser.add_argument('-norm', help='LFQ normalization: (1) using median of CONTROL group, default; (2) using median of all groups', default=1, type=int)
     parser.add_argument('-proteins_for_figure', help='path to proteins for figure plotting', default='', type=str)
     parser.add_argument('-figdir', help='path to output folder for figures', default='')
@@ -51,9 +52,13 @@ def run():
 
 
 def process_files(args):
-
+    
     infolder = args['pdir']
     ms1folder = args['pdir']
+    if args['out_folder'] :
+        out_folder = path.abspath(args['out_folder'])
+    else :
+        out_folder = ms1folder
     path_to_fasta = args['d']
 
     df1 = pd.read_table(args['samples'], dtype={'group': str, 'condition': str, 'vs': str})
@@ -83,7 +88,7 @@ def process_files(args):
 
     for fn in listdir(ms1folder):
         if fn.endswith('_proteins_full.tsv'):
-            f_name = fn.replace('.features_proteins_full.tsv', '')
+            f_name = fn.replace('_proteins_full.tsv', '')
             if f_name in f_dict_map:
                 s_files_dict[f_dict_map[f_name]].append(path.join(ms1folder, fn))
 
@@ -119,7 +124,7 @@ def process_files(args):
         logger.info('Starting Stage 1: Run pairwise DirectMS1Quant runs...')
 
         for i2, i1_val in all_conditions.items():
-            out_name = path.join(ms1folder, '%s_directms1quant_out_%s_vs_%s%s' % (outlabel, ''.join(list(i2)), control_label, i1_val))
+            out_name = path.join(out_folder, '%s_directms1quant_out_%s_vs_%s%s' % (outlabel, ''.join(list(i2)), control_label, i1_val))
             dquant_params = copy(dquant_params_base)
             dquant_params['S1'] = s_files_dict[(control_label, i1_val)]
             dquant_params['S2'] = s_files_dict[i2]
@@ -135,7 +140,7 @@ def process_files(args):
     pep_cnt = Counter()
     pep_cnt_up = Counter()
     for i2, i1_val in all_conditions.items():
-        out_name = path.join(ms1folder, '%s_directms1quant_out_%s_vs_%s%s.tsv' % (outlabel, ''.join(list(i2)), control_label, i1_val))
+        out_name = path.join(out_folder, '%s_directms1quant_out_%s_vs_%s%s.tsv' % (outlabel, ''.join(list(i2)), control_label, i1_val))
         # if os.path.isfile(out_name):
         df0_full = pd.read_table(out_name.replace('.tsv', '_quant_peptides.tsv'), usecols=['origseq', 'up', 'down', 'proteins'])
             
@@ -174,7 +179,7 @@ def process_files(args):
     args_local['allowed_proteins'] = ''
     for z in listdir(infolder):
         if z.endswith(replace_label):
-            zname = z.split('.')[0]
+            zname = z.replace(replace_label, '')
             if zname in df1_filenames:
                 args_local['S1'].append(path.join(infolder, z))
                 names_map[args_local['S1'][-1]] = zname
@@ -198,7 +203,7 @@ def process_files(args):
             all_s_lbls[sample_num].append(label)
 
         all_lbls = all_s_lbls['S1']
-        out_name = path.join(ms1folder, '%s_peptide_LFQ.tsv' % (outlabel, ))
+        out_name = path.join(out_folder, '%s_peptide_LFQ.tsv' % (outlabel, ))
         df_final = pd.read_table(out_name)
 
         logger.info('Skipping Stage 2: Prepare full LFQ peptide table...')
@@ -209,7 +214,6 @@ def process_files(args):
         sample_num = 'S1'
 
         all_s_lbls[sample_num] = []
-
         for z in args_local[sample_num]:
             label = sample_num + '_' + z.replace(replace_label, '')
             all_s_lbls[sample_num].append(label)
@@ -271,7 +275,7 @@ def process_files(args):
         df_final = df_final[df_final['nonmissing']]
         logger.info('Total number of PFMs: %d', len(df_final))
 
-        out_name = path.join(ms1folder, '%s_peptide_LFQ.tsv' % (outlabel, ))
+        out_name = path.join(out_folder, '%s_peptide_LFQ.tsv' % (outlabel, ))
         df_final.to_csv(out_name, sep='\t', index=False)
 
 
@@ -368,7 +372,7 @@ def process_files(args):
 
         origfnames = []
         for cc in all_lbls:
-            origfn = cc.split('/')[-1].split('.')[0]
+            origfn = path.basename(cc)
             origfnames.append(origfn)
             
         dft = pd.DataFrame.from_dict([df_final.groupby('proteins')[cc].median().to_dict() for cc in all_lbls])
@@ -384,15 +388,15 @@ def process_files(args):
         df1x['sample+condition'] = df1x['sample'].apply(lambda x: x + ' ') + df1x['condition']
 
 
-        out_name = path.join(ms1folder, '%s_proteins_LFQ.tsv' % (outlabel, ))
-        out_namex = path.join(ms1folder, '%s_peptide_LFQ_processed.tsv' % (outlabel, ))
+        out_name = path.join(out_folder, '%s_proteins_LFQ.tsv' % (outlabel, ))
+        out_namex = path.join(out_folder, '%s_peptide_LFQ_processed.tsv' % (outlabel, ))
         df1.to_csv(out_name, sep='\t', index=False)
         df1x.to_csv(out_namex, sep='\t', index=False)
 
     else:
 
         logger.info('Skipping Stage 3: Prepare full LFQ protein table...')
-        out_name = path.join(ms1folder, '%s_proteins_LFQ.tsv' % (outlabel, ))
+        out_name = path.join(out_folder, '%s_proteins_LFQ.tsv' % (outlabel, ))
         df1 = pd.read_table(out_name)
 
     if args['start_stage'] <= 4:
@@ -455,7 +459,7 @@ def process_files(args):
                             if not path.isdir(out_figdir):
                                 makedirs(out_figdir)
                         else:
-                            out_figdir = infolder
+                            out_figdir = out_folder
                         plt.savefig(path.join(out_figdir, '%s_%s.png' % (args['out'], gname, )))
 
 

@@ -62,31 +62,31 @@ def run():
 
     cnt = Counter(dbname_map.values())
 
-    if group_to_use not in ['dbname', 'OX']:
-        for ox in cnt.keys():
+    # if group_to_use not in ['dbname', 'OX']:
+    for ox in cnt.keys():
 
-            line = ncbi.get_lineage(ox)
-            ranks = ncbi.get_rank(line)
-            if group_to_use not in ranks.values():
-                logger.warning('%s does not have %s', str(ox), group_to_use)
-                group_custom = 'OX:' + ox
-                # print('{} does not have {}'.format(i, group_to_use))
-                # continue
+        line = ncbi.get_lineage(ox)
+        ranks = ncbi.get_rank(line)
+        if group_to_use not in ranks.values():
+            logger.warning('%s does not have %s', str(ox), group_to_use)
+            group_custom = 'OX:' + ox
+            # print('{} does not have {}'.format(i, group_to_use))
+            # continue
 
-            else:
-                ranks_rev = {k[1]:k[0] for k in ranks.items()}
-                # print(ranks_rev)
-                group_custom = ranks_rev[group_to_use]
+        else:
+            ranks_rev = {k[1]:k[0] for k in ranks.items()}
+            # print(ranks_rev)
+            group_custom = group_to_use+':'+str(ranks_rev[group_to_use])
 
-            ox_map[ox] = group_custom
+        ox_map[ox] = group_custom
 
 
-        for dbname in list(dbname_map.keys()):
-            dbname_map[dbname] = ox_map[dbname_map[dbname]]
+    for dbname in list(dbname_map.keys()):
+        dbname_map[dbname] = ox_map[dbname_map[dbname]]
 
-        cnt = Counter(dbname_map.values())
+    cnt = Counter(dbname_map.values())
 
-    print(cnt.most_common())
+    logging.debug(cnt.most_common())
 
     # return -1
 
@@ -149,9 +149,10 @@ def run():
     escore = lambda x: -x[1]
     fdr = float(args['fdr']) / 100
 
-    # all_proteins = []
+    all_proteins = []
 
     base_out_name = args['out'] + group_to_use + '.tsv'
+    proteins_out_name = args['out'] + 'proteins_' + group_to_use + '.tsv'
 
     out_dict = dict()
 
@@ -192,18 +193,26 @@ def run():
 
     
         top_proteins = final_iteration(resdict, mass_diff, rt_diff, pept_prot, protsN_tmp, base_out_name, prefix, isdecoy, isdecoy_key, escore, fdr, args['nproc'], prots_spc_basic2=prots_spc_basic2, output_all=False)
-        # all_proteins.extend(top_proteins)
+        tax_level, taxonomy_id = group_name.split(':')
+        ext_top_proteins = []
+        for el in top_proteins :
+            tmp_lst = [elem for elem in el] + [taxonomy_id, tax_level]
+            ext_top_proteins.append(tmp_lst)
+        all_proteins.extend(ext_top_proteins)
         out_dict[group_name] = len(top_proteins)
         # print(top_proteins)
         print('\n')
         # break
     
     with open(base_out_name, 'w') as output:
-        output.write('taxid\tproteins\n')
+        output.write('group\ttaxid\tproteins\n')
         for k, v in out_dict.items():
-            output.write('\t'.join((str(k), str(v))) + '\n')
+            output.write('\t'.join(map(str, k.split(':')+[v])) + '\n')
 
-    
+    with open(proteins_out_name, 'w') as output:
+        output.write('dbname\tscore\tmatched peptides\ttheoretical peptides\tdecoy\ttaxid\ttax_level\n')
+        for x in all_proteins:
+            output.write('\t'.join(x) + '\n')    
 
 if __name__ == '__main__':
     run()
