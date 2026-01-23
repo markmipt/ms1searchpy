@@ -1421,6 +1421,7 @@ def process_peptides(args):
                     dlc.calibrate_preds(seq_df=df_for_calib, check_df=df_for_check)
                 except:
                     dlc.calibrate_preds(seq_df=df_for_calib)
+                    # print('smart calibration is turned off')
 
                 df_for_check['pr'] =  dlc.make_preds(seq_df=df_for_check)
 
@@ -1445,10 +1446,7 @@ def process_peptides(args):
                                 logger.info('???')
 
                     rt_diff_tmp = df_for_check.apply(lambda x: x['rt_diff_tmp'] - rt_cor_dict[x['plen']], axis=1)
-
-
                 XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
-
             else:
 
                 RC = achrom.get_RCs_vary_lcp(ns, nr, metric='mae')
@@ -1457,6 +1455,8 @@ def process_peptides(args):
                 rt_diff_tmp = RT_pred - nr
 
                 XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
+
+
 
             RT_sigma = XRT_sigma
 
@@ -1510,6 +1510,7 @@ def process_peptides(args):
 
         else:
 
+
             qin = list(p1)
             qout = []
             pepdict = worker_RT(qin, qout, 0, 1, RC, False, False, True)
@@ -1535,10 +1536,11 @@ def process_peptides(args):
 
 
 
-
-
     else:
         rt_diff = np.zeros(len(resdict['iorig']))
+
+
+
 
 
     with open(base_out_name + '_protsN.tsv', 'w') as output:
