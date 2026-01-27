@@ -1529,7 +1529,7 @@ def process_peptides(args):
 
 
 
-        rt_diff = (rt_pred - np.array([rts[iorig] for iorig in resdict['iorig']]) - XRT_shift) / RT_sigma
+        # rt_diff = (rt_pred - np.array([rts[iorig] for iorig in resdict['iorig']]) - XRT_shift) / RT_sigma
 
 
         logger.info('RT prediction was finished')
