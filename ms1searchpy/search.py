@@ -32,7 +32,7 @@ def run():
      "[X]|[D]" for asp-n or "[RK]|{P},[K]|[X]" for mix of trypsin and lys-c', default='[RK]|{P}')
     parser.add_argument('-mc', help='number of missed cleavages', default=0, type=int)
     parser.add_argument('-cmin', help='min precursor charge', default=1, type=int)
-    parser.add_argument('-cmax', help='max precursor charge', default=4, type=int)
+    parser.add_argument('-cmax', help='max precursor charge', default=6, type=int)
     parser.add_argument('-fmods', help='fixed modifications. Use "[" and "]" for N-term and C-term amino acids. in psiname1@aminoacid1,psiname2@aminoacid2 format', default='Carbamidomethyl@C')
     parser.add_argument('-fmods_legend', help='PSI Names for extra fixed modifications. Oxidation, Carbamidomethyl and TMT6plex are stored by default in source code. in psiname1@monomass1,psiname2@monomass2 format', default='')
     parser.add_argument('-ad', help='add decoy', default=0, type=int)
