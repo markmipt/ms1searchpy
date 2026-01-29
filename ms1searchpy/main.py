@@ -854,9 +854,9 @@ def process_peptides(args):
     calib_path = args['pl']
     calib_path = calib_path.strip()
 
-    if calib_path and args['ts']:
-        args['ts'] = 0
-        logger.info('Two-stage RT prediction does not work with list of MS/MS identified peptides...')
+    # if calib_path and args['ts']:
+    #     args['ts'] = 0
+    #     logger.info('Two-stage RT prediction does not work with list of MS/MS identified peptides...')
 
     args['enzyme'] = utils.get_enzyme(args['e'])
 
