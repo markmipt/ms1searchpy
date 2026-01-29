@@ -2,7 +2,7 @@ from __future__ import division
 import argparse
 import pandas as pd
 import numpy as np
-from scipy.stats import binom, ttest_ind
+from scipy.stats import binom, ttest_ind, scoreatpercentile
 from scipy.optimize import curve_fit
 import logging
 from pyteomics import fasta
@@ -13,7 +13,7 @@ random.seed(42)
 logger = logging.getLogger(__name__)
 
 
-def get_df_final(args, replace_label, allowed_peptides, allowed_prots_all, pep_RT=False, RT_threshold=False):
+def get_df_final(args, replace_label, allowed_peptides, allowed_prots_all, pep_RT=False, RT_threshold=False, prot_spc=False):
 
     df_final = False
     for i in range(1, 3, 1):
@@ -21,8 +21,10 @@ def get_df_final(args, replace_label, allowed_peptides, allowed_prots_all, pep_R
         if args.get(sample_num, 0):
             for z in args[sample_num]:
                 label = sample_num + '_' + z.replace(replace_label, '')
-                df3 = pd.read_table(z.replace(replace_label, '_PFMs.tsv'), usecols=['sequence', 'proteins', 'charge', 'ion_mobility', 'Intensity', 'RT'])
-
+                # df3 = pd.read_table(z.replace(replace_label, '_PFMs.tsv'), usecols=['sequence', 'proteins', 'charge', 'ion_mobility', 'Intensity', 'RT'])
+                df3 = pd.read_table(z.replace(replace_label, '_PFMs_ML.tsv'), usecols=['seqs', 'proteins', 'ch', 'im', 'Is', 'rt', 'qpreds', 'preds'])
+                df3 = df3.rename(columns={'seqs': 'sequence', 'ch': 'charge', 'im': 'ion_mobility', 'Is': 'Intensity', 'rt': 'RT'})
+                df3 = df3[df3['qpreds'] <= 10]
 
                 if not args['allowed_peptides']:
                     df3['tmpseq'] = df3['sequence']
@@ -37,8 +39,41 @@ def get_df_final(args, replace_label, allowed_peptides, allowed_prots_all, pep_R
                 df3['origseq'] = df3['sequence']
                 df3['sequence'] = df3['sequence'] + df3['charge'].astype(int).astype(str) + df3['ion_mobility'].astype(str)
 
+
+                if pep_RT is False:
+                    df3 = df3.sort_values(by='preds')
+                    df3 = df3.drop_duplicates(subset='sequence')
+
+
+
+
                 if pep_RT is not False:
-                    df3 = df3[df3.apply(lambda x: abs(pep_RT[x['sequence']] - x['RT']) <= 3 * RT_threshold, axis=1)]
+
+
+                    # if prot_spc is not False:
+
+
+
+
+                    #     df3['max_prot_score'] = df3['proteins'].apply(lambda x: max(prot_spc.get(z, 0) for z in x.split(';')))
+                    #     df3 = df3.sort_values(by='max_prot_score', ascending=False)
+                    #     df3 = df3.drop_duplicates(subset=['ids', ])
+
+
+                    df3['RT diff'] = df3.apply(lambda x: pep_RT[x['sequence']] - x['RT'], axis=1)
+                    # df3['RT diff'] = df3.apply(lambda x: abs(pep_RT[x['origseq']] - x['RT']), axis=1)
+
+                    RT_shift, RT_threshold_l, RT_threshold_r = RT_threshold['RT_'+label]
+
+
+                    # RT_shift = df3['RT diff'].median()
+                    df3['RT diff'] = df3['RT diff'] - RT_shift
+                    df3 = df3[df3.apply(lambda x: RT_threshold_l <= (pep_RT[x['sequence']] - x['RT'] - RT_shift) <= RT_threshold_r, axis=1)]
+                    # RT_threshold = (scoreatpercentile(df3['RT diff'].values, 68) - scoreatpercentile(df3['RT diff'].values, 32)) / 2
+                    # RT_threshold = (scoreatpercentile(df3['RT diff'].values, 68) - scoreatpercentile(df3['RT diff'].values, 32)) / 2
+                    # print(RT_shift, RT_threshold)
+                    # df3 = df3[df3.apply(lambda x: abs(pep_RT[x['sequence']] - x['RT'] - RT_shift) <= 1000 * RT_threshold, axis=1)]
+                    # df3 = df3[df3.apply(lambda x: abs(pep_RT[x['origseq']] - x['RT'] - RT_shift) <= 3 * RT_threshold, axis=1)]
 
                 df3 = df3.sort_values(by='Intensity', ascending=False)
 
@@ -107,6 +142,7 @@ def run():
     parser.add_argument('-S2', nargs='+', help='input files for S2 sample', required=True)
     parser.add_argument('-out', help='name of DirectMS1quant output file', default='directms1quant_out')
     parser.add_argument('-min_samples', help='minimum number of samples for peptide usage. 0 means 50%% of input files', default=0)
+    parser.add_argument('-min_samples_group', help='minimum number of samples "best" group for peptide usage', default=0)
     parser.add_argument('-fold_change', help='FC threshold standard deviations', default=2.0, type=float)
     parser.add_argument('-fold_change_abs', help='Use absolute log2 scale FC threshold instead of standard deviations', action='store_true')
     # parser.add_argument('-bp', help='Experimental. Better percentage', default=80, type=int)
@@ -145,6 +181,9 @@ def process_files(args):
 
     cnt_file = 0
 
+    prot_scores = defaultdict(list)
+    s_koeff = 0
+
     for i in range(1, 3, 1):
         sample_num = 'S%d' % (i, )
         if args[sample_num]:
@@ -160,6 +199,11 @@ def process_files(args):
                 label = sample_num + '_' + z.replace(replace_label, '')
                 all_s_lbls[sample_num].append(label)
 
+                s_koeff += 1
+                df0 = pd.read_table(z, usecols=['dbname', 'score'])
+                for dbname, score in df0.values:
+                    prot_scores[dbname].append(score)
+                    
                 if not args['allowed_proteins']:
                     if not args['all_proteins']:
                         df0 = pd.read_table(z.replace('_proteins_full.tsv', '_proteins.tsv'), usecols=['dbname', ])
@@ -182,7 +226,11 @@ def process_files(args):
                     # cnt0.update(df0['seqs'])
 
     if args['allowed_proteins']:
-        allowed_prots = set(z.strip() for z in open(args['allowed_proteins'], 'r').readlines())
+        try:
+            ap = pd.read_table(args['allowed_proteins'], usecols=['dbname', ])
+            allowed_prots = set(ap['dbname'])
+        except:
+            allowed_prots = set(z.strip() for z in open(args['allowed_proteins'], 'r').readlines())
         allowed_prots.update([decoy_prefix + z for z in allowed_prots])
 
     if args['allowed_peptides']:
@@ -191,6 +239,12 @@ def process_files(args):
         allowed_peptides = allowed_peptides
 
     logger.info('Total number of TARGET protein GROUPS: %d', len(allowed_prots) / 2)
+
+    prot_spc = dict()
+    for k, v in prot_scores.items():
+        prot_spc[k] = sum(v) / s_koeff
+
+    # print(prot_spc)
 
     for i in range(1, 3, 1):
         sample_num = 'S%d' % (i, )
@@ -204,7 +258,27 @@ def process_files(args):
                     for dbname in dbnames.split(';'):
                         allowed_prots_all.add(dbname)
 
-    df_final = get_df_final(args, replace_label, allowed_peptides, allowed_prots_all, pep_RT=False, RT_threshold=False)
+    df_final = get_df_final(args, replace_label, allowed_peptides, allowed_prots_all, pep_RT=False, RT_threshold=False, prot_spc=prot_spc)
+
+    rt_ccols = [z for z in df_final.columns.tolist() if z.startswith('RT_')]
+
+    pep_RT = df_final.set_index('peptide')[rt_ccols].median(axis=1).to_dict()
+
+
+    RT_threshold = dict()
+
+    for cc in rt_ccols:
+        dfqqq = df_final[~pd.isna(df_final[cc])].copy()
+        dfqqq['RT diff'] = dfqqq.apply(lambda x: pep_RT[x['peptide']] - x[cc], axis=1)
+        # df3['RT diff'] = df3.apply(lambda x: abs(pep_RT[x['origseq']] - x['RT']), axis=1)
+        RT_shift = dfqqq['RT diff'].median()
+        dfqqq['RT diff'] = dfqqq['RT diff'] - RT_shift
+        RT_threshold_l = scoreatpercentile(dfqqq['RT diff'], 10) * 2
+        RT_threshold_r = scoreatpercentile(dfqqq['RT diff'], 90) * 2
+        # print(cc, RT_shift, RT_threshold_l, RT_threshold_r)
+        RT_threshold[cc] = (RT_shift, RT_threshold_l, RT_threshold_r)
+
+    df_final = get_df_final(args, replace_label, allowed_peptides, allowed_prots_all, pep_RT=pep_RT, RT_threshold=RT_threshold, prot_spc=prot_spc)
 
     logger.info('Total number of peptide sequences used in quantitation: %d', len(set(df_final['origseq'])))
 
@@ -222,6 +296,8 @@ def process_files(args):
     if custom_min_samples == 0:
         custom_min_samples = int(len(all_lbls)/2)
 
+    custom_min_samples_group = int(args['min_samples_group'])
+
     df_final = df_final_copy.copy()
 
     max_missing = len(all_lbls) - custom_min_samples
@@ -234,28 +310,35 @@ def process_files(args):
     df_final['nonmissing_S1'] = len(all_s_lbls['S1']) - df_final['nummissing_S1']
     df_final['nonmissing_S2'] = len(all_s_lbls['S2']) - df_final['nummissing_S2']
     df_final['nonmissing'] = df_final['nummissing'] <= max_missing
+    # df_final['nonmissing'] = (df_final['nummissing'] <= max_missing) & ((df_final['nonmissing_S1'] >= custom_min_samples_group) | (df_final['nonmissing_S2'] >= custom_min_samples_group))
 
-    df_final = df_final[df_final['nonmissing']]
-    logger.info('Total number of PFMs passed missing values threshold: %d', len(df_final))
+    # df_final = df_final[df_final['nonmissing']]
+    logger.info('Total number of PFMs: %d', len(df_final))
+    logger.info('Total number of PFMs passed missing values threshold: %d', len(df_final[df_final['nonmissing']]))
 
 
     df_final['S2_mean'] = df_final[all_s_lbls['S2']].mean(axis=1)
     df_final['S1_mean'] = df_final[all_s_lbls['S1']].mean(axis=1)
     df_final['FC_raw'] = np.log2(df_final['S2_mean']/df_final['S1_mean'])
 
-    FC_max = df_final['FC_raw'].max()
-    FC_min = df_final['FC_raw'].min()
+    # FC_max = df_final['FC_raw'].max()
+    # FC_min = df_final['FC_raw'].min()
+
+    FC_max = df_final[df_final['nonmissing']]['FC_raw'].max()
+    FC_min = df_final[df_final['nonmissing']]['FC_raw'].min()
 
     df_final.loc[(pd.isna(df_final['S2_mean'])) & (~pd.isna(df_final['S1_mean'])), 'FC_raw'] = FC_min
     df_final.loc[(~pd.isna(df_final['S2_mean'])) & (pd.isna(df_final['S1_mean'])), 'FC_raw'] = FC_max
 
     if args['intensity_norm'] == 2:
         for cc in all_lbls:
-            df_final[cc] = df_final[cc] / df_final[cc].nlargest(1000).sum()
+            # df_final[cc] = df_final[cc] / df_final[cc].nlargest(1000).sum()
+            df_final[cc] = df_final[cc] / df_final[df_final['nonmissing']][cc].nlargest(1000).sum()
 
     elif args['intensity_norm'] == 1:
         for cc in all_lbls:
-            df_final[cc] = df_final[cc] / df_final[cc].median()
+            # df_final[cc] = df_final[cc] / df_final[cc].median()
+            df_final[cc] = df_final[cc] / df_final[df_final['nonmissing']][cc].median()
 
     for slbl in ['1', '2']:
         S_len_current = len(all_s_lbls['S%s' % (slbl, )])
@@ -265,19 +348,19 @@ def process_files(args):
     df_final['S1_std'] = df_final['S1_std'].fillna(df_final['S2_std'])
     df_final['S2_std'] = df_final['S2_std'].fillna(df_final['S1_std'])
 
-    idx_to_calc_initial_pval = df_final[['nonmissing_S1', 'nonmissing_S2']].min(axis=1) >= 2
-    df_final.loc[idx_to_calc_initial_pval, 'p-value'] = list(ttest_ind(np.log10(df_final.loc[idx_to_calc_initial_pval, all_s_lbls['S1']].values.astype(float)), np.log10(df_final.loc[idx_to_calc_initial_pval, all_s_lbls['S2']].values.astype(float)), axis=1, nan_policy='omit', equal_var=True)[1])
-    df_final['p-value'] = df_final['p-value'].astype(float)
+    # idx_to_calc_initial_pval = df_final[['nonmissing_S1', 'nonmissing_S2']].min(axis=1) >= 2
+    # df_final.loc[idx_to_calc_initial_pval, 'p-value'] = list(ttest_ind(np.log10(df_final.loc[idx_to_calc_initial_pval, all_s_lbls['S1']].values.astype(float)), np.log10(df_final.loc[idx_to_calc_initial_pval, all_s_lbls['S2']].values.astype(float)), axis=1, nan_policy='omit', equal_var=True)[1])
+    # df_final['p-value'] = df_final['p-value'].astype(float)
 
-    for cc in all_lbls:
-        df_final[cc] = df_final[cc].fillna(df_final[cc].min())
+    # for cc in all_lbls:
+    #     df_final[cc] = df_final[cc].fillna(df_final[cc].min())
 
-    idx_missing_pval = pd.isna(df_final['p-value'])
+    # idx_missing_pval = pd.isna(df_final['p-value'])
 
-    df_final.loc[idx_missing_pval, 'p-value'] = list(ttest_ind(np.log10(df_final.loc[idx_missing_pval, all_s_lbls['S1']].values.astype(float)), np.log10(df_final.loc[idx_missing_pval, all_s_lbls['S2']].values.astype(float)), axis=1, nan_policy='omit', equal_var=True)[1])
+    # df_final.loc[idx_missing_pval, 'p-value'] = list(ttest_ind(np.log10(df_final.loc[idx_missing_pval, all_s_lbls['S1']].values.astype(float)), np.log10(df_final.loc[idx_missing_pval, all_s_lbls['S2']].values.astype(float)), axis=1, nan_policy='omit', equal_var=True)[1])
 
-    df_final['p-value'] = df_final['p-value'].fillna(1.0)
-    p_val_threshold = 0.1
+    # df_final['p-value'] = df_final['p-value'].fillna(1.0)
+    # p_val_threshold = 0.1
 
     for cc in all_lbls:
         df_final[cc] = df_final[cc].fillna(df_final[cc].min())
@@ -288,10 +371,15 @@ def process_files(args):
     df_final['FC'] = np.log2(df_final['S2_mean']/df_final['S1_mean'])
 
 
-    FC_max = df_final['FC'].max()
-    FC_min = df_final['FC'].min()
+    # FC_max = df_final['FC'].max()
+    # FC_min = df_final['FC'].min()
+    FC_max = df_final[df_final['nonmissing']]['FC'].max()
+    FC_min = df_final[df_final['nonmissing']]['FC'].min()
 
     df_final_for_calib = df_final.copy()
+
+    df_final_for_calib = df_final_for_calib[df_final_for_calib['nonmissing']]
+    
     df_final_for_calib = df_final_for_calib[~pd.isna(df_final_for_calib['S1_mean'])]
     df_final_for_calib = df_final_for_calib[df_final_for_calib['FC'] <= FC_max/2]
     df_final_for_calib = df_final_for_calib[df_final_for_calib['FC'] >= FC_min/2]
@@ -322,6 +410,7 @@ def process_files(args):
     df_final = df_final.drop(columns=['protein'])
 
     df_final = df_final.sort_values(by=['nummissing', 'intensity_median'], ascending=(True, False))
+    # df_final = df_final.sort_values(by=['intensity_median', ], ascending=(False, ))
     df_final = df_final.drop_duplicates(subset=('origseq', 'proteins'))
 
 
@@ -329,15 +418,48 @@ def process_files(args):
 
     if args['protein_shifts']:
         df_shifts = pd.read_table(args['protein_shifts'])
-        shifts_map = df_shifts.set_index('dbname')['FC shift'].to_dict()
+        if 'FC shift' in df_shifts.columns:
+            shifts_map = df_shifts.set_index('dbname')['FC shift'].to_dict()
+        else:
+            df_shifts = df_shifts[df_shifts['identified peptides'] >= 3]
+            shifts_map = df_shifts.set_index('dbname')['log2FoldChange(S2/S1) using all peptides'].to_dict()
         df_final['FC_corrected'] = df_final.apply(lambda x: x['FC_corrected'] - shifts_map.get(x['proteins'], 0), axis=1)
 
 
+        for cc in all_s_lbls['S2']:
+            df_final[cc] = df_final[cc] / df_final['proteins'].apply(lambda x: 2**shifts_map.get(x, 0))
+
+
+
+    df_final.loc[~df_final['nonmissing'], 'FC_corrected'] = (np.random.random(size=(~df_final['nonmissing']).sum())-0.5) / 100
 
 
     df_final['FC_abs'] = df_final['FC_corrected'].abs()
     df_final = df_final.sort_values(by='FC_abs').reset_index(drop=True)
     df_final['FC_abs'] = df_final['FC_corrected']
+
+
+
+
+    # idx_to_calc_initial_pval = df_final[['nonmissing_S1', 'nonmissing_S2']].min(axis=1) >= 2
+    idx_to_calc_initial_pval = (df_final[['nonmissing_S1', 'nonmissing_S2']].min(axis=1) >= 2) & (df_final['nonmissing'])
+
+
+    df_final.loc[idx_to_calc_initial_pval, 'p-value'] = list(ttest_ind(np.log10(df_final.loc[idx_to_calc_initial_pval, all_s_lbls['S1']].values.astype(float)), np.log10(df_final.loc[idx_to_calc_initial_pval, all_s_lbls['S2']].values.astype(float)), axis=1, nan_policy='omit', equal_var=True)[1])
+    df_final['p-value'] = df_final['p-value'].astype(float)
+
+    for cc in all_lbls:
+        df_final[cc] = df_final[cc].fillna(df_final[cc].min())
+
+    idx_missing_pval = pd.isna(df_final['p-value'])
+
+    df_final.loc[idx_missing_pval, 'p-value'] = list(ttest_ind(np.log10(df_final.loc[idx_missing_pval, all_s_lbls['S1']].values.astype(float)), np.log10(df_final.loc[idx_missing_pval, all_s_lbls['S2']].values.astype(float)), axis=1, nan_policy='omit', equal_var=True)[1])
+
+    df_final['p-value'] = df_final['p-value'].fillna(1.0)
+    p_val_threshold = 0.1
+
+
+
 
     idx_stat = df_final['p-value'] <= p_val_threshold
     df_final['FC_gr_mean'] = df_final.groupby('proteins', group_keys=False)['FC_abs'].apply(lambda x: x.expanding().mean())
@@ -401,14 +523,45 @@ def process_files(args):
     cols.insert(0, 'proteins')
     df_final = df_final[cols]
 
-    df_final.to_csv(path_or_buf=args['out']+'_quant_peptides.tsv', sep='\t', index=False)
+    df_final.to_csv(path_or_buf=args['out']+'_quant_peptides.tsv', sep='\t', index=False, float_format="%.4g")
 
     df_final = df_final.sort_values(by=['nummissing', 'intensity_median'], ascending=(True, False))
+    # df_final = df_final.sort_values(by=['intensity_median', ], ascending=(False, ))
     df_final = df_final.drop_duplicates(subset=('origseq', 'proteins'))
 
+
+
+
     prot_to_peps = defaultdict(str)
+    prot_pep_map = defaultdict(set)
     for dbname, pepseq in df_final.sort_values(by='origseq')[['proteins', 'origseq']].values:
         prot_to_peps[dbname] += pepseq
+        prot_pep_map[dbname].add(pepseq)
+
+
+    genes_map = {}
+    pep_pos_map = {}
+    prot_len_map = {}
+    if args['d']:
+        for prot, protseq in fasta.read(args['d']):
+            if decoy_prefix not in prot:
+                try:
+                    prot_name = prot.split('|')[1].split(' ')[0]
+                except:
+                    prot_name = prot.split(' ')[0]
+                try:
+                    gene_name = prot.split('GN=')[1].split(' ')[0]
+                except:
+                    gene_name = prot.split(' ')[0]
+                genes_map[prot_name] = gene_name
+
+            dbname = prot.split(' ')[0]
+            if dbname in prot_pep_map:
+                pep_pos_map[dbname] = dict()
+                for pepseq in prot_pep_map[dbname]:
+                    pep_pos_map[dbname][pepseq] = protseq.find(pepseq) + 1
+                prot_len_map[dbname] = len(protseq)
+
 
     all_peps_cnt = Counter(list(prot_to_peps.values()))
     peps_more_than_2 = set([k for k, v in all_peps_cnt.items() if v >= 2])
@@ -440,6 +593,36 @@ def process_files(args):
     df_final['up'] = df_final.apply(lambda x: x['up'] if up_dict.get(x['proteins'], 0) >= down_dict.get(x['proteins'], 0) else x['down'], axis=1)
     protsN = df_final.groupby('proteins')['up'].count().to_dict()
 
+    def get_difregmap(x):
+        out = ''
+        flag = 0
+        last_pos = 0
+        out += '%d/' % (x['prot_pos'].values[0], )
+        for enum_idx, z in enumerate(x['up'].values):
+            if not z:
+                out += '_'
+            else:
+                if not flag:
+                    out += '(%d)' % (x['prot_pos'].values[enum_idx], )
+                    flag = 1
+                last_pos = x['prot_pos'].values[enum_idx] + len(x['origseq'].values[enum_idx])-1
+                out += '*'
+        if flag:
+            out_tmp = out[::-1].split('*', 1)
+            out = out_tmp[1][::-1] + '*(%d)' % (last_pos, ) + out_tmp[0][::-1]
+        out += '/%d/%d' % (x['prot_pos'].values[-1]+len(x['origseq'].values[-1])-1, x['prot_len'].values[-1])
+        return out
+
+    if args['d']:
+        df_final['prot_pos'] = df_final.apply(lambda x: pep_pos_map[x['proteins']][x['origseq']], axis=1)
+        df_final['prot_len'] = df_final.apply(lambda x: prot_len_map[x['proteins']], axis=1)
+        df_final = df_final.sort_values(by='prot_pos')
+        difregmap = df_final.reset_index(drop=True).groupby('proteins').apply(get_difregmap).to_dict()
+        # difregmap = df_final.reset_index(drop=True).groupby('proteins')['up'].apply(lambda x: ''.join([('*' if z else '_') for z in x])).to_dict()
+    else:
+        difregmap = {}
+
+
     prots_up = df_final.groupby('proteins')['up'].sum()
     decoy_df = df_final[df_final['decoy']].drop_duplicates(subset='origseq')
 
@@ -461,6 +644,8 @@ def process_files(args):
     n_arr = np.array(list(protsN.get(k, 0) for k in names_arr))
 
     all_pvals = calc_sf_all(v_arr, n_arr, p_up)
+
+    df_final = df_final[df_final['nonmissing']]
 
     total_set = set()
     total_set_genes = set()
@@ -499,19 +684,7 @@ def process_files(args):
     df_out['protname'] = df_out['dbname'].apply(lambda x: x.split('|')[1] if '|' in x else x)
     df_out['protein_quant_group'] = df_out['dbname'].apply(lambda x: protein_groups[x])
 
-    genes_map = {}
     if args['d']:
-        for prot, protseq in fasta.read(args['d']):
-            if decoy_prefix not in prot:
-                try:
-                    prot_name = prot.split('|')[1]
-                except:
-                    prot_name = prot.split(' ')[0]
-                try:
-                    gene_name = prot.split('GN=')[1].split(' ')[0]
-                except:
-                    gene_name = prot.split(' ')[0]
-                genes_map[prot_name] = gene_name
 
         df_out['gene'] = df_out['protname'].apply(lambda x: genes_map[x])
 
@@ -525,14 +698,20 @@ def process_files(args):
 
     df_out = df_out.sort_values(by='score', ascending=False).reset_index(drop=True)
 
+
+    # lbl_FC_to_use = 'log2FoldChange(S2/S1)'
+    lbl_FC_to_use = 'log2FoldChange(S2/S1) using all peptides'
+
+
+
     df_out['FC_pass'] = False
-    df_out['FC_pass'] = df_out['log2FoldChange(S2/S1)'].abs() >= fold_change
+    df_out['FC_pass'] = df_out[lbl_FC_to_use].abs() >= fold_change
 
 
     BH_idx = (df_out['identified peptides'] >= min_matched_peptides) & (df_out['FC_pass'])
 
-    BH_idx_pos = (df_out['log2FoldChange(S2/S1)'] >= 0) & (df_out['identified peptides'] >= min_matched_peptides)
-    BH_idx_neg = (df_out['log2FoldChange(S2/S1)'] < 0) & (df_out['identified peptides'] >= min_matched_peptides)
+    BH_idx_pos = (df_out[lbl_FC_to_use] >= 0) & (df_out['identified peptides'] >= min_matched_peptides)
+    BH_idx_neg = (df_out[lbl_FC_to_use] < 0) & (df_out['identified peptides'] >= min_matched_peptides)
 
     # df_out['p-value'] = 1.0
     df_out['p-value'] = 10**(-df_out['score'])
@@ -560,16 +739,18 @@ def process_files(args):
 
     df_out = df_out.drop(columns = {'decoy'})
 
+    df_out['difregmap'] = df_out['dbname'].apply(lambda x: difregmap.get(x, ''))
+
     df_out = df_out[['score', 'p-value', 'dbname', 'log2FoldChange(S2/S1)', 'differentially expressed peptides',
                     'identified peptides', 'log2FoldChange(S2/S1) no normalization', 'log2FoldChange(S2/S1) using all peptides',
-                    'log2FoldChange(S2/S1) using all peptides and no normalization', 'protname', 'protein_quant_group', 'gene', 'FC_pass', 'FDR_pass', 'BH_pass',]]# 'BH_threshold']]
+                    'log2FoldChange(S2/S1) using all peptides and no normalization', 'protname', 'protein_quant_group', 'gene', 'FC_pass', 'FDR_pass', 'BH_pass', 'difregmap']]# 'BH_threshold']]
 
-    df_out.to_csv(path_or_buf=args['out']+'_quant_full.tsv', sep='\t', index=False)
+    df_out.to_csv(path_or_buf=args['out']+'_quant_full.tsv', sep='\t', index=False, float_format="%.4g")
 
     # df_out_f = df_out[(df_out['FDR_pass']) & (df_out['FC_pass'])]
     df_out_f = df_out[(df_out['BH_pass']) & (df_out['FC_pass'])]
 
-    df_out_f.to_csv(path_or_buf=args['out']+'.tsv', sep='\t', index=False)
+    df_out_f.to_csv(path_or_buf=args['out']+'.tsv', sep='\t', index=False, float_format="%.4g")
 
     for z in set(df_out_f['dbname']):
         try:
