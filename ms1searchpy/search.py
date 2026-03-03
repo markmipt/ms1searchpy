@@ -57,7 +57,7 @@ def run():
     parser.add_argument('-ms2mzml', help='EXPERIMENTAL. path to mzML with DDA', default='')
     parser.add_argument('-insource', help='EXPERIMENTAL. Use in-source fragments search', default=0, type=int)
     parser.add_argument('-isowidth', help='EXPERIMENTAL. Isolation window width, required only for mgf files', default=0, type=float)
-    parser.add_argument('-rt_shift', help='EXPERIMENTAL. rt_shift', default=0.1, type=float)
+    parser.add_argument('-rt_shift', help='EXPERIMENTAL. rt_shift', default=0, type=float)
     parser.add_argument('-acc_frag', help='EXPERIMENTAL. acc_frag', default=0.02, type=float)
     parser.add_argument('-systematic_mass_shift', help='EXPERIMENTAL. Systematic mass shift error in ppm', default=0, type=float)
     parser.add_argument('-md_correction', help='EXPERIMENTAL. Can be Orbi, Icr or Tof. Sqrt, Linear or Uniform mass error normalization, respectively.', default='Orbi')

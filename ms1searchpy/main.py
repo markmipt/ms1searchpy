@@ -940,7 +940,12 @@ def process_peptides(args):
 
         df1['Is'] = [Is[iorig] for iorig in df1['iorig'].values]
 
-        df1['top_peps'] = (df1['mc'] == 0) & (df1['seqs'].apply(lambda x: x in true_seqs) & (df1['Is'] >= best_isotopes_calibration))  
+        df1['top_peps'] = (df1['mc'] == 0) & (df1['seqs'].apply(lambda x: x in true_seqs) & (df1['Is'] >= best_isotopes_calibration))
+        print(df1['top_peps'].sum())  
+        df1['top_peps'] = (df1['mc'] == 0) & (df1['seqs'].apply(lambda x: x in true_seqs) & (df1['Is'] >= best_isotopes_calibration) & (df1['Is'] == df1.groupby('seqs')['Is'].transform('max')))
+        print(df1['top_peps'].sum())  
+        # top_peps_index = df1[df1['top_peps']].sort_values(by='Is', ascending=False).drop_duplicates(subset='seqs').index
+        # df1_top_peps = df1[(df1['mc'] == 0) & (df1['seqs'].apply(lambda x: x in true_seqs) & (df1['Is'] >= best_isotopes_calibration))].sort_values(by='Is', ascending=False).drop_duplicates(subset='seqs').copy()
 
         mass_calib_arg = args['mcalib']
 
@@ -1143,6 +1148,22 @@ def process_peptides(args):
         true_rt = true_rt[e_ind]
         true_I = true_I[e_ind]
 
+
+        true_seqs_unique = []
+        true_rt_unique = []
+        added_peps = set()
+        added_cnt = 0
+        for pepseq, peprt in zip(true_seqs, true_rt):
+            if pepseq not in added_peps:
+                true_seqs_unique.append(pepseq)
+                true_rt_unique.append(peprt)
+                added_peps.add(pepseq)
+                added_cnt += 1
+            if added_cnt >= 2500:
+                break
+        true_seqs = np.array(true_seqs_unique)
+        true_rt = np.array(true_rt_unique)
+
         true_seqs_full_for_calibration = set(true_seqs)
 
 
@@ -1150,20 +1171,6 @@ def process_peptides(args):
             logger.info('Running RT prediction...')
 
 
-            true_seqs_unique = []
-            true_rt_unique = []
-            added_peps = set()
-            added_cnt = 0
-            for pepseq, peprt in zip(true_seqs, true_rt):
-                if pepseq not in added_peps:
-                    true_seqs_unique.append(pepseq)
-                    true_rt_unique.append(peprt)
-                    added_peps.add(pepseq)
-                    added_cnt += 1
-                if added_cnt >= 2500:
-                    break
-            true_seqs = np.array(true_seqs_unique)
-            true_rt = np.array(true_rt_unique)
 
             per_ind = np.random.RandomState(seed=SEED).permutation(len(true_seqs))
             true_seqs = true_seqs[per_ind]
@@ -1777,7 +1784,7 @@ def process_peptides(args):
     if args['ms2mzml']:
         from pyteomics import mzml, mgf
         from identipy import utils as ms2utils
-        from identipy.cutils import RNHS_fast_basic as score_fast_basic
+        from identipy.cutils import RNHS3_fast_basic as score_fast_basic
         from identipy.scoring import RNHS
         from ms1searchpy import utils as ms1utils
 
@@ -1834,8 +1841,8 @@ def process_peptides(args):
             df1_small = df1[['peptide', 'mzraw', 'rt']].copy()
             df1_small['m_theor'] = df1_small['peptide'].apply(lambda x: pep_to_mass_dict[x])
 
-            if calibrate_fragments:
-                n = 1
+            # if calibrate_fragments:
+            #     n = 1
 
 
             if n == 1 or os.name == 'nt':
@@ -1847,7 +1854,7 @@ def process_peptides(args):
 
                     qin.append((df_index, seqm, m_theor, mz, rt))
 
-                qout = worker_for_msms(qin, qout, msms_rt_sorted, all_msms_int, iso_down_int, iso_up_int, iso_down, iso_up, shift, True)
+                qout = worker_for_msms(qin, qout, msms_rt_sorted, all_msms_int, iso_down_int, iso_up_int, iso_down, iso_up, shift, True, calibrate_fragments)
 
                 for index_out_local, hyperscore_out_local, hyperscore3_out_local, rt_shift_out_local, pep_count_msms_out_local, match_out_local, i_matched_out_local, fragments_ppm_out_local, iar_out_local in qout:
                     index_out.extend(index_out_local)
@@ -1873,14 +1880,14 @@ def process_peptides(args):
 
                 procs = []
                 for proc_num in range(n):
-                    p = Process(target=worker_for_msms, args=(qin, qout, msms_rt_sorted, all_msms_int, iso_down_int, iso_up_int, iso_down, iso_up, shift, False))
+                    p = Process(target=worker_for_msms, args=(qin, qout, msms_rt_sorted, all_msms_int, iso_down_int, iso_up_int, iso_down, iso_up, shift, False, calibrate_fragments))
                     p.start()
                     procs.append(p)
 
                 for _ in range(n):
                     for item in iter(qout.get, None):
 
-                        index_out_local, hyperscore_out_local, hyperscore3_out_local, rt_shift_out_local, pep_count_msms_out_local, match_out_local, i_matched_out_local = item
+                        index_out_local, hyperscore_out_local, hyperscore3_out_local, rt_shift_out_local, pep_count_msms_out_local, match_out_local, i_matched_out_local, fragments_ppm_out_local, iar_out_local = item
                         index_out.extend(index_out_local)
                         hyperscore_out.extend(hyperscore_out_local)
                         hyperscore3_out.extend(hyperscore3_out_local)
@@ -1888,6 +1895,8 @@ def process_peptides(args):
                         pep_count_msms_out.extend(pep_count_msms_out_local)
                         match_out.extend(match_out_local)
                         i_matched_out.extend(i_matched_out_local)
+                        fragments_ppm_out.extend(fragments_ppm_out_local)
+                        iar_out.extend(iar_out_local)
                         
                 for p in procs:
                     p.join()
@@ -1915,7 +1924,7 @@ def process_peptides(args):
 
 
 
-        def worker_for_msms(qin, qout, msms_rt_sorted, all_msms_int, iso_down_int, iso_up_int, iso_down, iso_up, shift, win_sys=False):
+        def worker_for_msms(qin, qout, msms_rt_sorted, all_msms_int, iso_down_int, iso_up_int, iso_down, iso_up, shift, win_sys=False, calibrate_fragments=False):
 
             theor_dict = dict()
             hyper_res = dict()
@@ -1936,7 +1945,7 @@ def process_peptides(args):
                 df_index, seqm, m_theor, mz, rt = item
 
                 mz_int = int(mz)
-                iso_range = list(range(mz_int - iso_down_int - 2, mz_int + iso_up_int + 2, 1))
+                # iso_range = list(range(mz_int - iso_down_int - 2, mz_int + iso_up_int + 2, 1))
 
                 pep_count_msms = 0
                 hf_best = 0
@@ -1949,14 +1958,14 @@ def process_peptides(args):
                 reshaped = False
                 start = msms_rt_sorted.searchsorted(rt - shift)
                 end = msms_rt_sorted.searchsorted(rt + shift, side='right')
-                for RT in msms_rt_sorted[start:end]:
-
+                for RT, iso_down_int_val, iso_up_int_val, iso_down_val, iso_up_val in zip(msms_rt_sorted[start:end], iso_down_int[start:end], iso_up_int[start:end], iso_down[start:end], iso_up[start:end]):
+                    iso_range = list(range(mz_int - iso_down_int_val - 2, mz_int + iso_up_int_val + 2, 1))
                     for mz_int_val in iso_range:
                         for s in all_msms_int[RT].get(mz_int_val, []):
 
                             nm_ms2 = s['mz']
 
-                            if nm_ms2 - iso_down - 1 <= mz <= nm_ms2 + iso_up:
+                            if nm_ms2 - iso_down_val - 1 <= mz <= nm_ms2 + iso_up_val:
 
                                 pep_count_msms += 1
 
@@ -1993,7 +2002,7 @@ def process_peptides(args):
                                                 reshaped = True
                                                 theor_dict[seqm] = (theor, theoretical_set, reshaped)
 
-                                            score = RNHS(s, theor, options_for_ms2['acc_frag'], options_for_ms2['acc_frag_ppm'])
+                                            score = RNHS3(s, theor, options_for_ms2['acc_frag'], options_for_ms2['acc_frag_ppm'])
                                             score3 = RNHS3(s, theor, options_for_ms2['acc_frag'], options_for_ms2['acc_frag_ppm'])
                                             hyper_res[(seqm, s_id)] = [hf_base, score, score3]
 
@@ -2003,7 +2012,7 @@ def process_peptides(args):
                                             match_best = score['match']
                                             rt_shift_current = rt - RT
                                             i_matched_best = score3['i_matched']
-                                            if win_sys:
+                                            if calibrate_fragments:
 
                                                 tres = get_fragment_mass_tol(s, theor, acc=options_for_ms2['acc_frag'])
                                                 fragments_ppm_best = np.median(tres['fmt']) * 2
@@ -2018,11 +2027,11 @@ def process_peptides(args):
                 pep_count_msms_out_local.append(pep_count_msms)
                 match_out_local.append(match_best)
                 i_matched_out_local.append(i_matched_best)
-                if win_sys:
+                if calibrate_fragments:
                     fragments_ppm_out_local.append(fragments_ppm_best)
                     iar_out_local.append(iar_best)
             if not win_sys:
-                qout.put((index_out_local, hyperscore_out_local, hyperscore3_out_local, rt_shift_out_local, pep_count_msms_out_local, match_out_local, i_matched_out_local))
+                qout.put((index_out_local, hyperscore_out_local, hyperscore3_out_local, rt_shift_out_local, pep_count_msms_out_local, match_out_local, i_matched_out_local, fragments_ppm_out_local, iar_out_local))
             else:
                 qout.append((index_out_local, hyperscore_out_local, hyperscore3_out_local, rt_shift_out_local, pep_count_msms_out_local, match_out_local, i_matched_out_local, fragments_ppm_out_local, iar_out_local))
 
@@ -2032,13 +2041,18 @@ def process_peptides(args):
                 return qout
 
         shift = args['rt_shift']
+        if shift == 0:
+            shift = RT_sigma
+            logger.info('setting initial RT shift for MS/MS spectra: %f min' % (shift, ))
 
+        iso_up = []
+        iso_down = []
 
         if args['insource'] == 1:
 
 
-            iso_up = 9999
-            iso_down = 9999
+            # iso_up = 9999
+            # iso_down = 9999
 
             all_msms_int = defaultdict(dict)
             mzml_flag = True
@@ -2058,16 +2072,19 @@ def process_peptides(args):
                             spectrum['mz'] = 600
                             mz_int = int(spectrum['mz'])
                         all_msms_int[RT].setdefault(mz_int, []).append(spectrum)
+                        iso_up.append(9999)
+                        iso_down.append(9999)
 
 
         else:
 
             if not args['isowidth']:
-                iso_up = False
-                iso_down = False
-            else:
-                iso_up = args['isowidth']
-                iso_down = args['isowidth']
+                iso_flag = False
+                # iso_up = False
+                # iso_down = False
+            # else:
+            #     iso_up = args['isowidth']
+            #     iso_down = args['isowidth']
 
             all_msms_int = defaultdict(dict)
             mzml_flag = True
@@ -2096,10 +2113,14 @@ def process_peptides(args):
                             RT = float(z['scanList']['scan'][0]['scan start time'])
                             spectrum['mz'] = spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z']
                             mz_int = int(spectrum['mz'])
-                            if iso_up is False:
-                                iso_up = float(spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window upper offset'])
-                                iso_down = float(spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window lower offset'])
-
+                            if iso_flag is False:
+                                # iso_up = float(spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window upper offset'])
+                                # iso_down = float(spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window lower offset'])
+                                iso_up.append(float(spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window upper offset']))
+                                iso_down.append(float(spectrum['precursorList']['precursor'][0]['isolationWindow']['isolation window lower offset']))
+                            else:
+                                iso_up.append(args['isowidth'])
+                                iso_down.append(args['isowidth'])
                         else:
                             RT = float(z['params']['rtinseconds']) / 60
                             spectrum['mz'] = spectrum['params']['pepmass'][0]
@@ -2109,12 +2130,23 @@ def process_peptides(args):
                 
                         # all_msms_int[RT].append(spectrum)
                         all_msms_int[RT].setdefault(mz_int, []).append(spectrum)
+        iso_up_int = np.array([ceil(iso_up_val) for iso_up_val in iso_up])
+        iso_down_int = np.array([ceil(iso_up_val) for iso_up_val in iso_down])
+        iso_up = np.array(iso_up)
+        iso_down = np.array(iso_down)
+        logger.debug(iso_up[:5])
+        logger.debug(iso_down[:5])
 
-        iso_up_int = ceil(iso_up)
-        iso_down_int = ceil(iso_down)
-        logger.debug(iso_up, iso_up_int)
+        msms_rt_sorted = np.array(list(all_msms_int.keys()))
+        if len(msms_rt_sorted) != len(iso_up):
+            logger.warning('Different MS/MS spectra has exactly the same Retention times!')
 
-        msms_rt_sorted = np.array(sorted(all_msms_int.keys()))
+        idx_for_sort = np.argsort(msms_rt_sorted)
+        msms_rt_sorted = msms_rt_sorted[idx_for_sort]
+        iso_up = iso_up[idx_for_sort]
+        iso_up_int = iso_up_int[idx_for_sort]
+        iso_down = iso_down[idx_for_sort]
+        iso_down_int = iso_down_int[idx_for_sort]
 
 
         n = args['nproc']
@@ -2126,9 +2158,11 @@ def process_peptides(args):
 
 
         seqs_for_fragment_calibration = true_seqs_full_for_calibration
-        df1_for_frag_calib = df1[df1['seqs'].apply(lambda x: x in seqs_for_fragment_calibration)]
+        df1_for_frag_calib = df1[df1['seqs'].apply(lambda x: x in seqs_for_fragment_calibration)].copy()
+        df1_for_frag_calib = df1_for_frag_calib.sort_values(by='Is',ascending=False).drop_duplicates(subset='seqs')
+        logger.debug(len(df1_for_frag_calib))
 
-        hyperscore_out, hyperscore3_out, rt_shift_out, pep_count_msms_out, match_out, i_matched_out, fragments_ppm_out_randomly_sorted, iar_out = get_msms_output_results(df1_for_frag_calib, msms_rt_sorted, all_msms_int, iso_down_int, iso_up_int, iso_down, iso_up, shift, calibrate_fragments=True, n=1)
+        hyperscore_out, hyperscore3_out, rt_shift_out, pep_count_msms_out, match_out, i_matched_out, fragments_ppm_out_randomly_sorted, iar_out = get_msms_output_results(df1_for_frag_calib, msms_rt_sorted, all_msms_int, iso_down_int, iso_up_int, iso_down, iso_up, shift, calibrate_fragments=True, n=n)
 
 
         fragmassdif = []
@@ -2145,7 +2179,7 @@ def process_peptides(args):
 
 
         # import pickle
-        # pickle.dump(iar_out, open('/home/mark/iar_out.pickle', 'wb'))
+        # pickle.dump(fragmassdif, open('/home/mark/fragmassdif_out.pickle', 'wb'))
 
         hyperscore_out, hyperscore3_out, rt_shift_out, pep_count_msms_out, match_out, i_matched_out, _, _ = get_msms_output_results(df1_for_frag_calib, msms_rt_sorted, all_msms_int, iso_down_int, iso_up_int, iso_down, iso_up, shift, calibrate_fragments=False, n=n)
 
@@ -2156,8 +2190,11 @@ def process_peptides(args):
             if not np.isnan(rt_shift_val):
                 rt_shift_list.append(rt_shift_val)
 
+
+        # pickle.dump(rt_shift_list, open('/home/mark/rt_shift_list_out.pickle', 'wb'))
+
         MS1MS2RT_shift, MS1MS2RT_sigma, MS1MS2RT_covvalue = calibrate_RT_gaus_full(rt_shift_list, bin_if_inf=0.01)
-        logger.debug(MS1MS2RT_shift, MS1MS2RT_sigma)
+        # logger.debug(MS1MS2RT_shift, MS1MS2RT_sigma)
         shift_l = max(MS1MS2RT_shift - 3 * MS1MS2RT_sigma, -shift)
         shift_r = min(MS1MS2RT_shift + 3 * MS1MS2RT_sigma, shift)
         logger.info('NEW RT shift left = %s', shift_l)
@@ -2578,43 +2615,48 @@ def process_peptides(args):
             df1.loc[mask, 'preds'] = rankdata(model.predict(get_X_array(test_df, feature_columns)), method='ordinal') / sum(mask)
 
 
-    else:
-        df1['preds'] = np.power(df1['mass_diff'], 2) + np.power(df1['rt_diff'], 2)
 
 
+        df1['qpreds'] = pd.qcut(df1['preds'], 50, labels=range(50))
+
+        df1['decoy'] = df1['decoy2']
 
 
-    df1['qpreds'] = pd.qcut(df1['preds'], 50, labels=range(50))
+        df1u = df1.sort_values(by='preds')
+        df1u = df1u.drop_duplicates(subset='seqs')
 
-    df1['decoy'] = df1['decoy2']
+        qval_ok = 0
+        for qval_cur in range(50):
+            df1ut = df1u[df1u['qpreds'] == qval_cur]
+            decoy_ratio = df1ut['decoy'].sum() / len(df1ut)
+            if decoy_ratio < ml_correction:
+                qval_ok = qval_cur
+            else:
+                break
+        logger.info('%d %% of PFMs were removed from protein scoring after Machine Learning', (100 - (qval_ok+1)*2))
 
+    #CHECK merge conflict was from here
+        df1u = df1u[df1u['qpreds'] <= qval_ok]#.copy()
 
-    df1u = df1.sort_values(by='preds')
-    df1u = df1u.drop_duplicates(subset='seqs')
+        df1u['qpreds'] = pd.qcut(df1u['preds'], 10, labels=range(10))
 
-    qval_ok = 0
-    for qval_cur in range(50):
-        df1ut = df1u[df1u['qpreds'] == qval_cur]
-        decoy_ratio = df1ut['decoy'].sum() / len(df1ut)
-        if decoy_ratio < ml_correction:
-            qval_ok = qval_cur
-        else:
-            break
-    logger.info('%d %% of PFMs were removed from protein scoring after Machine Learning', (100 - (qval_ok+1)*2))
-
-#CHECK merge conflict was from here
-    df1u = df1u[df1u['qpreds'] <= qval_ok]#.copy()
-
-    df1u['qpreds'] = pd.qcut(df1u['preds'], 10, labels=range(10))
-
-    qdict = dict()
-    for v in df1u.groupby('qpreds'):
-        qdict[v[0]] = v[1]['preds'].max()
-    df1['qpreds'] = 11
-    for qv, pv in sorted(qdict.items(), key=lambda x: -x[0]):
-        df1.loc[df1['preds'] <= pv, 'qpreds'] = qv
+        qdict = dict()
+        for v in df1u.groupby('qpreds'):
+            qdict[v[0]] = v[1]['preds'].max()
+        df1['qpreds'] = 11
+        for qv, pv in sorted(qdict.items(), key=lambda x: -x[0]):
+            df1.loc[df1['preds'] <= pv, 'qpreds'] = qv
 
 # #to here
+
+    else:
+        df1['decoy'] = df1['decoy2']
+        df1['preds'] = np.power(df1['mass_diff'], 2) + np.power(df1['rt_diff'], 2)
+        try:
+            df1['qpreds'] = pd.qcut(df1['preds'], 10, labels=range(10))
+        except:
+            df1['qpreds'] = 0
+
 
     df1.to_csv(base_out_name + '_PFMs_ML.tsv', sep='\t', index=False)
 
