@@ -2653,7 +2653,7 @@ def process_peptides(args):
         df1['decoy'] = df1['decoy2']
         df1['preds'] = np.power(df1['mass_diff'], 2) + np.power(df1['rt_diff'], 2)
         try:
-            df1['qpreds'] = pd.qcut(df1['preds'], 10, labels=range(10))
+            df1['qpreds'] = pd.qcut(df1['preds'], 10, labels=range(10)).astype(int)
         except:
             df1['qpreds'] = 0
 
