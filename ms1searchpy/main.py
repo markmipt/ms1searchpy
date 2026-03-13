@@ -653,6 +653,67 @@ def calibrate_mass(bwidth, mass_left, mass_right, true_md):
     mass_shift, mass_sigma = popt[1], abs(popt[2])
     return mass_shift, mass_sigma, pcov[0][0]
 
+# opt_bin from IQMMA
+def opt_bin(ar, border=16) :
+    num_bins = 4
+    bwidth = (max(ar) - min(ar))/num_bins
+    bbins = np.arange(min(ar), max(ar), bwidth)
+    H1, b1 = np.histogram(ar, bins=bbins)
+    max_percent = 100*max(H1)/sum(H1)
+
+    bestbins1 = num_bins
+    bestbins2 = num_bins
+    mxp2 = max_percent
+    mxp1 = max_percent
+    old_max_percent = max_percent
+    i = 0
+    j = 0
+    while max_percent > border and i < 10000 :
+        num_bins = num_bins*2
+        bwidth = (max(ar) - min(ar))/num_bins
+        bbins = np.arange(min(ar), max(ar), bwidth)
+        H1, b1 = np.histogram(ar, bins=bbins)
+        old_max_percent = max_percent
+        max_percent = 100*max(H1)/sum(H1)
+        # print('first_while', num_bins, max_percent)
+        if max_percent <= border :
+            bestbins1 = num_bins
+            mxp1 = max_percent
+        if old_max_percent == max_percent :
+            j += 1
+        if j == 7 :
+            # print('Unable to reach border bin width')
+            logger.debug('Unable to reach border bin width')
+            break
+        i += 1
+    i = 0
+    while max_percent < border and i < 10000 :
+        if num_bins < 16 :
+            num_bins -= 1
+        else :
+            num_bins = round(num_bins/1.1, 0)
+
+        bwidth = (max(ar) - min(ar))/num_bins
+        bbins = np.arange(min(ar), max(ar), bwidth)
+        H1, b1 = np.histogram(ar, bins=bbins)
+        max_percent = 100*max(H1)/sum(H1)
+        # print('second_while', num_bins, max_percent)
+        if max_percent < border :
+            bestbins2 = num_bins
+            mxp2 = max_percent
+        i += 1
+    if abs(mxp1 - border) < abs(mxp2 - border) :
+        bestbins = bestbins1
+    else :
+        bestbins = bestbins2
+    bwidth = (max(ar) - min(ar))/bestbins
+    bbins = np.arange(min(ar), max(ar), bwidth)
+    H1, b1 = np.histogram(ar, bins=bbins)
+    max_percent = 100*max(H1)/sum(H1)
+    # logger.debug('final num_bins: ' + str(int(num_bins)) + '\t' + 'final max percent per bin: ' + str(round(max_percent, 2)) + '%')
+
+    return bwidth
+
 def calibrate_RT_gaus(bwidth, mass_left, mass_right, true_md):
 
     bbins = np.arange(-mass_left, mass_right, bwidth)
@@ -1228,9 +1289,12 @@ def process_peptides(args):
             logger.info('First-stage calibrated RT sigma: %.3f min', XRT_sigma)
 
             RT_sigma = XRT_sigma
+        else:
+            RT_sigma = max(rts) / 50
 
     else:
         logger.info('No matches found')
+        return -1
 
 
 
@@ -1620,6 +1684,7 @@ def process_peptides(args):
             'decoy2',
             'top_25_targets',
             'i_matched_out',
+            'best_spectrum_id',
             'G',
         }
 
@@ -1788,6 +1853,11 @@ def process_peptides(args):
         from identipy.scoring import RNHS
         from ms1searchpy import utils as ms1utils
 
+        class MS1OnlyMzML(mzml.MzML): 
+            _default_iter_path = '//spectrum[./*[local-name()="cvParam" and @name="ms level" and @value="1"]]' 
+            _use_index = False 
+            _iterative = False
+
         options_for_ms2 = {
             'maxpeaks': 500000,
             'minpeaks': 2,
@@ -1824,6 +1894,7 @@ def process_peptides(args):
             i_matched_out = []
             fragments_ppm_out = []
             iar_out = []
+            s_id_out = []
 
             theor_dict = dict()
             hyper_res = dict()
@@ -1856,7 +1927,7 @@ def process_peptides(args):
 
                 qout = worker_for_msms(qin, qout, msms_rt_sorted, all_msms_int, iso_down_int, iso_up_int, iso_down, iso_up, shift, True, calibrate_fragments)
 
-                for index_out_local, hyperscore_out_local, hyperscore3_out_local, rt_shift_out_local, pep_count_msms_out_local, match_out_local, i_matched_out_local, fragments_ppm_out_local, iar_out_local in qout:
+                for index_out_local, hyperscore_out_local, hyperscore3_out_local, rt_shift_out_local, pep_count_msms_out_local, match_out_local, i_matched_out_local, fragments_ppm_out_local, iar_out_local, s_id_out_local in qout:
                     index_out.extend(index_out_local)
                     hyperscore_out.extend(hyperscore_out_local)
                     hyperscore3_out.extend(hyperscore3_out_local)
@@ -1866,6 +1937,7 @@ def process_peptides(args):
                     i_matched_out.extend(i_matched_out_local)
                     fragments_ppm_out.extend(fragments_ppm_out_local)
                     iar_out.extend(iar_out_local)
+                    s_id_out.extend(s_id_out_local)
 
             else:
                 qin = Queue()
@@ -1887,7 +1959,7 @@ def process_peptides(args):
                 for _ in range(n):
                     for item in iter(qout.get, None):
 
-                        index_out_local, hyperscore_out_local, hyperscore3_out_local, rt_shift_out_local, pep_count_msms_out_local, match_out_local, i_matched_out_local, fragments_ppm_out_local, iar_out_local = item
+                        index_out_local, hyperscore_out_local, hyperscore3_out_local, rt_shift_out_local, pep_count_msms_out_local, match_out_local, i_matched_out_local, fragments_ppm_out_local, iar_out_local, s_id_out_local = item
                         index_out.extend(index_out_local)
                         hyperscore_out.extend(hyperscore_out_local)
                         hyperscore3_out.extend(hyperscore3_out_local)
@@ -1897,6 +1969,7 @@ def process_peptides(args):
                         i_matched_out.extend(i_matched_out_local)
                         fragments_ppm_out.extend(fragments_ppm_out_local)
                         iar_out.extend(iar_out_local)
+                        s_id_out.extend(s_id_out_local)
                         
                 for p in procs:
                     p.join()
@@ -1909,6 +1982,7 @@ def process_peptides(args):
             pep_count_msms_out = np.array(pep_count_msms_out)
             match_out = np.array(match_out)
             i_matched_out = np.asarray(i_matched_out, dtype="object")
+            s_id_out = np.array(s_id_out)
 
             idx_sort = np.argsort(index_out)
 
@@ -1918,8 +1992,9 @@ def process_peptides(args):
             pep_count_msms_out = list(pep_count_msms_out[idx_sort])
             match_out = list(match_out[idx_sort])
             i_matched_out = list(i_matched_out[idx_sort])
+            s_id_out = list(s_id_out[idx_sort])
 
-            return hyperscore_out, hyperscore3_out, rt_shift_out, pep_count_msms_out, match_out, i_matched_out, fragments_ppm_out, iar_out
+            return hyperscore_out, hyperscore3_out, rt_shift_out, pep_count_msms_out, match_out, i_matched_out, fragments_ppm_out, iar_out, s_id_out
 
 
 
@@ -1938,6 +2013,7 @@ def process_peptides(args):
             i_matched_out_local = []
             fragments_ppm_out_local = []
             iar_out_local = []
+            s_id_out_local = []
 
 
 
@@ -1950,6 +2026,7 @@ def process_peptides(args):
                 pep_count_msms = 0
                 hf_best = 0
                 hf3_best = 0
+                s_id_best = '-1'
                 rt_shift_current = np.nan
                 fragments_ppm_best = np.nan
                 match_best = dict()
@@ -1970,7 +2047,8 @@ def process_peptides(args):
                                 pep_count_msms += 1
 
                                 stored = 0
-                                s_id = s['index']
+                                # s_id = s['index']
+                                s_id = s['id']
                                 if (seqm, s_id) in hyper_res:
 
                                     hf_base, score, score3 = hyper_res[(seqm, s_id)]
@@ -2009,6 +2087,7 @@ def process_peptides(args):
                                         if score['score'] > hf_best:
                                             hf_best = score['score']
                                             hf3_best = score3['score']
+                                            s_id_best = s_id
                                             match_best = score['match']
                                             rt_shift_current = rt - RT
                                             i_matched_best = score3['i_matched']
@@ -2021,6 +2100,7 @@ def process_peptides(args):
 
                                             # spec_best = (s, theor)
                 index_out_local.append(df_index)
+                s_id_out_local.append(s_id_best)
                 hyperscore_out_local.append(hf_best)
                 hyperscore3_out_local.append(hf3_best)
                 rt_shift_out_local.append(rt_shift_current)
@@ -2031,9 +2111,9 @@ def process_peptides(args):
                     fragments_ppm_out_local.append(fragments_ppm_best)
                     iar_out_local.append(iar_best)
             if not win_sys:
-                qout.put((index_out_local, hyperscore_out_local, hyperscore3_out_local, rt_shift_out_local, pep_count_msms_out_local, match_out_local, i_matched_out_local, fragments_ppm_out_local, iar_out_local))
+                qout.put((index_out_local, hyperscore_out_local, hyperscore3_out_local, rt_shift_out_local, pep_count_msms_out_local, match_out_local, i_matched_out_local, fragments_ppm_out_local, iar_out_local, s_id_out_local))
             else:
-                qout.append((index_out_local, hyperscore_out_local, hyperscore3_out_local, rt_shift_out_local, pep_count_msms_out_local, match_out_local, i_matched_out_local, fragments_ppm_out_local, iar_out_local))
+                qout.append((index_out_local, hyperscore_out_local, hyperscore3_out_local, rt_shift_out_local, pep_count_msms_out_local, match_out_local, i_matched_out_local, fragments_ppm_out_local, iar_out_local, s_id_out_local))
 
             if not win_sys:
                 qout.put(None)
@@ -2051,13 +2131,43 @@ def process_peptides(args):
         if args['insource'] == 1:
 
 
-            # iso_up = 9999
-            # iso_down = 9999
+            # all_msms_int = defaultdict(dict)
+            # mzml_flag = True
+            # all_ms1_RTs = sorted(set(df1['rt']))
+
+            # df_features = df_features.sort_values(by='massCalib')
+            # for rt_cur_val in all_ms1_RTs:
+            #     tmp_features = df_features[(df_features['rtEnd'] >= rt_cur_val) & (df_features['rtStart'] <= rt_cur_val)]
+            #     z = dict()
+            #     z['m/z array'] = tmp_features['massCalib'].values + 1.0072765
+            #     z['intensity array'] = tmp_features['intensityApex'].values
+
+            #     if args['systematic_mass_shift']:
+            #         z['m/z array'] = z['m/z array'] * (1 - 1e-6 * args['systematic_mass_shift'])
+
+            #     z['precursorList'] = {'precursor': [{'selectedIonList': {'selectedIon': [{'selected ion m/z': 600, 'charge state': 2}, ]}}, ]}
+            #     z['id'] = tmp_features['id'].values[0]
+            #     z['RT'] = rt_cur_val
+
+            #     spectrum = ms2utils.preprocess_spectrum(z, options_for_ms2)
+            #     if spectrum is not None:
+            #         if mzml_flag:
+            #             RT = rt_cur_val
+            #             spectrum['mz'] = 600
+            #             mz_int = int(spectrum['mz'])
+            #         all_msms_int[RT].setdefault(mz_int, []).append(spectrum)
+            #         iso_up.append(9999)
+            #         iso_down.append(9999)
+
+
+            # # iso_up = 9999
+            # # iso_down = 9999
 
             all_msms_int = defaultdict(dict)
             mzml_flag = True
-            a = mzml.read(args['ms2mzml'], use_index=False)
-            for z in a:
+            # a = mzml.read(args['ms2mzml'], use_index=False)
+            # for z in a:
+            for z in MS1OnlyMzML(source=args['ms2mzml']):
                 if z['ms level'] == 1:
 
                     if args['systematic_mass_shift']:
@@ -2162,7 +2272,7 @@ def process_peptides(args):
         df1_for_frag_calib = df1_for_frag_calib.sort_values(by='Is',ascending=False).drop_duplicates(subset='seqs')
         logger.debug(len(df1_for_frag_calib))
 
-        hyperscore_out, hyperscore3_out, rt_shift_out, pep_count_msms_out, match_out, i_matched_out, fragments_ppm_out_randomly_sorted, iar_out = get_msms_output_results(df1_for_frag_calib, msms_rt_sorted, all_msms_int, iso_down_int, iso_up_int, iso_down, iso_up, shift, calibrate_fragments=True, n=n)
+        hyperscore_out, hyperscore3_out, rt_shift_out, pep_count_msms_out, match_out, i_matched_out, fragments_ppm_out_randomly_sorted, iar_out, _ = get_msms_output_results(df1_for_frag_calib, msms_rt_sorted, all_msms_int, iso_down_int, iso_up_int, iso_down, iso_up, shift, calibrate_fragments=True, n=n)
 
 
         fragmassdif = []
@@ -2170,6 +2280,7 @@ def process_peptides(args):
             # if tres is not False:
             if not np.isnan(tres):
                 fragmassdif.append(tres)
+
         if len(fragmassdif):
 
             fragmassdif = np.array(fragmassdif)
@@ -2181,30 +2292,35 @@ def process_peptides(args):
         # import pickle
         # pickle.dump(fragmassdif, open('/home/mark/fragmassdif_out.pickle', 'wb'))
 
-        hyperscore_out, hyperscore3_out, rt_shift_out, pep_count_msms_out, match_out, i_matched_out, _, _ = get_msms_output_results(df1_for_frag_calib, msms_rt_sorted, all_msms_int, iso_down_int, iso_up_int, iso_down, iso_up, shift, calibrate_fragments=False, n=n)
+        if args['rt_shift'] == 0:
+
+            hyperscore_out, hyperscore3_out, rt_shift_out, pep_count_msms_out, match_out, i_matched_out, _, _, _ = get_msms_output_results(df1_for_frag_calib, msms_rt_sorted, all_msms_int, iso_down_int, iso_up_int, iso_down, iso_up, shift, calibrate_fragments=False, n=n)
 
 
-        rt_shift_list = []
-        for rt_shift_val in rt_shift_out:
-            # if rt_shift_val is not False:
-            if not np.isnan(rt_shift_val):
-                rt_shift_list.append(rt_shift_val)
+            rt_shift_list = []
+            for rt_shift_val in rt_shift_out:
+                # if rt_shift_val is not False:
+                if not np.isnan(rt_shift_val):
+                    rt_shift_list.append(rt_shift_val)
+
+            import pickle
+            pickle.dump(rt_shift_list, open('/home/mark/rt_shift_list_out.pickle', 'wb'))
+
+            opt_bin_val = opt_bin(rt_shift_list)
+            MS1MS2RT_shift, MS1MS2RT_sigma, MS1MS2RT_covvalue = calibrate_RT_gaus(opt_bin_val, -min(rt_shift_list), max(rt_shift_list), rt_shift_list)
+
+            # MS1MS2RT_shift, MS1MS2RT_sigma, MS1MS2RT_covvalue = calibrate_RT_gaus_full(rt_shift_list, bin_if_inf=0.01)
+            # logger.debug(MS1MS2RT_shift, MS1MS2RT_sigma)
+            shift_l = max(MS1MS2RT_shift - 3 * MS1MS2RT_sigma, -shift)
+            shift_r = min(MS1MS2RT_shift + 3 * MS1MS2RT_sigma, shift)
+            logger.info('NEW RT shift left = %s', shift_l)
+            logger.info('NEW RT shift right = %s', shift_r)
+            shift = max(-shift_l, shift_r)
 
 
-        # pickle.dump(rt_shift_list, open('/home/mark/rt_shift_list_out.pickle', 'wb'))
-
-        MS1MS2RT_shift, MS1MS2RT_sigma, MS1MS2RT_covvalue = calibrate_RT_gaus_full(rt_shift_list, bin_if_inf=0.01)
-        # logger.debug(MS1MS2RT_shift, MS1MS2RT_sigma)
-        shift_l = max(MS1MS2RT_shift - 3 * MS1MS2RT_sigma, -shift)
-        shift_r = min(MS1MS2RT_shift + 3 * MS1MS2RT_sigma, shift)
-        logger.info('NEW RT shift left = %s', shift_l)
-        logger.info('NEW RT shift right = %s', shift_r)
-        shift = max(-shift_l, shift_r)
 
 
-
-
-        hyperscore_out, hyperscore3_out, rt_shift_out, pep_count_msms_out, match_out, i_matched_out, _, _ = get_msms_output_results(df1, msms_rt_sorted, all_msms_int, iso_down_int, iso_up_int, iso_down, iso_up, shift, calibrate_fragments=False, n=n)
+        hyperscore_out, hyperscore3_out, rt_shift_out, pep_count_msms_out, match_out, i_matched_out, _, _, s_id_out = get_msms_output_results(df1, msms_rt_sorted, all_msms_int, iso_down_int, iso_up_int, iso_down, iso_up, shift, calibrate_fragments=False, n=n)
 
 
 
@@ -2214,6 +2330,7 @@ def process_peptides(args):
         df1['rt_shift_out'] = rt_shift_out
         df1['pep_count_msms_out'] = pep_count_msms_out
         df1['i_matched_out'] = i_matched_out
+        df1['best_spectrum_id'] = s_id_out
 
 
         df1['b_count'] = [(sum(z.get(('b', 1), {})) if z is not None else 0) for z in match_out]
