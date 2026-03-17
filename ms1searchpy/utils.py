@@ -1,4 +1,4 @@
-from pyteomics import fasta, parser, mass
+from pyteomics import fasta, parser, mass, mzml
 import os
 from scipy.stats import binom
 import numpy as np
@@ -28,6 +28,8 @@ mods_custom_dict = {
     'Carbamidomethyl': 57.021464,
     'TMT6plex': 229.162932,
 }
+
+
 
 
 def get_aa_mass_with_fixed_mods(fmods, fmods_legend):
@@ -107,6 +109,7 @@ def write_pepxml(inputfile, args, df1, pept_prot):
     #     elif mod.endswith('-'):
     #         nterm_fixed = settings.getfloat('modifications', 'protein nterm cleavage')
 
+
     filename = inputfile.replace('.mzML', '.pep.xml')#get_outpath(inputfile, settings, 'pep.xml')
     with open(filename, 'wb') as output:
         logger.info('Writing %s ...', filename)
@@ -183,6 +186,7 @@ def write_pepxml(inputfile, args, df1, pept_prot):
 # #       results = list(get_output(results, settings))
         logger.info('Accumulated results: %s', len(df1))
 #         pept_prot, prots, pept_neighbors, pept_ntts = build_pept_prot(settings, results)
+        _, _, _, pept_neighbors = get_prot_pept_map(args, neighbors=True)
 #         if settings.has_option('misc', 'aa_mass'):
 #             aa_mass = settings.get('misc', 'aa_mass')
 #         else:
@@ -205,13 +209,15 @@ def write_pepxml(inputfile, args, df1, pept_prot):
 #         ctermcleavage = settings.getfloat('modifications', 'protein cterm cleavage')
 
         df1['idx'] = df1.index
-        for idx, neutral_mass, charge_state, RT, comp_voltage, sequence, matched_ions, md, hyperscore_score, hyperscore3_score, sf_score, ms1_intensity, b_sum, y_sum, missed_cleavages in df1[['idx', 'nmasses', 'ch', 'rt', 'im', 'seqs', 'matched_ions', 'md', 'hyperscore', 'hyperscore3', 'sf', 'Is', 'b_count', 'y_count', 'mc']].values:
+        if 'best_spectrum_id' not in df1.columns:
+            df1['best_spectrum_id'] = df1['idx']
+        for idx, neutral_mass, charge_state, RT, comp_voltage, sequence, matched_ions, md, hyperscore_score, hyperscore3_score, sf_score, ms1_intensity, b_sum, y_sum, missed_cleavages, best_spectrum_id in df1[['idx', 'nmasses', 'ch', 'rt', 'im', 'seqs', 'matched_ions', 'md', 'hyperscore', 'hyperscore3', 'sf', 'Is', 'b_count', 'y_count', 'mc', 'best_spectrum_id']].values:
         # for idx, result in enumerate(df1):
             if 1:
                 tmp = etree.Element('spectrum_query')
                 # spectrum = result['spectrum']
-                tmp.set('spectrum', str(idx))
-                tmp.set('spectrumNativeID', str(idx))
+                tmp.set('spectrum', str(best_spectrum_id))
+                tmp.set('spectrumNativeID', str(best_spectrum_id))
                 # tmp.set('spectrum', get_title(spectrum))
                 # tmp.set('spectrumNativeID', get_title(spectrum))
                 tmp.set('start_scan', str(idx))  # ???
@@ -258,10 +264,10 @@ def write_pepxml(inputfile, args, df1, pept_prot):
                         # except:
                         #     protein_descr = ''
 
-#                         neighbors = pept_neighbors.get(sequence, {}).get(proteins[0], ('-', '-'))
+                        neighbors = pept_neighbors.get(sequence, {}).get(proteins[0], ('-', '-'))
 
-#                         tmp3.set('peptide_prev_aa', neighbors[0])
-#                         tmp3.set('peptide_next_aa', neighbors[1])
+                        tmp3.set('peptide_prev_aa', neighbors[0])
+                        tmp3.set('peptide_next_aa', neighbors[1])
                         tmp3.set('protein_descr', protein_descr)
 
                         num_tot_proteins = len(proteins)
@@ -273,6 +279,7 @@ def write_pepxml(inputfile, args, df1, pept_prot):
 #                         # neutral_mass_theor = cmass.fast_mass(sequence, aa_mass=aa_mass)
                         tmp3.set('calc_neutral_pep_mass', str(neutral_mass_theor))
                         tmp3.set('massdiff', str(neutral_mass * md / 1e6))
+                        tmp3.set('num_tol_term', str(2))
                         # tmp3.set('num_tol_term', str(pept_ntts.get(sequence, {}).get(proteins[0], '?')))
                         tmp3.set('num_missed_cleavages', str(missed_cleavages))
                         # tmp3.set('is_rejected', '0')  # ???
@@ -287,10 +294,11 @@ def write_pepxml(inputfile, args, df1, pept_prot):
                                 except:
                                     protein_descr = ''
                                 tmp4.set('protein_descr', protein_descr)
-                                # neighbors = pept_neighbors.get(sequence, {}).get(prot, ('-', '-'))
-                                # tmp4.set('peptide_prev_aa', neighbors[0])
-                                # tmp4.set('peptide_next_aa', neighbors[1])
+                                neighbors = pept_neighbors.get(sequence, {}).get(prot, ('-', '-'))
+                                tmp4.set('peptide_prev_aa', neighbors[0])
+                                tmp4.set('peptide_next_aa', neighbors[1])
                                 # tmp4.set('num_tol_term', str(pept_ntts.get(sequence, {}).get(prot, '?')))
+                                tmp4.set('num_tol_term', str(2))
                                 tmp3.append(copy(tmp4))
 
 #                         labels = parser.std_labels + [la[:-1] if la[-1] == '[' else '-' + la[:-2] if la[-1] == ']' else la for la in leg if len(la) > 1]
@@ -704,7 +712,53 @@ def prot_peptides(prot_seq, enzyme, mc, minlen, maxlen, is_decoy, dont_use_seen_
                             seen_target.add(f)
                         yield f
 
-def get_prot_pept_map(args):
+try:
+    from identipy import cparser
+except ImportError:
+    from identipy import customparser as cparser
+
+
+def get_peptides2(prot_seq, enzyme, mc, minlen, maxlen, semitryptic=False):
+    peptides = cparser._cleave(prot_seq, enzyme, mc)
+    for pep, startposition in peptides:
+        plen = len(pep)
+        if minlen <= plen <= maxlen:
+            if not semitryptic:
+                yield pep, startposition, plen
+            else:
+                for i in range(plen-minlen+1):
+                    yield pep[i:], startposition + i, plen - i
+                for i in range(1, plen-minlen+1, 1):
+                    yield pep[:-i], startposition, plen - i
+
+
+seen_target = set()
+seen_decoy = set()
+def prot_peptides2(prot_seq, enzyme, mc, minlen, maxlen, is_decoy, dont_use_seen_peptides=False):
+
+
+    dont_use_fast_valid = parser.fast_valid(prot_seq)
+    # peptides = parser.cleave(prot_seq, enzyme, mc)
+    # for pep in peptides:
+    #     plen = len(pep)
+    for pep, startposition, plen in get_peptides2(prot_seq, enzyme, mc, minlen, maxlen):
+        if minlen <= plen <= maxlen:
+            forms = []
+            if dont_use_fast_valid or pep in seen_target or pep in seen_decoy or parser.fast_valid(pep):
+                if plen <= maxlen:
+                    forms.append(pep)
+            for f in forms:
+                if dont_use_seen_peptides:
+                    yield (f, startposition)
+                else:
+                    if f not in seen_target and f not in seen_decoy:
+                        if is_decoy:
+                            seen_decoy.add(f)
+                        else:
+                            seen_target.add(f)
+                        yield (f, startposition)
+
+def get_prot_pept_map(args, neighbors=False):
     seen_target.clear()
     seen_decoy.clear()
 
@@ -723,13 +777,26 @@ def get_prot_pept_map(args):
     target_peps = set()
     decoy_peps = set()
 
+    pept_neighbors = {}
+
 
 
     for desc, prot in prot_gen(args):
         dbinfo = desc.split(' ')[0]
-        for pep in prot_peptides(prot, enzyme, mc, minlen, maxlen, desc.startswith(prefix), dont_use_seen_peptides=True):
-            pept_prot.setdefault(pep, set()).add(dbinfo)
-            protsN.setdefault(dbinfo, set()).add(pep)
+
+        if neighbors:
+
+            for pep, startposition in prot_peptides2(prot, enzyme, mc, minlen, maxlen, desc.startswith(prefix), dont_use_seen_peptides=True):
+                pept_prot.setdefault(pep, set()).add(dbinfo)
+
+                pept_neighbors.setdefault(pep, {})
+                pept_neighbors[pep][dbinfo] = (prot[startposition - 1] if startposition != 0 else '-', prot[startposition + len(pep)] if startposition + len(pep) < len(prot) else '-')
+
+                protsN.setdefault(dbinfo, set()).add(pep)
+        else:
+            for pep in prot_peptides(prot, enzyme, mc, minlen, maxlen, desc.startswith(prefix), dont_use_seen_peptides=True):
+                pept_prot.setdefault(pep, set()).add(dbinfo)
+                protsN.setdefault(dbinfo, set()).add(pep)
     for k, v in protsN.items():
         if k.startswith(prefix):
             decoy_prot_count += 1
@@ -740,19 +807,26 @@ def get_prot_pept_map(args):
 
         protsN[k] = len(v)
 
-    logger.info('Database information:')
-    logger.info('Target/Decoy proteins: %d/%d', target_prot_count, decoy_prot_count)
-    target_peps_number = len(target_peps)
-    decoy_peps_number = len(decoy_peps)
-    intersection_number = len(target_peps.intersection(decoy_peps)) / (target_peps_number + decoy_peps_number)
-    logger.info('Target/Decoy peptides: %d/%d', target_peps_number, decoy_peps_number)
-    logger.info('Target-Decoy peptide intersection: %.1f %%',
-        100 * intersection_number)
-       
-    ml_correction = decoy_peps_number * (1 - intersection_number) / target_peps_number * 0.5
-    del decoy_peps
-    del target_peps
-    return protsN, pept_prot, ml_correction
+
+    if neighbors:
+        del decoy_peps
+        del target_peps
+        return protsN, pept_prot, 0, pept_neighbors
+
+    else:
+        logger.info('Database information:')
+        logger.info('Target/Decoy proteins: %d/%d', target_prot_count, decoy_prot_count)
+        target_peps_number = len(target_peps)
+        decoy_peps_number = len(decoy_peps)
+        intersection_number = len(target_peps.intersection(decoy_peps)) / (target_peps_number + decoy_peps_number)
+        logger.info('Target/Decoy peptides: %d/%d', target_peps_number, decoy_peps_number)
+        logger.info('Target-Decoy peptide intersection: %.1f %%',
+            100 * intersection_number)
+        
+        ml_correction = decoy_peps_number * (1 - intersection_number) / target_peps_number * 0.5
+        del decoy_peps
+        del target_peps
+        return protsN, pept_prot, ml_correction
 
 
 
