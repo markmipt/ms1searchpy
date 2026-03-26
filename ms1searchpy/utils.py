@@ -11,7 +11,7 @@ from copy import deepcopy
 from collections import defaultdict, Counter
 import string
 from time import strftime
-import pkg_resources
+from importlib.metadata import version
 from copy import copy
 from lxml import etree
 
@@ -155,7 +155,7 @@ def write_pepxml(inputfile, args, df1, pept_prot):
         child4 = etree.Element('search_summary')
         child4.set('base_name', base_name)
         child4.set('search_engine', search_engine)
-        child4.set("search_engine_version", get_version())
+        child4.set("search_engine_version", version('ms1searchpy'))
         child4.set('precursor_mass_type', 'monoisotopic')
         child4.set('fragment_mass_type', 'monoisotopic')
         child4.set('search_id', '1')
@@ -933,8 +933,3 @@ def calc_sf_all(v, n, p, prev_best_score=False, p_array=False):
     sf_values[np.isnan(sf_values)] = 0
     sf_values[np.isinf(sf_values)] = (prev_best_score if prev_best_score is not False else max(sf_values[~np.isinf(sf_values)]) * 2)
     return sf_values
-
-
-
-def get_version():
-    return pkg_resources.get_distribution('ms1searchpy').version
