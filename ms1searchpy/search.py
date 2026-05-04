@@ -62,7 +62,7 @@ def run():
     parser.add_argument('-systematic_mass_shift', help='EXPERIMENTAL. Systematic mass shift error in ppm', default=0, type=float)
     parser.add_argument('-md_correction', help='EXPERIMENTAL. Can be Orbi, Icr or Tof. Sqrt, Linear or Uniform mass error normalization, respectively.', default='Orbi')
     parser.add_argument('-rd_correction', help='EXPERIMENTAL. 1 - RT error correction by mzrange; 0 - no correction', default=0, type=int)
-    # parser.add_argument('-ms2pip', help='EXPERIMENTAL. Use MS2PIP for theoretical spectra generation', default=0, type=int)
+    parser.add_argument('-ms2pip', help='EXPERIMENTAL. Use MS2PIP for theoretical spectra generation', default=0, type=int)
     parser.add_argument('-semi', help='EXPERIMENTAL. add semi-tryptic peptides', default=0, type=int)
     parser.add_argument('-m_off', help='EXPERIMENTAL. Turn off accurate mass filter', default=0, type=int)
     parser.add_argument('-newLC_calib', help='EXPERIMENTAL. newLC calibration', default=0, type=int)

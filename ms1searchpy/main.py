@@ -923,7 +923,10 @@ def process_peptides(args):
 
 
     prefix = args['prefix']
-    protsN, pept_prot, ml_correction = utils.get_prot_pept_map(args)
+    if args['semi'] == 2:
+        protsN, pept_prot, ml_correction = utils.get_prot_pept_map_semi2(args)
+    else:
+        protsN, pept_prot, ml_correction = utils.get_prot_pept_map(args)
 
     kwargs, df_features = prepare_peptide_processor(fname_orig, args)
     logger.info('Running the search ...')
@@ -1587,6 +1590,13 @@ def process_peptides(args):
             pepdict = worker_RT(qin, qout, 0, 1, RC, False, False, True)
 
         rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
+
+
+
+        rt_pred = rt_pred.clip(0, 1e6)
+
+
+
         # rt_diff = np.array([rts[iorig] for iorig in resdict['iorig']]) - rt_pred
         rt_diff = rt_pred - np.array([rts[iorig] for iorig in resdict['iorig']]) - XRT_shift
         # rt_diff = resdict['rt'] - rt_pred
@@ -2303,8 +2313,8 @@ def process_peptides(args):
                 if not np.isnan(rt_shift_val):
                     rt_shift_list.append(rt_shift_val)
 
-            import pickle
-            pickle.dump(rt_shift_list, open('/home/mark/rt_shift_list_out.pickle', 'wb'))
+            # import pickle
+            # pickle.dump(rt_shift_list, open('/home/mark/rt_shift_list_out.pickle', 'wb'))
 
             opt_bin_val = opt_bin(rt_shift_list)
             MS1MS2RT_shift, MS1MS2RT_sigma, MS1MS2RT_covvalue = calibrate_RT_gaus(opt_bin_val, -min(rt_shift_list), max(rt_shift_list), rt_shift_list)
@@ -2336,34 +2346,35 @@ def process_peptides(args):
         df1['b_count'] = [(sum(z.get(('b', 1), {})) if z is not None else 0) for z in match_out]
         df1['y_count'] = [(sum(z.get(('y', 1), {})) if z is not None else 0) for z in match_out]
 
-        # if args['ms2pip']:
-        #     import ms2pip
-        #     dfx = df1[(df1['hyperscore'] > 0)].copy()
-        #     dfx = dfx.drop_duplicates(subset=['seqs', 'ch'])
-        #     dfx['spec_id'] = range(1, len(dfx)+1)
-        #     dfx['spec_id'] = dfx['spec_id'].astype(str)
-        #     dfx['modifications'] = [utils.mods_for_deepLC(seq, aa_to_psi) for seq in dfx['seqs'].values]
-        #     dfx['charge'] = dfx['ch']
-        #     dfx['peptide'] = dfx['seqs']
-        #     dfx[['spec_id', 'modifications', 'peptide', 'charge']].to_csv('/home/mark/msallsearchpy2/test_ms2pip.peprec', index=False, sep='\t')
-        #     out_fragments = ms2pip.predict_batch('/home/mark/msallsearchpy2/test_ms2pip.peprec')
-        #     pred_i_dict = {}
-        #     for pepseq, pepch, pr in zip(dfx['seqs'].values, dfx['ch'].values, out_fragments):
-        #         i_predicted = np.append(pr.predicted_intensity['b'], pr.predicted_intensity['y'])
-        #         pred_i_dict[(pepseq, pepch)] = i_predicted
+        if args['ms2pip']:
 
-        #     def get_correlation_with_preds(x, pred_i_dict):
-        #         i_matched = x['i_matched_out']
-        #         if len(i_matched):
-        #             if (x['seqs'], x['ch']) in pred_i_dict:
-        #                 i_predicted = pred_i_dict[(x['seqs'], x['ch'])]
-        #                 return np.corrcoef(i_matched, i_predicted)[0][1]
-        #             else:
-        #                 return 0
-        #         else:
-        #              return 0
+            import ms2pip
+            dfx = df1[(df1['hyperscore'] > 0)].copy()
+            dfx = dfx.drop_duplicates(subset=['seqs', 'ch'])
+            dfx['spec_id'] = range(1, len(dfx)+1)
+            dfx['spec_id'] = dfx['spec_id'].astype(str)
+            dfx['modifications'] = [utils.mods_for_deepLC(seq, aa_to_psi) for seq in dfx['seqs'].values]
+            dfx['charge'] = dfx['ch']
+            dfx['peptide'] = dfx['seqs']
+            dfx[['spec_id', 'modifications', 'peptide', 'charge']].to_csv(base_out_name + '_ms2pip.peprec', index=False, sep='\t')
+            out_fragments = ms2pip.predict_batch(base_out_name + '_ms2pip.peprec')
+            pred_i_dict = {}
+            for pepseq, pepch, pr in zip(dfx['seqs'].values, dfx['ch'].values, out_fragments):
+                i_predicted = np.append(pr.predicted_intensity['b'], pr.predicted_intensity['y'])
+                pred_i_dict[(pepseq, pepch)] = i_predicted
 
-        #     df1['MS2PIP_corr'] = df1.apply(get_correlation_with_preds, pred_i_dict=pred_i_dict, axis=1)
+            def get_correlation_with_preds(x, pred_i_dict):
+                i_matched = x['i_matched_out']
+                if len(i_matched):
+                    if (x['seqs'], x['ch']) in pred_i_dict:
+                        i_predicted = pred_i_dict[(x['seqs'], x['ch'])]
+                        return np.corrcoef(i_matched, i_predicted)[0][1]
+                    else:
+                        return 0
+                else:
+                     return 0
+
+            df1['MS2PIP_corr'] = df1.apply(get_correlation_with_preds, pred_i_dict=pred_i_dict, axis=1)
 
 
         kdict = dict()
@@ -2834,7 +2845,7 @@ def process_peptides(args):
 
 
 
-    if args['semi']:
+    if args['semi'] == 1:
         protsN_semi, pept_prot3, pept_prot_semi, protsN3 = utils.get_prot_pept_map_semi(args, pept_prot)
 
         protsN_semi_backpep = dict()

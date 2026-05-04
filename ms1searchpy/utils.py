@@ -829,6 +829,65 @@ def get_prot_pept_map(args, neighbors=False):
         return protsN, pept_prot, ml_correction
 
 
+def get_prot_pept_map_semi2(args):
+    seen_target.clear()
+    seen_decoy.clear()
+
+
+    prefix = args['prefix']
+    enzyme = get_enzyme(args['e'])
+    mc = args['mc']
+    minlen = args['lmin']
+    maxlen = args['lmax']
+
+    pept_prot = dict()
+    protsN = dict()
+
+    target_prot_count = 0
+    decoy_prot_count = 0
+    target_peps = set()
+    decoy_peps = set()
+
+
+
+
+    for desc, prot in prot_gen(args):
+        dbinfo = desc.split(' ')[0]
+
+        for pep in prot_peptides(prot, enzyme, mc, minlen, maxlen, desc.startswith(prefix), dont_use_seen_peptides=True):
+
+
+            for idx in range(len(pep)-1):
+                pl = pep[:idx+1]
+                pr = pep[idx+1:]
+                if minlen <= len(pl) <= maxlen:
+                    pept_prot.setdefault(pep, set()).add(dbinfo)
+                    protsN.setdefault(dbinfo, set()).add(pl)
+    for k, v in protsN.items():
+        if k.startswith(prefix):
+            decoy_prot_count += 1
+            decoy_peps.update(v)
+        else:
+            target_prot_count += 1
+            target_peps.update(v)
+
+        protsN[k] = len(v)
+
+
+    logger.info('Database information:')
+    logger.info('Target/Decoy proteins: %d/%d', target_prot_count, decoy_prot_count)
+    target_peps_number = len(target_peps)
+    decoy_peps_number = len(decoy_peps)
+    intersection_number = len(target_peps.intersection(decoy_peps)) / (target_peps_number + decoy_peps_number)
+    logger.info('Target/Decoy peptides: %d/%d', target_peps_number, decoy_peps_number)
+    logger.info('Target-Decoy peptide intersection: %.1f %%',
+        100 * intersection_number)
+    
+    ml_correction = decoy_peps_number * (1 - intersection_number) / target_peps_number * 0.5
+    del decoy_peps
+    del target_peps
+    return protsN, pept_prot, ml_correction
+
 
 def get_prot_pept_map_semi(args, pept_prot):
 
