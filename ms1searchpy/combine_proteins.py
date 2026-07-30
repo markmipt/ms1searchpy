@@ -3,27 +3,7 @@ import pandas as pd
 import argparse
 import logging
 
-logger = logging.getLogger(__name__)
-
-def run():
-    parser = argparse.ArgumentParser(
-        description='Combine DirectMS1 search results',
-        epilog='''
-
-    Example usage
-    -------------
-    $ ms1combine_proteins file1_proteins_full.tsv ... filen_proteins_full.tsv
-    -------------
-    ''',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
-    parser.add_argument('file', nargs='+', help='input tsv proteins_full files')
-    parser.add_argument('-out', help='prefix for joint file name', default='combined')
-    parser.add_argument('-fdr', help='protein fdr filter in %%', default=1.0, type=float)
-    parser.add_argument('-prefix', help='decoy prefix', default='DECOY_')
-    args = vars(parser.parse_args())
-    logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
-            datefmt='[%H:%M:%S]', level=logging.INFO)
+def base_func(args, logger):
 
     tmp_list = []
     for idx, filen in enumerate(args['file']):
@@ -73,6 +53,30 @@ def run():
 
     df1 = pd.DataFrame.from_records(filtered_prots, columns=['dbname', 'score'])
     df1.to_csv(out_name, index=False, sep='\t')
+
+def run():
+    parser = argparse.ArgumentParser(
+        description='Combine DirectMS1 search results',
+        epilog='''
+
+    Example usage
+    -------------
+    $ ms1combine_proteins file1_proteins_full.tsv ... filen_proteins_full.tsv
+    -------------
+    ''',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    parser.add_argument('file', nargs='+', help='input tsv proteins_full files')
+    parser.add_argument('-out', help='prefix for joint file name', default='combined')
+    parser.add_argument('-fdr', help='protein fdr filter in %%', default=1.0, type=float)
+    parser.add_argument('-prefix', help='decoy prefix', default='DECOY_')
+    args = vars(parser.parse_args())
+
+
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
+            datefmt='[%H:%M:%S]', level=logging.INFO)
+    base_func(args, logger)
 
 if __name__ == '__main__':
     run()
