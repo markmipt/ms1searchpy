@@ -10,7 +10,7 @@ def run():
 
     Example usage
     -------------
-    $ search.py input.mzML input2.mzML -d human.fasta -ad 1 -fdr 5.0
+    $ search.py input.mzML -d human.fasta -ad 1 -fdr 1.0 -deeplc 1
     -------------
     ''',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -18,12 +18,10 @@ def run():
     parser.add_argument('files', help='input mzML or .tsv files with peptide features', nargs='+')
     parser.add_argument('-d', '-db', help='path to protein fasta file', required=True)
     parser.add_argument('-o', help='path to output folder', default='')
-    parser.add_argument('-ptol', help='precursor mass tolerance in ppm', default=10.0, type=float)
+    parser.add_argument('-ptol', help='precursor mass tolerance in ppm', default=8.0, type=float)
     parser.add_argument('-fdr', help='protein fdr filter in %%', default=1.0, type=float)
-    parser.add_argument('-i', help='minimum number of isotopes', default=2, type=int)
+    parser.add_argument('-i', help='minimum number of isotopes (including monoisotopic peak)', default=2, type=int)
     parser.add_argument('-ci', help='minimum intensity for mass and RT calibration, 0 - auto calibration', default=0, type=int)
-    # parser.add_argument('-ci', help='minimum number of isotopes for mass and RT calibration', default=0, type=int)
-    # parser.add_argument('-csc', help='minimum number of scans for mass and RT calibration', default=0, type=int)
     parser.add_argument('-ts', help='Two-stage RT training: 0 - turn off, 1 - turn one, 2 - turn on and use additive model in the first stage (Default)', default=2, type=int)
     parser.add_argument('-sc', help='minimum number of scans for peptide feature', default=2, type=int)
     parser.add_argument('-lmin', help='min length of peptides', default=7, type=int)
@@ -54,15 +52,15 @@ def run():
     parser.add_argument('-es', help='Experimental. Use extra stage for RT calibration', default=0, type=int)
     parser.add_argument('-csd', help='Employ limited (1) or comlete (2) chrge-state distribution model; for complete model path to ThermoRawFileParser 1.4.2+ has to be provided. Default - (0) - don\'t use charge-state distribution' , default=0, type=int)
     parser.add_argument('-trfp', help='Path to ThermoRawFileParser executable', default='')
-    parser.add_argument('-ms2mzml', help='EXPERIMENTAL. path to mzML with DDA', default='')
-    parser.add_argument('-insource', help='EXPERIMENTAL. Use in-source fragments search', default=0, type=int)
-    parser.add_argument('-isowidth', help='EXPERIMENTAL. Isolation window width, required only for mgf files', default=0, type=float)
-    parser.add_argument('-rt_shift', help='EXPERIMENTAL. rt_shift', default=0, type=float)
-    parser.add_argument('-acc_frag', help='EXPERIMENTAL. acc_frag', default=0.02, type=float)
-    parser.add_argument('-systematic_mass_shift', help='EXPERIMENTAL. Systematic mass shift error in ppm', default=0, type=float)
+    parser.add_argument('-ms2mzml', help='msallsearchpy: Path to mzML file with MS/MS spectra', default='')
+    parser.add_argument('-insource', help='msallsearchpy: Use in-source fragments search instead of MS2 spectra', default=0, type=int)
+    parser.add_argument('-isowidth', help='msallsearchpy: Isolation window width, required only for mgf files', default=0, type=float)
+    parser.add_argument('-rt_shift', help='msallsearchpy: RT difference threshold between MS1 RTApex and MS/MS scan RT. By default, this value is automatically optimized.', default=0, type=float)
+    parser.add_argument('-acc_frag', help='msallsearchpy: Initial fragment mass accuracy in Da', default=0.02, type=float)
+    parser.add_argument('-systematic_mass_shift', help='Systematic mass shift error in ppm for MS1 and MS2 spectra', default=0, type=float)
     parser.add_argument('-md_correction', help='EXPERIMENTAL. Can be Orbi, Icr or Tof. Sqrt, Linear or Uniform mass error normalization, respectively.', default='Orbi')
-    parser.add_argument('-rd_correction', help='EXPERIMENTAL. 1 - RT error correction by mzrange; 0 - no correction', default=0, type=int)
-    parser.add_argument('-ms2pip', help='EXPERIMENTAL. Use MS2PIP for theoretical spectra generation', default=0, type=int)
+    parser.add_argument('-rd_correction', help='EXPERIMENTAL. 1 - RT error correction by mz intervals; 0 - no correction', default=0, type=int)
+    parser.add_argument('-ms2pip', help='msallsearchpy: Use MS2PIP for theoretical spectra generation', default=0, type=int)
     parser.add_argument('-semi', help='EXPERIMENTAL. add semi-tryptic peptides', default=0, type=int)
     parser.add_argument('-m_off', help='EXPERIMENTAL. Turn off accurate mass filter', default=0, type=int)
     parser.add_argument('-newLC_calib', help='EXPERIMENTAL. newLC calibration', default=0, type=int)
