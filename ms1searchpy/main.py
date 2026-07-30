@@ -103,7 +103,8 @@ def RNHS3(spectrum, theoretical, acc, acc_ppm=False, position=False):
     i_array = np.append(spectrum['intensity array'], 0)
     for ion in [('b', 1), ('y', 1)]:
         ind = ind_dict[ion]
-        i_matched.extend(i_array[ind][::-1])
+        # i_matched.extend(i_array[ind][::-1])
+        i_matched.extend(i_array[ind])
 
     i_matched = np.array(i_matched)
     i_matched = np.log2(i_matched/i_matched.sum() + 0.001)
@@ -1501,6 +1502,9 @@ def process_peptides(args):
 
                 rt_diff_tmp = df_for_check['pr'] - df_for_check['tr']
 
+                rt_min_clip = df_for_calib['tr'].min()
+                rt_max_clip = df_for_calib['tr'].max()
+
 
                 if args['rd_correction'] == 1:
                     df_for_check['rt_diff_tmp'] = df_for_check['pr'] - df_for_check['tr']
@@ -1527,6 +1531,9 @@ def process_peptides(args):
                 RT_pred = np.array([achrom.calculate_RT(s, RC) for s in ns])
 
                 rt_diff_tmp = RT_pred - nr
+
+                rt_min_clip = min(nr)
+                rt_max_clip = max(nr)
 
                 XRT_shift, XRT_sigma, covvalue = calibrate_RT_gaus_full(rt_diff_tmp)
 
@@ -1592,8 +1599,8 @@ def process_peptides(args):
         rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
 
 
-
-        rt_pred = rt_pred.clip(0, 1e6)
+        print('RT clip', rt_min_clip, rt_max_clip)
+        rt_pred = rt_pred.clip(rt_min_clip, rt_max_clip)
 
 
 
