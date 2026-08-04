@@ -766,6 +766,7 @@ def prepare_peptide_processor(fname, args):
     global mzraw
     global avraw
     global imraw
+    global sulfurraw
 
     min_ch = args['cmin']
     max_ch = args['cmax']
@@ -799,6 +800,8 @@ def prepare_peptide_processor(fname, args):
         imraw = df_features['FAIMS'].values
     else:
         imraw = df_features['im'].values
+
+    sulfurraw = df_features['Sulfur.Signal'].values
 
     logger.info('Number of peptide isotopic clusters passed filters: %d', len(nmasses))
 
@@ -1849,6 +1852,22 @@ def process_peptides(args):
     df1['c_DP'] = df1['peptide'].apply(lambda x: x.count('DP'))
     df1['c_KP'] = df1['peptide'].apply(lambda x: x.count('KP'))
     df1['c_RP'] = df1['peptide'].apply(lambda x: x.count('RP'))
+
+    def score_sulfur(x):
+        if x['c_MC'] > 0 and x['Sulfur.Signal'] > 0:
+            return 1
+        elif x['c_MC'] > 0 and x['Sulfur.Signal'] == 0:
+            return 0
+        elif x['c_MC'] == 0 and x['Sulfur.Signal'] == 0:
+            return 0.5
+        elif x['c_MC'] == 0 and x['Sulfur.Signal'] == 1:
+            return -1
+        
+    if args['use_sulfur']:
+        df1['Sulfur.Signal'] = sulfurraw[df1['iorig'].values]
+        df1['c_MC'] = ((df1['peptide'].apply(lambda x: x.count('C') + x.count('M'))) > 0).astype(int)
+        df1['sulfur_score'] = df1.apply(score_sulfur, axis=1)
+
 
     df1['rt_diff_abs'] = df1['rt_diff'].abs()
     df1['rt_diff_abs_pdiff'] = df1['rt_diff_abs'] - df1.groupby('ids')['rt_diff_abs'].transform('median')
