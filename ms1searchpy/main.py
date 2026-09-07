@@ -1864,7 +1864,18 @@ def process_peptides(args):
             return -1
         
     if args['use_sulfur']:
-        df1['Sulfur.Signal'] = sulfurraw[df1['iorig'].values]
+
+        sulfur_columns_names = ['Sulfur.Signal', ]
+        one_sample = sulfurraw[0].split(';')
+        if len(one_sample) > 1:
+            for idx, _ in enumerate(one_sample[1:]):
+                sulfur_columns_names.append('Sulfur.feature_%d' % (idx + 2, ) )
+
+        df1[sulfur_columns_names] = [z.split(';') for z in sulfurraw[df1['iorig'].values]]
+        for cc in sulfur_columns_names:
+            df1[cc] = df1[cc].astype(float)
+
+        # df1['Sulfur.Signal'] = sulfurraw[df1['iorig'].values]
         df1['c_MC'] = ((df1['peptide'].apply(lambda x: x.count('C') + x.count('M'))) > 0).astype(int)
         df1['sulfur_score'] = df1.apply(score_sulfur, axis=1)
 

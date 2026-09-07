@@ -524,7 +524,15 @@ def iterate_spectra(fname, min_ch, max_ch, min_isotopes, min_scans, nproc, check
     if 'Sulfur.Signal' not in df_features.columns:
         df_features['Sulfur.Signal'] = 0
     else:
-        df_features['Sulfur.Signal'] = df_features['Sulfur.Signal'].astype(int)
+
+        sulfur_columns = ['Sulfur.Signal', 'Sulfur.Offset.A2']
+        # sulfur_columns = ['Sulfur.Signal', ]
+        # for cc in df_features.columns:
+        #     if cc.startswith('Sulfur') and cc != 'Sulfur.Signal':
+        #             sulfur_columns.append(cc)
+
+        # df_features['Sulfur.Signal'] = df_features['Sulfur.Signal'].astype(int)
+        df_features['Sulfur.Signal'] = df_features[sulfur_columns].fillna(-10).apply(lambda x: ';'.join([str(z) for z in x]), axis=1)
 
     # if 'mz_std_1' in df_features.columns:
     #     df_features['mz_diff_ppm_1'] = df_features.apply(lambda x: 1e6 * (x['mz'] - (x['mz_std_1'] - 1.00335 / x['charge'])) / x['mz'], axis=1)
