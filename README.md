@@ -6,7 +6,7 @@
 
 Basic command for protein identification:
 
-    biosaur2 filename1.mzML
+    biosaur2 filename1.mzML -cmin 2 -cmax 3 -minlh 2
     ms1searchpy filename1.features.tsv -d path_to_fasta_with_decoys.FASTA -deeplc 1
     
 To use msallsearchpy functionality add path to mzML file
