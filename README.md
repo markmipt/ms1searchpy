@@ -1,17 +1,24 @@
 # ms1searchpy - a DirectMS1 proteomics search engine for LC-MS1 spectra
 
-`ms1searchpy` consumes LC-MS data (**mzML**) or peptide features (**tsv**) and performs protein identification and quantitation. It is recommended to run the peptide cluster detection (biosaur2) separately so that the user can control the cluster search parameters. In addition, this will eliminate unnecessary calculations when reprocessing files.
+`ms1searchpy` consumes peptide isotopic envelopes from LC-MS1 data (**tsv**) and performs protein identification and quantitation. It is recommended to use biosaur2 for the peptide ion envelopes detection.
 
 ## Basic usage
 
 Basic command for protein identification:
 
-    biosaur2 *.mzML
-    ms1searchpy *features.tsv -d path_to.FASTA
+    biosaur2 filename1.mzML
+    ms1searchpy filename1.features.tsv -d path_to_fasta_with_decoys.FASTA -deeplc 1
     
-or
+To use msallsearchpy functionality add path to mzML file
 
-    ms1searchpy *.mzML -d path_to.FASTA
+    ms1searchpy filename1.features.tsv -d path_to_fasta_with_decoys.FASTA -deeplc 1 -ms2mzml filename1.mzML
+
+To create peptide-level shuffled decoy database add "-ad 1" option:
+    ms1searchpy filename1.features.tsv -d path_to_fasta_without_decoys.FASTA -ad 1 -deeplc 1
+
+To speed up RT predictions for subsequent searches, save the RT prediction results to a file:
+    ms1searchpy filename1.features.tsv -d path_to_fasta_with_decoys.FASTA -deeplc 1 -deeplc_library /home/user1/deeplc_lib_path.lib
+
 
 Read further for detailed info, including quantitative analysis.
 
@@ -25,26 +32,29 @@ Ivanov et al. DirectMS1: MS/MS-free identification of 1000 proteins of cellular 
 
 ## Installation
 
-It is recommended to additionally install [DeepLC](https://github.com/compomics/DeepLC) version 1.1.2.2 (unofficial fork with small changes). Newer version has some issues right now. It is highly important to install DeepLC before ms1searchpy for outdated packages compatibility!
+We suggest to use a standalone virtual enviroment with Python version 3.10.11. An example on how to create and to
+activate such enviroment is shown below:
 
-    pip install https://github.com/markmipt/DeepLC/archive/refs/heads/alternative_best_model.zip
+    pyenv install 3.10.11
+    pyenv virtualenv 3.10.11 virt_ms1searchpy
+    pyenv activate virt_ms1searchpy
 
 After that, install ms1searchpy:
 
     pip install ms1searchpy
 
-This should work on recent versions of Python (3.8-3.10).
+It will automatically install unofficial fork of [DeepLC](https://github.com/compomics/DeepLC), as well as [Identipy](https://github.com/levitsky/identipy) search engine. If you need an option to use [MS2PIP](https://github.com/compomics/ms2pip) for MS/MS spectra processing, install ms2pip:
+
+    pip install ms2pip==4.2.0
 
 ## Usage tutorial: protein identification
 
-The script used for protein identification is called `ms1searchpy`. It needs input files (mzML or tsv) and a FASTA database.
+The script used for protein identification is called `ms1searchpy`. It needs input files (tsv) and a FASTA database.
 
 ### Input files
 
-If mzML are provided, ms1searchpy will invoke [biosaur2](https://github.com/markmipt/biosaur2) to generate the features table.
-You can also use other software like [Dinosaur](https://github.com/fickludd/dinosaur) or [Biosaur](https://github.com/abdrakhimov1/Biosaur),
-but [biosaur2](https://github.com/markmipt/biosaur2) is recommended. You can also make it yourself,
-the table must contain columns 'massCalib', 'rtApex', 'charge' and 'nIsotopes' columns.
+You need a file with peptide ion envelopes. The default way is to use [biosaur2](https://github.com/markmipt/biosaur2) to generate the features table. You can also use other software like [Dinosaur](https://github.com/fickludd/dinosaur) or [Biosaur](https://github.com/abdrakhimov1/Biosaur), but [biosaur2](https://github.com/markmipt/biosaur2) is recommended. You can also make it yourself, the table must contain columns 'massCalib', 'rtApex', 'charge' and 'nIsotopes' columns.
+All of the mentioned feature detection algorithms work with mzML files as input.
 
 #### How to get mzML files
 
@@ -58,33 +68,61 @@ with default parameters.
 ### RT predictor
 
 For protein identification, `ms1searchpy` needs a retention time prediction model. The recommended one is [DeepLC](https://github.com/compomics/DeepLC),
-but you can also use built-in additive model (default).
+but you can also use built-in additive model (default or with an option "-deeplc 0").
 
 ### Examples
 
     biosaur2 test.mzML -minlh 3
     ms1searchpy test.features.tsv -d sprot_human.fasta -deeplc 1 -ad 1
 
-The first command will run `biosaur2` to detect all peptide isotopic clusters which are visible in at least 3 consecutive MS1 scans. The second command will run `ms1searchpy` with DeepLC RT predictor available as `deeplc` (should work if you install DeepLC
-alongside `ms1searchpy`. `-ad 1` creates a shuffled decoy database for FDR estimation.
-You should use it only once and just use the created database for other searches.
+The first command will run `biosaur2` to detect all peptide isotopic clusters which are visible in at least 3 consecutive MS1 scans. The second command will run `ms1searchpy` with DeepLC RT predictor. `-ad 1` creates a shuffled decoy database for FDR estimation. You should use it only once and use the created database for other searches within the project to
+proceed quantitative analysis.
 
 ### Output files
 
 `ms1searchpy` produces several tables:
  - identified proteins, FDR-filtered (`sample.features_proteins.tsv`) - this is the main result;
- - all identified proteins (`sample.features_proteins_full.tsv`);
- - all identified proteins based on all PFMs (`sample.features_proteins_full_noexclusion.tsv`);
- - all matched peptide match fingerprints, or peptide-feature matches (`sample.features_PFMs.tsv`);
- - all PFMs with features prepared for Machnine Learning (`sample.features_PFMs_ML.tsv`);
+ - all peptide-feature matches (PFMs) (`sample.features_PFMs.tsv`);
+ - all PFMs with extended columns used for Machnine Learning (`sample.features_PFMs_ML.tsv`);
+ - all proteins (`sample.features_proteins_full.tsv`);
+ - all proteins with scores based on all PFMs (`sample.features_proteins_full_noexclusion.tsv`);
  - number of theoretical peptides per protein (`sample.features_protsN.tsv`);
  - log file with estimated mass and RT accuracies (`sample.features_log.txt`).
 
+### msallsearchpy (for DDA and DIA data)
+
+The workflow we called msallsearchpy is the basic algorithm of ms1searchpy, where some of the matched PFMs are extended with useful MS/MS-based information. It means that some of the PFMs became more reliable identifications, but the PFMs with no matched fragments are still fully used in the protein identification and quantification process. To use msallsearchpy functionality add path to mzML file:
+
+    ms1searchpy test.features.tsv -d sprot_human.fasta -deeplc 1 -ad 1 -ms2mzml test.mzML
+
+It will automatically detect all MS/MS spectra within isolation window for PFM and calculate different MS/MS-based scores.
+See details in Ivanov et al (doi: UNPUBLISHED).
+
+
+### Using directms1quant
+
+New LFQ method designed specifically for DirectMS1 is invoked like this:
+
+    directms1quant -S1 sample1_r{1,2,3}.features_proteins_full.tsv -S2 sample2_r{1,2,3}.features_proteins_full.tsv
+
+It produces a filtered table of significantly changed proteins with p-values and fold changes,
+as well as the full protein table and a separate file simply listing all
+IDs of significantly modified proteins (e.g. for easy copy-paste into a StringDB search window).
+
+It was designed to automatically set a fold change threshold and produces the results with well-controlled quantitative
+FDR according to our tests against multiple benchmark datasets (LFQ Bench, UPS-E.coli, TPP experiments, etc).
+
 ### Combine results from replicates
 
-You can combine the results from several replicate runs with `ms1combine` by feeding it `_PFMs_ML.tsv` tables:
+If you want, you can combine the results from several replicate runs.
 
-    ms1combine sample_rep_*.features_PFMs_ML.tsv
+The simplest method is to average the protein scores obtained from multiple runs and filter the results again using decoys:
+
+    ms1combine_proteins sample_rep_1.features_proteins_full.tsv sample_rep_2.features_proteins_full.tsv sample_rep_3.features_proteins_full.tsv
+
+The second method involves combining all PFM results following the machine learning stage and recalculating the protein scores:
+
+    ms1combine sample_rep_1.features_PFMs_ML.tsv sample_rep_2.features_PFMs_ML.tsv sample_rep_3.features_PFMs_ML.tsv
 
 ### Using Group-specific FDR for metaproteomics
 
@@ -97,17 +135,6 @@ It produces a table with the number of identified proteins for each group using 
 ## Usage tutorial: Quantitation
 
 After obtaining the protein identification results, you can proceed to compare your samples using LFQ.
-
-### Using directms1quant
-
-New LFQ method designed specifically for DirectMS1 is invoked like this:
-
-    directms1quant -S1 sample1_r{1,2,3}.features_proteins_full.tsv -S2 sample2_r{1,2,3}.features_proteins_full.tsv
-
-It produces a filtered table of significantly changed proteins with p-values and fold changes,
-as well as the full protein table and a separate file simply listing all
-IDs of significantly modified proteins (e.g. for easy copy-paste into a StringDB search window).
-
 
 ### Multi-condition protein profiling using directms1quantmulti
 
