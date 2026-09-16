@@ -1924,6 +1924,8 @@ def process_peptides(args):
             'cterm_mass': 17.002735,
             'min_matched': 2,
             'acc_frag_ppm': False,
+            'glyco': None,
+            'remove_precursor': False,
         }
 
 
