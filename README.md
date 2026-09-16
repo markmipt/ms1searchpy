@@ -14,9 +14,11 @@ To use msallsearchpy functionality add path to mzML file
     ms1searchpy filename1.features.tsv -d path_to_fasta_with_decoys.FASTA -deeplc 1 -ms2mzml filename1.mzML
 
 To create peptide-level shuffled decoy database add "-ad 1" option:
+
     ms1searchpy filename1.features.tsv -d path_to_fasta_without_decoys.FASTA -ad 1 -deeplc 1
 
 To speed up RT predictions for subsequent searches, save the RT prediction results to a file:
+
     ms1searchpy filename1.features.tsv -d path_to_fasta_with_decoys.FASTA -deeplc 1 -deeplc_library /home/user1/deeplc_lib_path.lib
 
 
