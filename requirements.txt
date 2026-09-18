@@ -1,4 +1,5 @@
-pyteomics>=4.5.1
+deeplc @ git+https://github.com/markmipt/deeplc.git@alternative_best_model
+pyteomics==4.7.5
 lxml
 scipy
 numpy
@@ -9,3 +10,4 @@ biosaur2
 matplotlib
 seaborn
 ete3
+identipy @ git+https://github.com/levitsky/identipy.git@exp8
