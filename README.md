@@ -43,7 +43,7 @@ activate such enviroment is shown below:
 
 After that, install ms1searchpy:
 
-    pip install ms1searchpy
+    pip install git+https://github.com/markmipt/ms1searchpy.git
 
 It will automatically install unofficial fork of [DeepLC](https://github.com/compomics/DeepLC), as well as [Identipy](https://github.com/levitsky/identipy) search engine. If you need an option to use [MS2PIP](https://github.com/compomics/ms2pip) for MS/MS spectra processing, install ms2pip:
 
