@@ -114,6 +114,8 @@ IDs of significantly modified proteins (e.g. for easy copy-paste into a StringDB
 It was designed to automatically set a fold change threshold and produces the results with well-controlled quantitative
 FDR according to our tests against multiple benchmark datasets (LFQ Bench, UPS-E.coli, TPP experiments, etc).
 
+Original algorithm was described in the manuscript doi:10.1021/acs.analchem.2c02255. The updated default workflow details are available in doi:UNPUBLISHED. To run the workflow close to the originally described use an option "-legacy".
+
 ### Combine results from replicates
 
 If you want, you can combine the results from several replicate runs.

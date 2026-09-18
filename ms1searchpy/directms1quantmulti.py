@@ -44,6 +44,7 @@ def run():
     # parser.add_argument('-min_signif_for_pept', help='minimum number of pairwise DE results where peptide should be significant', default=999, type=int)
     parser.add_argument('-prefix', help='Decoy prefix. Default DECOY_', default='DECOY_', type=str)
     parser.add_argument('-start_stage', help='Can be 1, 2 or 3 to skip any stage which were already done', default=1, type=int)
+    parser.add_argument('-plot_figures', help='Can be 0 or 1. Default = 1', default=1, type=int)
     args = vars(parser.parse_args())
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
             datefmt='[%H:%M:%S]', level=logging.INFO)
@@ -197,7 +198,6 @@ def process_files(args, logger):
         non_missing_peptides_best = 0
         for cc in all_lbls:          
             non_missing_peptides = (~pd.isna(df_final[cc])).sum()
-            print('non-missing peptides for %s: %d' % (cc, non_missing_peptides))
             if non_missing_peptides >= non_missing_peptides_best:
                 cc1 = cc
                 non_missing_peptides_best = non_missing_peptides
@@ -211,7 +211,7 @@ def process_files(args, logger):
             ar_ratio = ar_ratio[idx_non_missing]
             ar2 = ar2[idx_non_missing]
             koef2_base = directms1quant.weighted_quantiles_interpolate(ar_ratio, np.sqrt(ar2), 0.5)
-            print('median intensity for sample %s: %.3f' % (cc, koef2_base))
+            # print('median intensity for sample %s: %.3f' % (cc, koef2_base))
 
             for RT_int in set(df_to_use['q_RT']):
                 tmp_df = df_to_use[df_to_use['q_RT'] == RT_int]
@@ -389,7 +389,7 @@ def process_files(args, logger):
         out_name = path.join(ms1folder, '%s_proteins_LFQ.tsv' % (outlabel, ))
         df1 = pd.read_table(out_name)
 
-    if args['start_stage'] <= 4:
+    if args['plot_figures']:
 
         logger.info('Starting Stage 4: Plot figures for selected proteins...')
 
