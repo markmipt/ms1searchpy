@@ -1602,7 +1602,9 @@ def process_peptides(args):
         rt_pred = np.array([pepdict[s] for s in resdict['seqs']])
 
 
-        print('RT clip', rt_min_clip, rt_max_clip)
+        # print('RT clip', rt_min_clip, rt_max_clip)
+
+        logger.info('RT range for detected peptides: %.2f - %.2f', rt_min_clip, rt_max_clip)
         rt_pred = rt_pred.clip(rt_min_clip, rt_max_clip)
 
 
@@ -1630,6 +1632,52 @@ def process_peptides(args):
     else:
         rt_diff = np.zeros(len(resdict['iorig']))
 
+
+
+
+
+    # def score_sulfur2(x):
+    #     if x['Isotopes'] <= 2:
+    #         return 0
+    #     else:
+    #         if x['c_MC'] > 0 and x['Sulfur.Signal'] > 0:
+    #             return 2
+    #         elif x['c_MC'] > 0 and x['Sulfur.Signal'] == 0:
+    #             return -1
+    #         elif x['c_MC'] == 0 and x['Sulfur.Signal'] == 0:
+    #             return 1
+    #         elif x['c_MC'] == 0 and x['Sulfur.Signal'] == 1:
+    #             return -2
+        
+    # if args['use_sulfur']:
+
+    #     c_MC_array = np.array([s.count('M') + s.count('C') for s in resdict['seqs']])
+    #     Isotopes_array = np.array([Isotopes[iorig] for iorig in resdict['iorig']])
+    #     sulfur_array = np.array([int(float(sulfurraw[iorig].split(';')[0])) for iorig in resdict['iorig']])
+        
+    #     print('???', len(resdict['iorig']))
+    #     e_ind1 = Isotopes_array <= 2
+    #     e_ind2 = (sulfur_array.clip(0, 1) == c_MC_array.clip(0, 1))
+    #     e_ind = np.logical_or.reduce([e_ind1, e_ind2])
+    #     resdict = filter_results(resdict, e_ind)
+    #     rt_diff = rt_diff[e_ind]
+    #     if args['use_rt']:
+    #         rt_pred = rt_pred[e_ind]
+    #     print('???', len(resdict['iorig']))
+
+        # sulfur_columns_names = ['Sulfur.Signal', ]
+        # one_sample = sulfurraw[0].split(';')
+        # if len(one_sample) > 1:
+        #     for idx, _ in enumerate(one_sample[1:]):
+        #         sulfur_columns_names.append('Sulfur.feature_%d' % (idx + 2, ) )
+
+        # df1[sulfur_columns_names] = [z.split(';') for z in sulfurraw[df1['iorig'].values]]
+        # for cc in sulfur_columns_names:
+        #     df1[cc] = df1[cc].astype(float)
+
+        # # df1['Sulfur.Signal'] = sulfurraw[df1['iorig'].values]
+        # df1['c_MC'] = ((df1['peptide'].apply(lambda x: x.count('C') + x.count('M'))) > 0).astype(int)
+        # df1['sulfur_score'] = df1.apply(score_sulfur, axis=1)
 
 
 
@@ -1854,14 +1902,17 @@ def process_peptides(args):
     df1['c_RP'] = df1['peptide'].apply(lambda x: x.count('RP'))
 
     def score_sulfur(x):
-        if x['c_MC'] > 0 and x['Sulfur.Signal'] > 0:
-            return 1
-        elif x['c_MC'] > 0 and x['Sulfur.Signal'] == 0:
+        if x['Isotopes'] <= 2:
             return 0
-        elif x['c_MC'] == 0 and x['Sulfur.Signal'] == 0:
-            return 0.5
-        elif x['c_MC'] == 0 and x['Sulfur.Signal'] == 1:
-            return -1
+        else:
+            if x['c_MC'] > 0 and x['Sulfur.Signal'] > 0:
+                return 2
+            elif x['c_MC'] > 0 and x['Sulfur.Signal'] == 0:
+                return -1
+            elif x['c_MC'] == 0 and x['Sulfur.Signal'] == 0:
+                return 1
+            elif x['c_MC'] == 0 and x['Sulfur.Signal'] == 1:
+                return -2
         
     if args['use_sulfur']:
 
