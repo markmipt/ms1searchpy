@@ -330,7 +330,8 @@ def process_files(args):
 
 
     if args['intensity_norm'] == 3:
-        df_final['RT_median'] = df_final[rt_ccols].median(axis=1)
+        # df_final['RT_median'] = df_final[rt_ccols].median(axis=1)
+        df_final['RT_median'] = df_final[rt_ccols].apply(lambda x: np.nanmedian(x), axis=1)
         num_rt_groups = int(len(df_final) / 250)
         num_rt_groups = min(50, num_rt_groups)
         num_rt_groups = max(1, num_rt_groups)
@@ -465,10 +466,10 @@ def process_files(args):
     df_final.loc[(~pd.isna(df_final['S2_mean'])) & (pd.isna(df_final['S1_mean'])), 'FC'] = FC_max
 
 
-    tmp1 = df_final.groupby('protein')['origseq'].count()
+    tmp1 = df_final_for_calib.groupby('protein')['origseq'].count()
     proteins_best50percent_by_num_quantified_peptides = set(tmp1[tmp1 >= np.median(tmp1)].index)
 
-    tmp2 = df_final[df_final['protein'].apply(lambda x: x in proteins_best50percent_by_num_quantified_peptides)].groupby('protein')['FC'].median().abs()
+    tmp2 = df_final_for_calib[df_final_for_calib['protein'].apply(lambda x: x in proteins_best50percent_by_num_quantified_peptides)].groupby('protein')['FC'].median().abs()
     proteins_best50percent_by_stable_FC = set(tmp2[tmp2 <= np.median(tmp2)].index)
     df_final_for_calib = df_final_for_calib[df_final_for_calib['protein'].apply(lambda x: x in proteins_best50percent_by_stable_FC)]
 
@@ -760,6 +761,9 @@ def process_files(args):
         df_out['p-value2'] = df_out['dbname'].apply(lambda x: prots_pval2.get(x, 1))
         df_out['p-value2'] = df_out['p-value2'].fillna(1.0)
         df_out['p-value'] = df_out[['p-value1', 'p-value2']].apply(lambda x: combine_pvalues([x['p-value1'], x['p-value2']])[1], axis=1)
+
+        df_out.loc[df_out['p-value1'] == 1.0, 'p-value'] = 1.0
+        df_out.loc[df_out['p-value2'] == 1.0, 'p-value'] = 1.0
 
         df_out['p-value'] = df_out['p-value'].clip(1e-60, 1.0)
         df_out['score'] = -np.log10(df_out['p-value'])

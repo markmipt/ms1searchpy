@@ -34,18 +34,18 @@ Ivanov et al. DirectMS1: MS/MS-free identification of 1000 proteins of cellular 
 
 ## Installation
 
-We suggest to use a standalone virtual enviroment with Python version 3.10.11. An example on how to create and to
+We suggest to use a standalone virtual enviroment with Python version 3.14.6. An example on how to create and to
 activate such enviroment is shown below:
 
-    pyenv install 3.10.11
-    pyenv virtualenv 3.10.11 virt_ms1searchpy
+    pyenv install 3.14.6
+    pyenv virtualenv 3.14.6 virt_ms1searchpy
     pyenv activate virt_ms1searchpy
 
 After that, install ms1searchpy:
 
     pip install git+https://github.com/markmipt/ms1searchpy.git
 
-It will automatically install unofficial fork of [DeepLC](https://github.com/compomics/DeepLC), as well as [Identipy](https://github.com/levitsky/identipy) search engine. If you need an option to use [MS2PIP](https://github.com/compomics/ms2pip) for MS/MS spectra processing, install ms2pip:
+It will automatically install [DeepLC](https://github.com/compomics/DeepLC) v.4, as well as [Identipy](https://github.com/levitsky/identipy) search engine. If you need an option to use [MS2PIP](https://github.com/compomics/ms2pip) for MS/MS spectra processing, install ms2pip:
 
     pip install ms2pip==4.2.0
 

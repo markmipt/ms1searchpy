@@ -188,10 +188,12 @@ def process_files(args, logger):
 
 
         rt_ccols = [z for z in df_final.columns.tolist() if z.startswith('RT_')]
-        df_final['RT_median'] = df_final[rt_ccols].median(axis=1)
+        # df_final['RT_median'] = df_final[rt_ccols].median(axis=1)
+        df_final['RT_median'] = df_final[rt_ccols].apply(lambda x: np.nanmedian(x), axis=1)
         num_rt_groups = int(len(df_final) / 250)
         num_rt_groups = min(50, num_rt_groups)
         num_rt_groups = max(1, num_rt_groups)
+
         df_final['q_RT'] = pd.qcut(df_final['RT_median'], num_rt_groups, labels=range(num_rt_groups)).astype(int)
         norm_dict = dict()
         df_to_use = df_final

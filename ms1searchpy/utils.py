@@ -447,8 +447,14 @@ def write_pepxml(inputfile, args, df1, pept_prot):
         s = etree.tostring(root, pretty_print=True)
         output.write(s)
 
-
-
+def mods_for_deepLC4(seq, aa_to_psi):
+    out = ''
+    for aa in seq:
+        if aa in aa_to_psi:
+            out += aa + '[%s]' % (aa_to_psi[aa], )
+        else:
+            out += aa
+    return out
 
 def mods_for_deepLC(seq, aa_to_psi):
     if 'Nterm' in aa_to_psi:
@@ -1005,3 +1011,43 @@ def calc_sf_all(v, n, p, prev_best_score=False, p_array=False):
     sf_values[np.isnan(sf_values)] = 0
     sf_values[np.isinf(sf_values)] = (prev_best_score if prev_best_score is not False else max(sf_values[~np.isinf(sf_values)]) * 2)
     return sf_values
+
+
+
+
+def calibration_core2(uncal_preds,cal_dict):
+    l_preds = len(uncal_preds)
+    if l_preds == 0:
+        return np.array([])
+    sorted_keys = sorted(cal_dict.keys())[::-1]
+    keys_for_calib = np.array([sorted_keys[0]] * l_preds)
+    for kk in sorted_keys:
+        keys_for_calib[uncal_preds <= kk] = kk
+    cal_preds = [cal_dict[kk][0] * (uncal_pred) + cal_dict[kk][1] for uncal_pred, kk in zip(uncal_preds, keys_for_calib)]
+    return np.array(cal_preds)
+
+
+def calibrate_preds_func_for_sorted(
+                         measured_tr,
+                         predicted_tr,
+                        split_cal=50):
+
+    mtr_mean = []
+    ptr_mean = []
+
+    calibrate_dict = {}
+    
+    for mtr, ptr in zip(np.array_split(measured_tr, split_cal), np.array_split(predicted_tr, split_cal)):
+        mtr_mean.append(np.median(mtr))
+        ptr_mean.append(np.median(ptr))
+
+    for i in range(0, len(ptr_mean)-1):
+        delta_ptr = ptr_mean[i + 1] - ptr_mean[i]
+        delta_mtr = mtr_mean[i + 1] - mtr_mean[i]
+
+        slope = delta_mtr / delta_ptr
+        intercept = (-1*(ptr_mean[i]*slope))+mtr_mean[i]
+
+        calibrate_dict[ptr_mean[i + 1]] = [slope, intercept]
+
+    return calibrate_dict

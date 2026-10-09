@@ -1,13 +1,13 @@
-deeplc @ git+https://github.com/markmipt/deeplc.git@alternative_best_model
+deeplc==4.5.0
 pyteomics==4.7.5
-lxml
-scipy
-numpy
-scikit-learn
-lightgbm
-pandas
+lxml==6.1.3
+scipy==1.17.1
+numpy==1.26.4
+scikit-learn==1.9.1
+lightgbm==4.6.0
+pandas==2.3.3
 biosaur2
-matplotlib
-seaborn
-ete3
+matplotlib==3.11.2
+seaborn==0.13.2
+ete3==3.1.3
 identipy @ git+https://github.com/levitsky/identipy.git@exp8
