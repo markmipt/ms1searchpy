@@ -31,8 +31,8 @@ Ivanov et al. DirectMS1: MS/MS-free identification of 1000 proteins of cellular 
 
 ## Installation
 
-We suggest to use a standalone virtual enviroment with Python version 3.14.6. An example on how to create and to
-activate such enviroment is shown below:
+We suggest using a standalone virtual environment with Python version 3.14.6. An example on how to create and to
+activate such environment is shown below:
 
     pyenv install 3.14.6
     pyenv virtualenv 3.14.6 virt_ms1searchpy
@@ -112,6 +112,10 @@ It was designed to automatically set a fold change threshold and produces the re
 FDR according to our tests against multiple benchmark datasets (LFQ Bench, UPS-E.coli, TPP experiments, etc).
 
 Original algorithm was described in the manuscript doi:10.1021/acs.analchem.2c02255. The updated default workflow details are available in doi:UNPUBLISHED. To run the workflow close to the originally described use an option "-legacy".
+
+### Quick guide on LFQbench analysis
+
+Instructions on how to reproduce the full LFQbench data analysis (in just five terminal commands) on a Linux system are available here: [PDF](https://github.com/markmipt/ms1searchpy/blob/master/examples/QuickGuide_Astral_LFQBench_Identification_and_Quantitation.pdf)
 
 ### Combine results from replicates
 
